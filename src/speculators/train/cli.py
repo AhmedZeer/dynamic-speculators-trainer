@@ -26,6 +26,7 @@ from speculators.models.utils import (
     get_verifier_config,
     resolve_draft_intermediate_size,
 )
+from speculators.train.checkpointer import patch_config_dtype
 from speculators.train.config import TrainConfig
 from speculators.train.dataloader import create_train_val_loaders
 from speculators.train.distributed import (
@@ -39,6 +40,7 @@ from speculators.train.logger import (
     setup_metric_logger,
     setup_root_logger,
 )
+from speculators.train.lora import apply_lora, save_lora_checkpoint
 from speculators.train.trainer import Trainer, TrainerConfig
 from speculators.train.utils import resolve_mask_token_id
 from speculators.train.vocab_mapping import (
@@ -670,9 +672,22 @@ def main(cfg: TrainConfig):  # noqa: C901
 
     # Get target layer IDs from the model (resolved at model level)
     num_target_layers = len(draft_model.target_layer_ids)  # type: ignore[arg-type]
+    hidden_size = draft_model.config.transformer_layer_config.hidden_size
 
     if args.speculator_type == "mtp":
         args.num_speculative_steps = draft_model.config.num_speculative_steps
+
+    if args.lora_r > 0:
+        if args.fsdp_shard:
+            raise ValueError("LoRA fine-tuning does not yet support --fsdp-shard")
+        draft_model = apply_lora(
+            draft_model,
+            r=args.lora_r,
+            alpha=args.lora_alpha,
+            dropout=args.lora_dropout,
+            target_modules=args.lora_target_modules,
+            save_merged=args.lora_save_merged,
+        )  # type: ignore[assignment]
 
     # Dry-run: persist an initialized checkpoint and exit before training so the
     # config/weights can be validated (e.g. in vLLM). The saved checkpoint can be
@@ -686,7 +701,12 @@ def main(cfg: TrainConfig):  # noqa: C901
                 hidden_states_dtype,
                 args.save_path,
             )
-            draft_model.save_pretrained(args.save_path)
+            save_path = Path(args.save_path)
+            if not save_lora_checkpoint(
+                draft_model, save_path, float_dtype=hidden_states_dtype
+            ):
+                draft_model.save_pretrained(save_path)
+            patch_config_dtype(save_path / "config.json", hidden_states_dtype)
             logger.info(
                 "[dry-run] Done. Validate this checkpoint, then train with "
                 "'--from-pretrained %s'.",
@@ -694,8 +714,6 @@ def main(cfg: TrainConfig):  # noqa: C901
             )
         maybe_destroy_distributed()
         return
-
-    hidden_size = draft_model.config.transformer_layer_config.hidden_size
 
     # Setup dataloaders
     preprocess_fns = {

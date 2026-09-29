@@ -60,6 +60,26 @@ torchrun --standalone --nproc_per_node=4 -m speculators.train \
 
 - **`--draft-hidden-act`** (str, default: `"silu"`) Activation function for draft decoder layers. Setting as `None` will inherit activation function from the verifier model.
 
+### LoRA Arguments
+
+LoRA fine-tuning is available for pretrained EAGLE-3 drafters. Install the optional
+dependency with `pip install 'speculators[lora]'`, then pass `--from-pretrained` and a
+positive rank. Each checkpoint stores a compact PEFT adapter under `adapter/` and, by
+default, a merged Speculators checkpoint at the checkpoint root for direct serving.
+
+- **`--lora-r`** (int, default: `0`) LoRA rank. Values above zero enable LoRA.
+
+- **`--lora-alpha`** (int, default: `16`) LoRA scaling alpha.
+
+- **`--lora-dropout`** (float, default: `0.05`) Dropout applied to LoRA inputs.
+
+- **`--lora-target-modules`** (str list) Module-name suffixes to adapt. Defaults to
+  `fc q_proj k_proj v_proj o_proj gate_proj up_proj down_proj`.
+
+- **`--lora-save-merged/--no-lora-save-merged`** (bool, default: enabled) Save a
+  merged, directly deployable drafter alongside the adapter. FSDP sharding is not yet
+  supported for LoRA runs.
+
 ### Data Arguments
 
 - **`--data-path`** (str, default: `"./data"`) Path to the processed training data directory.
@@ -127,6 +147,9 @@ torchrun --standalone --nproc_per_node=4 -m speculators.train \
 - **`--seed`** (int, default: `42`) Random seed for reproducibility.
 
 - **`--hidden-states-dtype`** (str, default: `"bfloat16"`) Data type for dataloader hidden states and autocast compute. Model master weights are always kept in fp32. Options: `float32` (full precision, for debugging), `bfloat16` (recommended for mixed precision training). Note: `float16` is not supported as it requires gradient scaling to prevent underflow.
+
+For a one-GPU offline smoke run using Qwen3-8B and Nemotron prompts, see
+`examples/train/eagle3_qwen3_8b_nemotron_lora_offline_smoke.sh`.
 
 - **`--deterministic-cuda`** (flag) Enable deterministic CUDA operations. May impact performance.
 

@@ -63,6 +63,7 @@ Extracts conversation turns from a dataset, regenerates each assistant response 
 
 - **Multi-turn support** — detects `messages`/`conversations` fields and regenerates each assistant turn against the model's own prior responses
 - **Local file support** for JSON/JSONL prompt datasets
+- **Arbitrary Hugging Face dataset support** through `hf:<dataset-id>[:<subset>:<split>]`
 - **Auto-detects model** from vLLM server (no need to specify `--model`)
 - **Resume capability** to skip already-processed conversations
 - **Async processing** with configurable concurrency
@@ -101,11 +102,21 @@ speculators regenerate-responses \
 
 Column names such as `instruction`, `question`, and `text` are not inferred. Convert those rows to one of the schemas above or use a registered dataset preset with a normalization function.
 
+### Arbitrary Hugging Face Datasets
+
+Datasets with `messages` or `conversations` rows can be streamed directly. A single
+suffix selects the split; two suffixes select the subset and split:
+
+```bash
+speculators regenerate-responses \
+  --dataset hf:openeurollm/Nemotron-Post-Training-Dataset-v2-decontaminated:chat
+```
+
 ### Arguments
 
 #### Data Arguments
 
-- **`--dataset`** (str, default: `ultrachat`) Registered dataset preset (see [Supported Datasets](#supported-datasets)) or local JSON/JSONL file (see [Local Files](#local-files)). `--split` and `--subset` do not apply to local files.
+- **`--dataset`** (str, default: `ultrachat`) Registered dataset preset, local JSON/JSONL file, or `hf:<dataset-id>[:<subset>:<split>]` specification. `--split` and `--subset` do not apply to local files or `hf:` specifications.
 
 - **`--split`** (str, default: preset-specific) Dataset split. Defaults to the preset's split.
 

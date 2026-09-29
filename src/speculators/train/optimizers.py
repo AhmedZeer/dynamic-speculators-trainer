@@ -75,9 +75,16 @@ def build_optimizers(model: Module, config) -> list[torch.optim.Optimizer]:
         "adamw" returns a single optimizer; "muon" returns ``[Muon, AdamW]``.
     """
     if config.optimizer == "adamw":
+        trainable_params = [
+            (name, param)
+            for name, param in model.named_parameters()
+            if param.requires_grad
+        ]
+        if not trainable_params:
+            raise ValueError("No trainable parameters found to optimize.")
         return [
             torch.optim.AdamW(
-                model.named_parameters(),
+                trainable_params,
                 lr=config.lr,
                 weight_decay=config.weight_decay,
             )

@@ -369,6 +369,40 @@ class OptimizerArgs(_Group):
     )
 
 
+class LoraArgs(_Group):
+    """Parameter-efficient fine-tuning settings for pretrained drafters."""
+
+    lora_r: int = Field(
+        default=0,
+        ge=0,
+        description="LoRA rank. Set above zero to enable LoRA fine-tuning.",
+    )
+    lora_alpha: int = Field(default=16, gt=0, description="LoRA scaling alpha.")
+    lora_dropout: float = Field(
+        default=0.05,
+        ge=0.0,
+        lt=1.0,
+        description="Dropout applied on LoRA adapter inputs.",
+    )
+    lora_target_modules: list[str] = Field(
+        default_factory=lambda: [
+            "fc",
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        ],
+        description="Space-separated module-name suffixes to receive LoRA adapters.",
+    )
+    lora_save_merged: bool = Field(
+        default=True,
+        description="Also save a merged, directly deployable speculator checkpoint.",
+    )
+
+
 class SchedulerArgs(_Group):
     scheduler_type: Literal["linear", "cosine", "none"] = Field(
         default="linear", description="LR scheduler type."
@@ -565,6 +599,7 @@ _GROUPS: dict[str, type[_Group]] = {
     "generation": GenerationArgs,
     "loss": LossArgs,
     "optimizer": OptimizerArgs,
+    "lora": LoraArgs,
     "scheduler": SchedulerArgs,
     "trainer": TrainerArgs,
     "logging": LoggingArgs,
@@ -675,6 +710,7 @@ class TrainConfig(BaseSettings):
     generation: GenerationArgs = Field(default_factory=GenerationArgs)
     loss: LossArgs = Field(default_factory=LossArgs)
     optimizer: OptimizerArgs = Field(default_factory=OptimizerArgs)
+    lora: LoraArgs = Field(default_factory=LoraArgs)
     scheduler: SchedulerArgs = Field(default_factory=SchedulerArgs)
     trainer: TrainerArgs = Field(default_factory=TrainerArgs)
     logging: LoggingArgs = Field(default_factory=LoggingArgs)
@@ -753,6 +789,18 @@ class TrainConfig(BaseSettings):
                 raise ValueError(
                     f"--dpace-alpha must be in (0, 1], got {self.dflash.dpace_alpha}"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_lora(self) -> "TrainConfig":
+        if self.lora.lora_r == 0:
+            return self
+        if not self.draft.from_pretrained:
+            raise ValueError("--lora-r requires --from-pretrained")
+        if self.speculator_type != "eagle3":
+            raise ValueError("LoRA fine-tuning currently supports only eagle3")
+        if not self.lora.lora_target_modules:
+            raise ValueError("--lora-target-modules must contain at least one module")
         return self
 
     def flatten(self) -> dict[str, Any]:

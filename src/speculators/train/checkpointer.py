@@ -20,6 +20,7 @@ from torch.nn.parallel import DistributedDataParallel
 from transformers.modeling_utils import PreTrainedModel
 
 from speculators.train.distributed import get_rank, is_distributed
+from speculators.train.lora import load_adapter_checkpoint, save_lora_checkpoint
 from speculators.utils.util import get_current_device
 
 logger = logging.getLogger("speculators")
@@ -304,6 +305,9 @@ class SingleGPUCheckpointer(BaseCheckpointer):
         self, model: PreTrainedModel, float_dtype: torch.dtype | None = None
     ):
         device = get_current_device()
+        checkpoint_dir = self.path / str(self.previous_epoch)
+        if load_adapter_checkpoint(model, checkpoint_dir):
+            return
         full_state_dict = load_safetensors_state_dict(
             self.model_path(self.previous_epoch),
             device,
@@ -346,9 +350,13 @@ class SingleGPUCheckpointer(BaseCheckpointer):
         raw_model: PreTrainedModel = (
             model.module if isinstance(model, DistributedDataParallel) else model
         )  # type: ignore[assignment]
-        model_state_dict = convert_float_dtype(raw_model.state_dict(), float_dtype)
-        raw_model.save_pretrained(self.path / str(epoch), state_dict=model_state_dict)
-        patch_config_dtype(self.path / str(epoch) / "config.json", float_dtype)
+        checkpoint_dir = self.path / str(epoch)
+        if not save_lora_checkpoint(
+            raw_model, checkpoint_dir, float_dtype=float_dtype
+        ):
+            model_state_dict = convert_float_dtype(raw_model.state_dict(), float_dtype)
+            raw_model.save_pretrained(checkpoint_dir, state_dict=model_state_dict)
+        patch_config_dtype(checkpoint_dir / "config.json", float_dtype)
 
         optimizers = _as_list(optimizer)
         state_dicts = [

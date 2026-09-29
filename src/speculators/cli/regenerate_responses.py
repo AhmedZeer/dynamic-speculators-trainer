@@ -665,7 +665,37 @@ async def _worker(
 def load_input_dataset(
     dataset_name: str, split: str | None, subset: str | None
 ) -> tuple[DatasetConfig, Any, str]:
-    """Load either a registered Hugging Face preset or a local JSON/JSONL file."""
+    """Load a preset, an ``hf:`` dataset spec, or a local JSON/JSONL file."""
+    if dataset_name.startswith("hf:"):
+        parts = dataset_name.removeprefix("hf:").split(":")
+        if len(parts) == 1:
+            hf_id, resolved_subset, resolved_split = parts[0], None, "train"
+        elif len(parts) == 2:
+            hf_id, resolved_split = parts
+            resolved_subset = None
+        elif len(parts) == 3:
+            hf_id, resolved_subset, resolved_split = parts
+        else:
+            raise ValueError(
+                f"Invalid hf: spec {dataset_name!r}; expected "
+                "hf:<dataset-id>[:<subset>:<split>]"
+            )
+        if not hf_id or not resolved_split or resolved_subset == "":
+            raise ValueError(f"Invalid hf: dataset spec {dataset_name!r}")
+        config = DatasetConfig(
+            name=hf_id.rsplit("/", 1)[-1],
+            hf_path=hf_id,
+            subset=resolved_subset,
+            split=resolved_split,
+        )
+        dataset = load_dataset(
+            hf_id,
+            name=resolved_subset,
+            split=resolved_split,
+            streaming=True,
+        )
+        return config, dataset, resolved_split
+
     if dataset_name not in REGEN_DATASETS:
         config = DatasetConfig(
             name=Path(dataset_name).stem,
@@ -879,13 +909,17 @@ async def _run(  # noqa: C901
 
 
 def _validate_dataset(value: str) -> str:
-    """Validate a registered preset or a local JSON/JSONL file."""
+    """Validate a registered preset, ``hf:`` spec, or local JSON/JSONL file."""
     if value in MULTIMODAL_DATASETS:
         raise typer.BadParameter(
             f"{value!r} is multimodal; on-policy regeneration does not support "
             "images yet. Use it off-policy with `prepare-data`."
         )
     if value in REGEN_DATASETS:
+        return value
+    if value.startswith("hf:"):
+        if not value.removeprefix("hf:").split(":", 1)[0]:
+            raise typer.BadParameter("Hugging Face dataset id cannot be empty")
         return value
 
     dataset_path = Path(value)
@@ -916,6 +950,8 @@ def regenerate_responses(
         typer.Option(
             help=(
                 "Registered dataset preset or local .json/.jsonl file. "
+                "Arbitrary Hugging Face datasets use "
+                "hf:<dataset-id>[:<subset>:<split>]. "
                 "Presets: " + ", ".join(REGEN_DATASETS)
             ),
             metavar="PRESET_OR_PATH",
@@ -1021,7 +1057,10 @@ def regenerate_responses(
     (prompt + completion token ids with loss mask) to a JSONL file.
     """
     if dataset not in REGEN_DATASETS and (split is not None or subset is not None):
-        raise typer.BadParameter("--split and --subset only apply to dataset presets")
+        raise typer.BadParameter(
+            "--split and --subset only apply to dataset presets; encode them in an "
+            "hf: dataset spec for arbitrary Hugging Face datasets"
+        )
 
     if max_retries < 0:
         raise typer.BadParameter("--max-retries must be >= 0")

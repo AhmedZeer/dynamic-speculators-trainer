@@ -23,6 +23,7 @@ TRACKED_PACKAGES = (
     "vllm",
     "transformers",
     "torch",
+    "peft",
     "compressed-tensors",
 )
 

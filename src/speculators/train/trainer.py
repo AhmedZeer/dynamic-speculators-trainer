@@ -33,6 +33,7 @@ from speculators.train.distributed import (
     is_distributed,
 )
 from speculators.train.graceful_shutdown import with_graceful_shutdown
+from speculators.train.lora import base_speculator_model
 from speculators.train.optimizers import build_optimizers
 from speculators.train.recovery import BatchRecoveryCoordinator
 from speculators.train.utils import normalize_counted_metrics
@@ -314,7 +315,7 @@ class Trainer:
 
     def setup_model(self):
         # Verify model is compatible with training infrastructure
-        SpeculatorModel.verify_training_compatible(self.model)
+        SpeculatorModel.verify_training_compatible(base_speculator_model(self.model))
 
         # Enable gradient checkpointing BEFORE FSDP/DDP wrapping to save
         # activation memory at the cost of recomputation during backward.

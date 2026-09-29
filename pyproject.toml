@@ -78,6 +78,9 @@ base = [
 ]
 
 [project.optional-dependencies]
+lora = [
+    "peft>=0.18.0,<1.0.0",
+]
 mooncake-cuda = [
     "mooncake-transfer-engine",
 ]
