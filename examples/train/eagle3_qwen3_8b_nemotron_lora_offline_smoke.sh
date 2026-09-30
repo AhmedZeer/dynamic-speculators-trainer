@@ -29,51 +29,91 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "=== Launching Qwen3-8B for response and hidden-state generation ==="
-python scripts/launch_vllm.py train "$MODEL" \
-    --provenance-dir "$RUN_DIR" \
-    --hidden-states-path "$HIDDEN_STATES_DIR" \
-    --target-layer-ids $TARGET_LAYER_IDS \
-    -- \
-    --port "$VLLM_PORT" \
-    --max-model-len "$VLLM_MAX_MODEL_LEN" \
-    --gpu-memory-utilization 0.90 &
-VLLM_PID=$!
+start_vllm() {
+    if [[ -n "$VLLM_PID" ]] && kill -0 "$VLLM_PID" 2>/dev/null; then
+        return
+    fi
 
-until curl -sf "http://localhost:${VLLM_PORT}/health" >/dev/null 2>&1; do
-    sleep 2
-done
+    echo "=== Launching Qwen3-8B because a generation stage has missing outputs ==="
+    python scripts/launch_vllm.py train "$MODEL" \
+        --provenance-dir "$RUN_DIR" \
+        --hidden-states-path "$HIDDEN_STATES_DIR" \
+        --target-layer-ids $TARGET_LAYER_IDS \
+        -- \
+        --port "$VLLM_PORT" \
+        --max-model-len "$VLLM_MAX_MODEL_LEN" \
+        --gpu-memory-utilization 0.90 &
+    VLLM_PID=$!
 
-echo "=== Regenerating Nemotron responses with Qwen3-8B ==="
-speculators regenerate-responses \
-    --endpoint "http://localhost:${VLLM_PORT}/v1/chat/completions" \
-    --model "$MODEL" \
-    --dataset "$DATASET" \
-    --limit "$MAX_SAMPLES" \
-    --concurrency 16 \
-    --max-tokens 1024 \
-    --sampling-params '{"temperature":0,"chat_template_kwargs":{"enable_thinking":false}}' \
-    --outfile "$REGENERATED_DATA" \
-    --resume
+    until curl -sf "http://localhost:${VLLM_PORT}/health" >/dev/null 2>&1; do
+        sleep 2
+    done
+}
 
-echo "=== Preparing regenerated token rows ==="
-speculators prepare-data \
-    --model "$MODEL" \
-    --data "$REGENERATED_DATA" \
-    --output "$DATA_DIR" \
-    --max-samples "$MAX_SAMPLES" \
-    --seq-length "$SEQ_LENGTH"
+# --resume skips completed prompt IDs, but --limit applies to newly queued IDs.
+# Count completed conversations first so rerunning this script does not generate
+# another MAX_SAMPLES rows after the original batch is already on Drive.
+COMPLETED_PROMPTS=$(python -c 'import json, pathlib, re, sys; p=pathlib.Path(sys.argv[1]); ids=set();
+if p.exists():
+    for line in p.open(encoding="utf-8"):
+        try:
+            row=json.loads(line); key=row.get("primary_id") or re.sub(r"_gen\d+$", "", str(row.get("id", "")))
+            if key: ids.add(str(key))
+        except (json.JSONDecodeError, AttributeError): pass
+print(len(ids))' "$REGENERATED_DATA")
 
-echo "=== Generating offline verifier hidden states ==="
-speculators generate-offline-data \
-    --model "$MODEL" \
-    --endpoint "http://localhost:${VLLM_PORT}/v1" \
-    --preprocessed-data "$DATA_DIR" \
-    --output "$HIDDEN_STATES_DIR" \
-    --max-samples "$MAX_SAMPLES" \
-    --concurrency 16 \
-    --validate-outputs \
-    --fail-on-error
+if (( COMPLETED_PROMPTS < MAX_SAMPLES )); then
+    REMAINING_PROMPTS=$((MAX_SAMPLES - COMPLETED_PROMPTS))
+    start_vllm
+    echo "=== Regenerating $REMAINING_PROMPTS remaining Nemotron prompts with Qwen3-8B ==="
+    speculators regenerate-responses \
+        --endpoint "http://localhost:${VLLM_PORT}/v1/chat/completions" \
+        --model "$MODEL" \
+        --dataset "$DATASET" \
+        --limit "$REMAINING_PROMPTS" \
+        --concurrency 16 \
+        --max-tokens 1024 \
+        --sampling-params '{"temperature":0,"chat_template_kwargs":{"enable_thinking":false}}' \
+        --outfile "$REGENERATED_DATA" \
+        --resume
+else
+    echo "=== Found $COMPLETED_PROMPTS generated prompts; skipping response generation ==="
+fi
+
+if compgen -G "$DATA_DIR/*.arrow" >/dev/null; then
+    echo "=== Found prepared Arrow dataset; skipping preprocessing ==="
+else
+    echo "=== Preparing regenerated token rows ==="
+    speculators prepare-data \
+        --model "$MODEL" \
+        --data "$REGENERATED_DATA" \
+        --output "$DATA_DIR" \
+        --max-samples "$MAX_SAMPLES" \
+        --seq-length "$SEQ_LENGTH"
+fi
+
+MISSING_HIDDEN_STATES=$(python -c 'from datasets import load_from_disk; from pathlib import Path; import sys; n=min(int(sys.argv[3]), len(load_from_disk(sys.argv[1]))); out=Path(sys.argv[2]); existing=set();
+if out.exists():
+    for p in out.glob("hs_*.safetensors"):
+        try: existing.add(int(p.stem[3:]))
+        except ValueError: pass
+print(sum(i not in existing for i in range(n)))' "$DATA_DIR" "$HIDDEN_STATES_DIR" "$MAX_SAMPLES")
+
+if (( MISSING_HIDDEN_STATES > 0 )); then
+    start_vllm
+    echo "=== Generating $MISSING_HIDDEN_STATES missing hidden-state files ==="
+    speculators generate-offline-data \
+        --model "$MODEL" \
+        --endpoint "http://localhost:${VLLM_PORT}/v1" \
+        --preprocessed-data "$DATA_DIR" \
+        --output "$HIDDEN_STATES_DIR" \
+        --max-samples "$MAX_SAMPLES" \
+        --concurrency 16 \
+        --validate-outputs \
+        --fail-on-error
+else
+    echo "=== Found all requested hidden states; skipping extraction ==="
+fi
 
 echo "=== Stopping vLLM and freeing the GPU ==="
 cleanup
