@@ -29,14 +29,14 @@ while (($#)); do
     shift
 done
 
-MODEL="Qwen/Qwen3-8B"
-DRAFTER="RedHatAI/Qwen3-8B-speculator.eagle3"
+MODEL="meta-llama/Llama-3.1-8B"
+DRAFTER="RedHatAI/Llama-3.1-8B-Instruct-speculator.eagle3"
 DATASET="hf:openeurollm/Nemotron-Post-Training-Dataset-v2-decontaminated:math"
-DUMP_ROOT="/content/drive/MyDrive/dynamic-speculators-dump-v4"
+DUMP_ROOT="/content/drive/MyDrive/dynamic-speculators-dump-llama-v1"
 VLLM_PORT=8000
 # MAX_SAMPLES is the shared cache target; TRAIN_SAMPLES selects a per-run prefix.
-MAX_SAMPLES="${MAX_SAMPLES:-10000}"
-TRAIN_SAMPLES="${TRAIN_SAMPLES:-5000}"
+MAX_SAMPLES="${MAX_SAMPLES:-1000}"
+TRAIN_SAMPLES="${TRAIN_SAMPLES:-1000}"
 TRAIN_DATA_RATIO="${TRAIN_DATA_RATIO:-0.9}"
 SEQ_LENGTH=8192
 VLLM_MAX_MODEL_LEN=16384
