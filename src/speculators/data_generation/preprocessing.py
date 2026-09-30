@@ -821,6 +821,7 @@ def load_and_preprocess_dataset(
     seq_length: int,
     build_dataset_num_proc: int = 8,
     seed: int = 0,
+    shuffle: bool = True,
     max_samples: int | None = None,
     token_freq_path: Path | str = "./token_freq.pt",  # noqa: S107
     render_endpoint: str | None = None,
@@ -843,6 +844,7 @@ def load_and_preprocess_dataset(
         seq_length: Maximum sequence length
         build_dataset_num_proc: Number of processes for dataset building
         seed: Random seed for shuffling
+        shuffle: Whether to shuffle rows. Disable for append-stable offline caches.
         max_samples: Optional limit on number of samples
         token_freq_path: Path to save token frequency distribution
         cache_dir: Directory to cache HuggingFace datasets (optional)
@@ -880,7 +882,8 @@ def load_and_preprocess_dataset(
     for train_data_path in train_data_paths:
         log.subsection(f"Processing {train_data_path}")
         raw_dataset, normalize_fn = load_raw_dataset(train_data_path)
-        raw_dataset = raw_dataset.shuffle(seed=seed)
+        if shuffle:
+            raw_dataset = raw_dataset.shuffle(seed=seed)
 
         if max_samples is not None and len(raw_dataset) > 3 * max_samples:
             # Reduce size to 3 * max_samples to reduce processing
@@ -925,7 +928,8 @@ def load_and_preprocess_dataset(
         processed_datasets.append(preprocessed_dataset)
 
     combined_dataset = concatenate_datasets(processed_datasets)
-    combined_dataset = combined_dataset.shuffle(seed=seed)
+    if shuffle:
+        combined_dataset = combined_dataset.shuffle(seed=seed)
     if max_samples is not None and len(combined_dataset) > max_samples:
         combined_dataset = combined_dataset.select(range(max_samples))
 

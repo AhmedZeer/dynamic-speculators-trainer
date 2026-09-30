@@ -11,7 +11,7 @@ The script separates shared data from each training run:
 
 ```text
 /content/drive/MyDrive/dynamic-speculators-dump-v2/
-├── eagle3_qwen3_8b_nemotron_lora_v2/   # DATA_ROOT, shared cache
+├── eagle3_qwen3_8b_nemotron_lora_ordered_v1/ # DATA_ROOT, shared cache
 │   ├── regenerated/qwen3_8b.jsonl
 │   ├── data/                           # prepared Arrow rows
 │   ├── hidden_states/                  # hs_<row-index>.safetensors
@@ -21,10 +21,16 @@ The script separates shared data from each training run:
     └── logs/
 ```
 
-The default `DATA_ROOT` preserves the existing v2 cache location. Override it
-with an environment variable to select a different shared cache. Keep one cache
-for runs that use the same dataset, verifier model, sequence length, and target
-layers. Use a separate cache if any of those data-generation inputs change.
+The default `DATA_ROOT` uses append-stable ordering. The older `v2` cache used
+size-dependent shuffling and must not be mixed with this cache. Override
+`DATA_ROOT` to select another shared cache. Keep one cache for runs that use the
+same dataset, verifier model, sequence length, and target layers. Use a separate
+cache if any of those data-generation inputs change.
+
+`RESPONSE_ROOT` may point at an existing regenerated-response directory. This
+allows a new ordered Arrow/hidden-state cache to reuse the much smaller JSONL
+from an older cache without copying it. Arrow data and hidden states must stay
+together under the new `DATA_ROOT`.
 
 `RUN_ID` defaults to `v1`; set a distinct value for each independent sweep run.
 Reuse the same `RUN_ID` when resuming a run. `RUN_DIR` can also be set directly.
@@ -60,7 +66,11 @@ The script reports how many selected training rows have hidden states and how
 many will be skipped. Without those flags, it detects completed artifacts and
 generates only missing responses or hidden states. If the requested cache size
 is larger than the prepared cache, the script expands the prepared data from
-the regenerated JSONL and preserves existing hidden-state files. With
+the regenerated JSONL using `--preserve-order`. It builds the expanded Arrow
+dataset in `data.next`, verifies that every existing row has identical token
+IDs, and only then swaps it into place. This validation reads the compact Arrow
+data and does not open existing hidden-state tensors. Existing hidden-state
+files therefore remain valid when growing a cache from 10k to 20k. With
 `--skip-regenerate`, expansion requires the regenerated JSONL to already have
 the requested number of prompts.
 

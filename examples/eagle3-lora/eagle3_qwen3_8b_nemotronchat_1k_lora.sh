@@ -47,13 +47,14 @@ LORA_ALPHA=128
 LR=1e-4
 SCHEDULER=linear # cosine
 # Generation outputs are shared by compatible hyperparameter runs. The default
-# points at the existing v2 cache; override DATA_ROOT to relocate it. Use a
+# uses append-stable row ordering; override DATA_ROOT to relocate it. Use a
 # separate cache if dataset, verifier, sequence length, or target layers change.
-DATA_ROOT="${DATA_ROOT:-$DUMP_ROOT/eagle3_qwen3_8b_nemotron_lora_v2}"
+DATA_ROOT="${DATA_ROOT:-$DUMP_ROOT/eagle3_qwen3_8b_nemotron_lora_ordered_v1}"
 # Training artifacts stay isolated per run. Reuse RUN_ID to resume a run.
 RUN_ID="${RUN_ID:-v1}"
 RUN_DIR="${RUN_DIR:-$DUMP_ROOT/runs/$RUN_ID}"
-REGENERATED_DATA="$DATA_ROOT/regenerated/qwen3_8b.jsonl"
+RESPONSE_ROOT="${RESPONSE_ROOT:-$DATA_ROOT/regenerated}"
+REGENERATED_DATA="$RESPONSE_ROOT/qwen3_8b.jsonl"
 DATA_DIR="$DATA_ROOT/data"
 HIDDEN_STATES_DIR="$DATA_ROOT/hidden_states"
 CHECKPOINT_DIR="$RUN_DIR/checkpoints"
@@ -61,7 +62,7 @@ WANDB_PROJECT="${WANDB_PROJECT:-dynamic-speculators-v2}"
 WANDB_RUN_NAME="${WANDB_RUN_NAME:-qwen3-8b-nemotronmath-1k-lora-{time}}"
 export WANDB_PROJECT
 
-mkdir -p "$DATA_ROOT/regenerated" "$HIDDEN_STATES_DIR" "$RUN_DIR"
+mkdir -p "$RESPONSE_ROOT" "$HIDDEN_STATES_DIR" "$RUN_DIR"
 echo "Shared data cache: $DATA_ROOT"
 echo "Run outputs: $RUN_DIR"
 
@@ -139,24 +140,43 @@ else
         echo "No prepared Arrow dataset or regenerated response file found under $DATA_ROOT; cannot prepare training data." >&2
         exit 1
     fi
-    PREPARE_OVERWRITE=()
     if (( PREPARED_SAMPLES > 0 )); then
         if (( SKIP_REGENERATE && COMPLETED_PROMPTS < MAX_SAMPLES )); then
             echo "Prepared cache has $PREPARED_SAMPLES rows, below MAX_SAMPLES=$MAX_SAMPLES, and --skip-regenerate left only $COMPLETED_PROMPTS response prompts. Increase the cache with regeneration enabled or point DATA_ROOT to a separate cache." >&2
             exit 1
         fi
-        echo "=== Expanding prepared data cache from $PREPARED_SAMPLES to target $MAX_SAMPLES rows ==="
-        PREPARE_OVERWRITE=(--overwrite)
+        echo "=== Building append-stable expansion from $PREPARED_SAMPLES to target $MAX_SAMPLES rows ==="
+        NEXT_DATA_DIR="$DATA_ROOT/data.next"
+        rm -rf "$NEXT_DATA_DIR"
+        speculators prepare-data \
+            --model "$MODEL" \
+            --data "$REGENERATED_DATA" \
+            --output "$NEXT_DATA_DIR" \
+            --max-samples "$MAX_SAMPLES" \
+            --seq-length "$SEQ_LENGTH" \
+            --preserve-order
+
+        python -c 'from datasets import load_from_disk; import sys; old=load_from_disk(sys.argv[1]); new=load_from_disk(sys.argv[2]);
+if len(new) < len(old): raise SystemExit(f"Expanded dataset shrank from {len(old)} to {len(new)} rows")
+for i in range(len(old)):
+    if old[i]["input_ids"] != new[i]["input_ids"]: raise SystemExit(f"Cache expansion changed token IDs at row {i}; refusing to reuse hidden states")
+print(f"Verified append-stable prefix: {len(old)} existing rows are unchanged")' "$DATA_DIR" "$NEXT_DATA_DIR"
+
+        PREVIOUS_DATA_DIR="$DATA_ROOT/data.previous"
+        rm -rf "$PREVIOUS_DATA_DIR"
+        mv "$DATA_DIR" "$PREVIOUS_DATA_DIR"
+        mv "$NEXT_DATA_DIR" "$DATA_DIR"
+        rm -rf "$PREVIOUS_DATA_DIR"
     else
         echo "=== Preparing regenerated token rows ==="
+        speculators prepare-data \
+            --model "$MODEL" \
+            --data "$REGENERATED_DATA" \
+            --output "$DATA_DIR" \
+            --max-samples "$MAX_SAMPLES" \
+            --seq-length "$SEQ_LENGTH" \
+            --preserve-order
     fi
-    speculators prepare-data \
-        --model "$MODEL" \
-        --data "$REGENERATED_DATA" \
-        --output "$DATA_DIR" \
-        --max-samples "$MAX_SAMPLES" \
-        --seq-length "$SEQ_LENGTH" \
-        "${PREPARE_OVERWRITE[@]}"
 fi
 
 MISSING_HIDDEN_STATES=$(python -c 'from datasets import load_from_disk; from pathlib import Path; import sys; n=min(int(sys.argv[3]), len(load_from_disk(sys.argv[1]))); out=Path(sys.argv[2]); existing=set();

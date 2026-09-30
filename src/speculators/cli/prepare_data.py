@@ -120,6 +120,17 @@ def prepare_data(
         int,
         typer.Option(help="Random seed"),
     ] = 0,
+    shuffle: Annotated[
+        bool,
+        typer.Option(
+            "--shuffle/--preserve-order",
+            help=(
+                "Shuffle rows before selecting --max-samples. Use "
+                "--preserve-order for an append-stable offline cache whose "
+                "existing row indices must survive later expansion."
+            ),
+        ),
+    ] = True,
     num_preprocessing_workers: Annotated[
         int | None,
         typer.Option(
@@ -229,6 +240,7 @@ def prepare_data(
             else default_preprocessing_workers()
         ),
         seed=seed,
+        shuffle=shuffle,
         max_samples=max_samples,
         token_freq_path=resolved_token_freq_path,
         render_endpoint=render_endpoint,
