@@ -119,8 +119,8 @@ elif (( COMPLETED_PROMPTS < MAX_SAMPLES )); then
         --model "$MODEL" \
         --dataset "$DATASET" \
         --limit "$REMAINING_PROMPTS" \
-        --concurrency 256 \
-        --max-tokens 8192 \
+        --concurrency 128 \
+        --max-tokens 1024 \
         --sampling-params '{"temperature":0,"chat_template_kwargs":{"enable_thinking":false}}' \
         --outfile "$REGENERATED_DATA" \
         --resume
