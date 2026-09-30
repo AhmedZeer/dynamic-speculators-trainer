@@ -32,7 +32,7 @@ done
 MODEL="Qwen/Qwen3-8B"
 DRAFTER="RedHatAI/Qwen3-8B-speculator.eagle3"
 DATASET="hf:openeurollm/Nemotron-Post-Training-Dataset-v2-decontaminated:math"
-DUMP_ROOT="/content/drive/MyDrive/dynamic-speculators-dump-v3"
+DUMP_ROOT="/content/drive/MyDrive/dynamic-speculators-dump-v4"
 VLLM_PORT=8000
 # MAX_SAMPLES is the shared cache target; TRAIN_SAMPLES selects a per-run prefix.
 MAX_SAMPLES="${MAX_SAMPLES:-10000}"
@@ -119,8 +119,8 @@ elif (( COMPLETED_PROMPTS < MAX_SAMPLES )); then
         --model "$MODEL" \
         --dataset "$DATASET" \
         --limit "$REMAINING_PROMPTS" \
-        --concurrency 16 \
-        --max-tokens 1024 \
+        --concurrency 256 \
+        --max-tokens 8192 \
         --sampling-params '{"temperature":0,"chat_template_kwargs":{"enable_thinking":false}}' \
         --outfile "$REGENERATED_DATA" \
         --resume
