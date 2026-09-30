@@ -194,7 +194,7 @@ python -m speculators.train \
     --num-workers 2 \
     --prefetch-factor 2 \
     --on-missing "$ON_MISSING" \
-    --report-to wandb 
+    --logger wandb
 
 echo "Adapter: $CHECKPOINT_DIR/0/adapter/"
 echo "Merged drafter: $CHECKPOINT_DIR/0/"
