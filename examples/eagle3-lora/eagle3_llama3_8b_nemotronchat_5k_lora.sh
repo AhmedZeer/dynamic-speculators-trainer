@@ -1,5 +1,5 @@
 #!/bin/bash
-# Single-GPU offline LoRA smoke run for the published Qwen3-8B EAGLE-3 drafter.
+# Single-GPU offline LoRA run for the published Llama 3.1 8B EAGLE-3 drafter.
 # Requires an editable install with the LoRA extra: pip install -e '.[lora]'
 
 set -euo pipefail
@@ -29,37 +29,38 @@ while (($#)); do
     shift
 done
 
-MODEL="meta-llama/Llama-3.1-8B"
+MODEL="meta-llama/Llama-3.1-8B-Instruct"
 DRAFTER="RedHatAI/Llama-3.1-8B-Instruct-speculator.eagle3"
 DATASET="hf:openeurollm/Nemotron-Post-Training-Dataset-v2-decontaminated:math"
-DUMP_ROOT="/content/drive/MyDrive/dynamic-speculators-dump-llama-v1"
+DUMP_ROOT="/content/drive/MyDrive/dynamic-speculators-dump-v2"
 VLLM_PORT=8000
 # MAX_SAMPLES is the shared cache target; TRAIN_SAMPLES selects a per-run prefix.
-MAX_SAMPLES="${MAX_SAMPLES:-1000}"
+MAX_SAMPLES="${MAX_SAMPLES:-5000}"
 TRAIN_SAMPLES="${TRAIN_SAMPLES:-1000}"
 TRAIN_DATA_RATIO="${TRAIN_DATA_RATIO:-0.9}"
 SEQ_LENGTH=8192
 VLLM_MAX_MODEL_LEN=16384
-TARGET_LAYER_IDS="2 18 33"
+TARGET_LAYER_IDS="2 16 29"
 EPOCHS=10
 LORA_RANK=64
 LORA_ALPHA=128
 LR=1e-4
 SCHEDULER=linear # cosine
+CONCURRENCY="${CONCURRENCY:-32}"
 # Generation outputs are shared by compatible hyperparameter runs. The default
 # uses append-stable row ordering; override DATA_ROOT to relocate it. Use a
 # separate cache if dataset, verifier, sequence length, or target layers change.
-DATA_ROOT="${DATA_ROOT:-$DUMP_ROOT/eagle3_qwen3_8b_nemotron_lora_ordered_v1}"
+DATA_ROOT="${DATA_ROOT:-$DUMP_ROOT/eagle3_llama3_8b_nemotron_lora_ordered_v1}"
 # Training artifacts stay isolated per run. Reuse RUN_ID to resume a run.
-RUN_ID="${RUN_ID:-5kv1}"
+RUN_ID="${RUN_ID:-llama3-1k-v1}"
 RUN_DIR="${RUN_DIR:-$DUMP_ROOT/runs/$RUN_ID}"
 RESPONSE_ROOT="${RESPONSE_ROOT:-$DATA_ROOT/regenerated}"
-REGENERATED_DATA="$RESPONSE_ROOT/qwen3_8b.jsonl"
+REGENERATED_DATA="$RESPONSE_ROOT/llama3_8b.jsonl"
 DATA_DIR="$DATA_ROOT/data"
 HIDDEN_STATES_DIR="$DATA_ROOT/hidden_states"
 CHECKPOINT_DIR="$RUN_DIR/checkpoints"
 WANDB_PROJECT="${WANDB_PROJECT:-dynamic-speculators-v2}"
-WANDB_RUN_NAME="${WANDB_RUN_NAME:-qwen3-8b-nemotronmath-5k-lora}"
+WANDB_RUN_NAME="${WANDB_RUN_NAME:-llama3-8b-nemotronmath-5k-lora}"
 export WANDB_PROJECT
 
 mkdir -p "$RESPONSE_ROOT" "$HIDDEN_STATES_DIR" "$RUN_DIR"
@@ -80,7 +81,7 @@ start_vllm() {
         return
     fi
 
-    echo "=== Launching Qwen3-8B because a generation stage has missing outputs ==="
+    echo "=== Launching Llama 3.1 8B Instruct because a generation stage has missing outputs ==="
     python scripts/launch_vllm.py train "$MODEL" \
         --provenance-dir "$DATA_ROOT" \
         --hidden-states-path "$HIDDEN_STATES_DIR" \
@@ -113,15 +114,15 @@ if (( SKIP_REGENERATE )); then
 elif (( COMPLETED_PROMPTS < MAX_SAMPLES )); then
     REMAINING_PROMPTS=$((MAX_SAMPLES - COMPLETED_PROMPTS))
     start_vllm
-    echo "=== Regenerating $REMAINING_PROMPTS remaining Nemotron prompts with Qwen3-8B ==="
+    echo "=== Regenerating $REMAINING_PROMPTS remaining Nemotron prompts with Llama 3.1 8B Instruct ==="
     speculators regenerate-responses \
         --endpoint "http://localhost:${VLLM_PORT}/v1/chat/completions" \
         --model "$MODEL" \
         --dataset "$DATASET" \
         --limit "$REMAINING_PROMPTS" \
-        --concurrency 256 \
+        --concurrency "$CONCURRENCY" \
         --max-tokens 8192 \
-        --sampling-params '{"temperature":0,"chat_template_kwargs":{"enable_thinking":false}}' \
+        --sampling-params '{"temperature":0}' \
         --outfile "$REGENERATED_DATA" \
         --resume
 else
@@ -197,7 +198,7 @@ elif (( MISSING_HIDDEN_STATES > 0 )); then
         --preprocessed-data "$DATA_DIR" \
         --output "$HIDDEN_STATES_DIR" \
         --max-samples "$MAX_SAMPLES" \
-        --concurrency 16 \
+        --concurrency "$CONCURRENCY" \
         --validate-outputs \
         --fail-on-error
 else
@@ -227,7 +228,7 @@ echo "=== Stopping vLLM and freeing the GPU ==="
 cleanup
 VLLM_PID=""
 
-echo "=== Fine-tuning EAGLE-3 with LoRA for 10 steps ==="
+echo "=== Fine-tuning Llama 3.1 EAGLE-3 with LoRA for $EPOCHS epochs ==="
 python -m speculators.train \
     --verifier-name-or-path "$MODEL" \
     --from-pretrained "$DRAFTER" \
