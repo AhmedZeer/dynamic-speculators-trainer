@@ -4,6 +4,31 @@
 
 set -euo pipefail
 
+SKIP_REGENERATE=0
+SKIP_MISSING=0
+while (($#)); do
+    case "$1" in
+        --skip-regenerate)
+            SKIP_REGENERATE=1
+            ;;
+        --skip-missing)
+            SKIP_MISSING=1
+            ;;
+        -h|--help)
+            echo "Usage: $0 [--skip-regenerate] [--skip-missing]"
+            echo "  --skip-regenerate  Reuse existing regenerated/prepared data; do not call the response-generation endpoint."
+            echo "  --skip-missing     Do not generate missing hidden states; train on available hidden-state samples only."
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            echo "Usage: $0 [--skip-regenerate] [--skip-missing]" >&2
+            exit 2
+            ;;
+    esac
+    shift
+done
+
 MODEL="Qwen/Qwen3-8B"
 DRAFTER="RedHatAI/Qwen3-8B-speculator.eagle3"
 DATASET="hf:openeurollm/Nemotron-Post-Training-Dataset-v2-decontaminated:chat"
@@ -62,7 +87,9 @@ if p.exists():
         except (json.JSONDecodeError, AttributeError): pass
 print(len(ids))' "$REGENERATED_DATA")
 
-if (( COMPLETED_PROMPTS < MAX_SAMPLES )); then
+if (( SKIP_REGENERATE )); then
+    echo "=== --skip-regenerate: found $COMPLETED_PROMPTS regenerated prompts; response generation is disabled ==="
+elif (( COMPLETED_PROMPTS < MAX_SAMPLES )); then
     REMAINING_PROMPTS=$((MAX_SAMPLES - COMPLETED_PROMPTS))
     start_vllm
     echo "=== Regenerating $REMAINING_PROMPTS remaining Nemotron prompts with Qwen3-8B ==="
@@ -83,6 +110,10 @@ fi
 if compgen -G "$DATA_DIR/*.arrow" >/dev/null; then
     echo "=== Found prepared Arrow dataset; skipping preprocessing ==="
 else
+    if [[ ! -f "$REGENERATED_DATA" ]]; then
+        echo "No prepared Arrow dataset or regenerated response file found at $RUN_DIR; cannot prepare training data." >&2
+        exit 1
+    fi
     echo "=== Preparing regenerated token rows ==="
     speculators prepare-data \
         --model "$MODEL" \
@@ -98,8 +129,9 @@ if out.exists():
         try: existing.add(int(p.stem[3:]))
         except ValueError: pass
 print(sum(i not in existing for i in range(n)))' "$DATA_DIR" "$HIDDEN_STATES_DIR" "$MAX_SAMPLES")
-
-if (( MISSING_HIDDEN_STATES > 0 )); then
+if (( SKIP_MISSING )); then
+    echo "=== --skip-missing: leaving $MISSING_HIDDEN_STATES hidden-state files ungenerated ==="
+elif (( MISSING_HIDDEN_STATES > 0 )); then
     start_vllm
     echo "=== Generating $MISSING_HIDDEN_STATES missing hidden-state files ==="
     speculators generate-offline-data \
@@ -113,6 +145,25 @@ if (( MISSING_HIDDEN_STATES > 0 )); then
         --fail-on-error
 else
     echo "=== Found all requested hidden states; skipping extraction ==="
+fi
+
+DATA_COUNTS=$(python -c 'from datasets import load_from_disk; from pathlib import Path; import sys; n=min(int(sys.argv[3]), len(load_from_disk(sys.argv[1]))); out=Path(sys.argv[2]); present=set();
+if out.exists():
+    for p in out.glob("hs_*.safetensors"):
+        try:
+            i=int(p.stem[3:])
+            if 0 <= i < n: present.add(i)
+        except ValueError: pass
+print(f"{n} {len(present)} {n-len(present)}")' "$DATA_DIR" "$HIDDEN_STATES_DIR" "$MAX_SAMPLES")
+read -r DATASET_SAMPLES AVAILABLE_SAMPLES SKIPPED_SAMPLES <<< "$DATA_COUNTS"
+echo "=== Data availability: $AVAILABLE_SAMPLES/$DATASET_SAMPLES samples have hidden states; $SKIPPED_SAMPLES will be skipped ==="
+if (( SKIP_MISSING && AVAILABLE_SAMPLES == 0 )); then
+    echo "No training samples have hidden states; cannot start training with --skip-missing." >&2
+    exit 1
+fi
+ON_MISSING=raise
+if (( SKIP_MISSING )); then
+    ON_MISSING=skip
 fi
 
 echo "=== Stopping vLLM and freeing the GPU ==="
@@ -139,7 +190,7 @@ python -m speculators.train \
     --lora-dropout 0.05 \
     --num-workers 2 \
     --prefetch-factor 2 \
-    --on-missing raise
+    --on-missing "$ON_MISSING"
 
 echo "Adapter: $CHECKPOINT_DIR/0/adapter/"
 echo "Merged drafter: $CHECKPOINT_DIR/0/"
