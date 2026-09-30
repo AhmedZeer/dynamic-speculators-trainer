@@ -32,7 +32,7 @@ done
 MODEL="Qwen/Qwen3-8B"
 DRAFTER="RedHatAI/Qwen3-8B-speculator.eagle3"
 DATASET="hf:openeurollm/Nemotron-Post-Training-Dataset-v2-decontaminated:chat"
-RUN_DIR="/content/drive/MyDrive/dynamic-speculators-dump-v2/eagle3_qwen3_8b_nemotron_lora_v1"
+RUN_DIR="/content/drive/MyDrive/dynamic-speculators-dump-v2/eagle3_qwen3_8b_nemotron_lora_v2"
 REGENERATED_DATA="$RUN_DIR/regenerated/qwen3_8b.jsonl"
 DATA_DIR="$RUN_DIR/data"
 HIDDEN_STATES_DIR="$RUN_DIR/hidden_states"
@@ -45,6 +45,9 @@ TARGET_LAYER_IDS="2 18 33"
 EPOCHS=10
 LORA_RANK=64
 LORA_ALPHA=128
+WANDB_PROJECT="${WANDB_PROJECT:-dynamic-speculators-v2}"
+WANDB_RUN_NAME="${WANDB_RUN_NAME:-qwen3-8b-nemotronchat-1k-lora-{time}}"
+export WANDB_PROJECT
 
 mkdir -p "$RUN_DIR/regenerated" "$HIDDEN_STATES_DIR"
 
@@ -194,7 +197,8 @@ python -m speculators.train \
     --num-workers 2 \
     --prefetch-factor 2 \
     --on-missing "$ON_MISSING" \
-    --logger wandb
+    --logger wandb \
+    --run-name "$WANDB_RUN_NAME"
 
 echo "Adapter: $CHECKPOINT_DIR/0/adapter/"
 echo "Merged drafter: $CHECKPOINT_DIR/0/"

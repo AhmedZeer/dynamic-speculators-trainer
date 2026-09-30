@@ -531,7 +531,10 @@ class Trainer:
             timer.mark("fwd")
             self._optimizers_zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+            # clip_grad_norm_ returns the total norm before clipping. Keep it in
+            # the step metrics so runs can track gradient scale and clipping.
+            grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+            metrics["grad_norm"] = grad_norm.detach()
 
             metrics["error_records_sum"] = torch.tensor(
                 batch["error_records"], dtype=torch.float32, device=loss.device
