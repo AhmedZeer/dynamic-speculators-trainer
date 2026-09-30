@@ -35,7 +35,7 @@ DATASET="hf:openeurollm/Nemotron-Post-Training-Dataset-v2-decontaminated:math"
 DUMP_ROOT="/content/drive/MyDrive/dynamic-speculators-dump-v2"
 VLLM_PORT=8000
 # MAX_SAMPLES is the shared cache target; TRAIN_SAMPLES selects a per-run prefix.
-MAX_SAMPLES="${MAX_SAMPLES:-1024}"
+MAX_SAMPLES="${MAX_SAMPLES:-5000}"
 TRAIN_SAMPLES="${TRAIN_SAMPLES:-$MAX_SAMPLES}"
 TRAIN_DATA_RATIO="${TRAIN_DATA_RATIO:-0.9}"
 SEQ_LENGTH=8192
@@ -51,14 +51,14 @@ SCHEDULER=linear # cosine
 # separate cache if dataset, verifier, sequence length, or target layers change.
 DATA_ROOT="${DATA_ROOT:-$DUMP_ROOT/eagle3_qwen3_8b_nemotron_lora_v2}"
 # Training artifacts stay isolated per run. Reuse RUN_ID to resume a run.
-RUN_ID="${RUN_ID:-v1}"
+RUN_ID="${RUN_ID:-5kv1}"
 RUN_DIR="${RUN_DIR:-$DUMP_ROOT/runs/$RUN_ID}"
 REGENERATED_DATA="$DATA_ROOT/regenerated/qwen3_8b.jsonl"
 DATA_DIR="$DATA_ROOT/data"
 HIDDEN_STATES_DIR="$DATA_ROOT/hidden_states"
 CHECKPOINT_DIR="$RUN_DIR/checkpoints"
 WANDB_PROJECT="${WANDB_PROJECT:-dynamic-speculators-v2}"
-WANDB_RUN_NAME="${WANDB_RUN_NAME:-qwen3-8b-nemotronmath-1k-lora-{time}}"
+WANDB_RUN_NAME="${WANDB_RUN_NAME:-qwen3-8b-nemotronmath-5k-lora}"
 export WANDB_PROJECT
 
 mkdir -p "$DATA_ROOT/regenerated" "$HIDDEN_STATES_DIR" "$RUN_DIR"
