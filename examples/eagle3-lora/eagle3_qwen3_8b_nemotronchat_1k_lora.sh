@@ -141,7 +141,8 @@ python -m speculators.train \
     --lora-dropout 0.05 \
     --num-workers 2 \
     --prefetch-factor 2 \
-    --on-missing raise
+    --on-missing raise \
+    --report-to wandb 
 
 echo "Adapter: $CHECKPOINT_DIR/0/adapter/"
 echo "Merged drafter: $CHECKPOINT_DIR/0/"
