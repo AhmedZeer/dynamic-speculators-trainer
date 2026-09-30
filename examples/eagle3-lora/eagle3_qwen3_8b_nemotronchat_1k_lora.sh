@@ -31,25 +31,37 @@ done
 
 MODEL="Qwen/Qwen3-8B"
 DRAFTER="RedHatAI/Qwen3-8B-speculator.eagle3"
-DATASET="hf:openeurollm/Nemotron-Post-Training-Dataset-v2-decontaminated:chat"
-RUN_DIR="/content/drive/MyDrive/dynamic-speculators-dump-v2/eagle3_qwen3_8b_nemotron_lora_v2"
-REGENERATED_DATA="$RUN_DIR/regenerated/qwen3_8b.jsonl"
-DATA_DIR="$RUN_DIR/data"
-HIDDEN_STATES_DIR="$RUN_DIR/hidden_states"
-CHECKPOINT_DIR="$RUN_DIR/checkpoints"
+DATASET="hf:openeurollm/Nemotron-Post-Training-Dataset-v2-decontaminated:math"
+DUMP_ROOT="/content/drive/MyDrive/dynamic-speculators-dump-v2"
 VLLM_PORT=8000
-MAX_SAMPLES=1024
+# MAX_SAMPLES is the shared cache target; TRAIN_SAMPLES selects a per-run prefix.
+MAX_SAMPLES="${MAX_SAMPLES:-1024}"
+TRAIN_SAMPLES="${TRAIN_SAMPLES:-$MAX_SAMPLES}"
+TRAIN_DATA_RATIO="${TRAIN_DATA_RATIO:-0.9}"
 SEQ_LENGTH=8192
 VLLM_MAX_MODEL_LEN=8192
 TARGET_LAYER_IDS="2 18 33"
 EPOCHS=10
 LORA_RANK=64
 LORA_ALPHA=128
+# Generation outputs are shared by compatible hyperparameter runs. The default
+# points at the existing v2 cache; override DATA_ROOT to relocate it. Use a
+# separate cache if dataset, verifier, sequence length, or target layers change.
+DATA_ROOT="${DATA_ROOT:-$DUMP_ROOT/eagle3_qwen3_8b_nemotron_lora_v2}"
+# Training artifacts stay isolated per run. Reuse RUN_ID to resume a run.
+RUN_ID="v1"
+RUN_DIR="${RUN_DIR:-$DUMP_ROOT/runs/$RUN_ID}"
+REGENERATED_DATA="$DATA_ROOT/regenerated/qwen3_8b.jsonl"
+DATA_DIR="$DATA_ROOT/data"
+HIDDEN_STATES_DIR="$DATA_ROOT/hidden_states"
+CHECKPOINT_DIR="$RUN_DIR/checkpoints"
 WANDB_PROJECT="${WANDB_PROJECT:-dynamic-speculators-v2}"
-WANDB_RUN_NAME="${WANDB_RUN_NAME:-qwen3-8b-nemotronchat-1k-lora-{time}}"
+WANDB_RUN_NAME="${WANDB_RUN_NAME:-qwen3-8b-nemotronmath-1k-lora-{time}}"
 export WANDB_PROJECT
 
-mkdir -p "$RUN_DIR/regenerated" "$HIDDEN_STATES_DIR"
+mkdir -p "$DATA_ROOT/regenerated" "$HIDDEN_STATES_DIR" "$RUN_DIR"
+echo "Shared data cache: $DATA_ROOT"
+echo "Run outputs: $RUN_DIR"
 
 VLLM_PID=""
 cleanup() {
@@ -67,7 +79,7 @@ start_vllm() {
 
     echo "=== Launching Qwen3-8B because a generation stage has missing outputs ==="
     python scripts/launch_vllm.py train "$MODEL" \
-        --provenance-dir "$RUN_DIR" \
+        --provenance-dir "$DATA_ROOT" \
         --hidden-states-path "$HIDDEN_STATES_DIR" \
         --target-layer-ids $TARGET_LAYER_IDS \
         -- \
@@ -113,20 +125,36 @@ else
     echo "=== Found $COMPLETED_PROMPTS generated prompts; skipping response generation ==="
 fi
 
+PREPARED_SAMPLES=0
 if compgen -G "$DATA_DIR/*.arrow" >/dev/null; then
-    echo "=== Found prepared Arrow dataset; skipping preprocessing ==="
+    PREPARED_SAMPLES=$(python -c 'from datasets import load_from_disk; import sys; print(len(load_from_disk(sys.argv[1])))' "$DATA_DIR")
+fi
+
+if (( PREPARED_SAMPLES >= MAX_SAMPLES )); then
+    echo "=== Found $PREPARED_SAMPLES prepared rows; reusing cache for target $MAX_SAMPLES ==="
 else
     if [[ ! -f "$REGENERATED_DATA" ]]; then
-        echo "No prepared Arrow dataset or regenerated response file found at $RUN_DIR; cannot prepare training data." >&2
+        echo "No prepared Arrow dataset or regenerated response file found under $DATA_ROOT; cannot prepare training data." >&2
         exit 1
     fi
-    echo "=== Preparing regenerated token rows ==="
+    PREPARE_OVERWRITE=()
+    if (( PREPARED_SAMPLES > 0 )); then
+        if (( SKIP_REGENERATE && COMPLETED_PROMPTS < MAX_SAMPLES )); then
+            echo "Prepared cache has $PREPARED_SAMPLES rows, below MAX_SAMPLES=$MAX_SAMPLES, and --skip-regenerate left only $COMPLETED_PROMPTS response prompts. Increase the cache with regeneration enabled or point DATA_ROOT to a separate cache." >&2
+            exit 1
+        fi
+        echo "=== Expanding prepared data cache from $PREPARED_SAMPLES to target $MAX_SAMPLES rows ==="
+        PREPARE_OVERWRITE=(--overwrite)
+    else
+        echo "=== Preparing regenerated token rows ==="
+    fi
     speculators prepare-data \
         --model "$MODEL" \
         --data "$REGENERATED_DATA" \
         --output "$DATA_DIR" \
         --max-samples "$MAX_SAMPLES" \
-        --seq-length "$SEQ_LENGTH"
+        --seq-length "$SEQ_LENGTH" \
+        "${PREPARE_OVERWRITE[@]}"
 fi
 
 MISSING_HIDDEN_STATES=$(python -c 'from datasets import load_from_disk; from pathlib import Path; import sys; n=min(int(sys.argv[3]), len(load_from_disk(sys.argv[1]))); out=Path(sys.argv[2]); existing=set();
@@ -154,16 +182,16 @@ else
     echo "=== Found all requested hidden states; skipping extraction ==="
 fi
 
-DATA_COUNTS=$(python -c 'from datasets import load_from_disk; from pathlib import Path; import sys; n=min(int(sys.argv[3]), len(load_from_disk(sys.argv[1]))); out=Path(sys.argv[2]); present=set();
+DATA_COUNTS=$(python -c 'from datasets import load_from_disk; from pathlib import Path; import sys; data=load_from_disk(sys.argv[1]); n=min(int(sys.argv[3]), int(len(data)*float(sys.argv[4]))); out=Path(sys.argv[2]); present=set();
 if out.exists():
     for p in out.glob("hs_*.safetensors"):
         try:
             i=int(p.stem[3:])
             if 0 <= i < n: present.add(i)
         except ValueError: pass
-print(f"{n} {len(present)} {n-len(present)}")' "$DATA_DIR" "$HIDDEN_STATES_DIR" "$MAX_SAMPLES")
+print(f"{n} {len(present)} {n-len(present)}")' "$DATA_DIR" "$HIDDEN_STATES_DIR" "$TRAIN_SAMPLES" "$TRAIN_DATA_RATIO")
 read -r DATASET_SAMPLES AVAILABLE_SAMPLES SKIPPED_SAMPLES <<< "$DATA_COUNTS"
-echo "=== Data availability: $AVAILABLE_SAMPLES/$DATASET_SAMPLES samples have hidden states; $SKIPPED_SAMPLES will be skipped ==="
+echo "=== Selected $DATASET_SAMPLES rows for this run: $AVAILABLE_SAMPLES have hidden states; $SKIPPED_SAMPLES will be skipped ==="
 if (( SKIP_MISSING && AVAILABLE_SAMPLES == 0 )); then
     echo "No training samples have hidden states; cannot start training with --skip-missing." >&2
     exit 1
@@ -187,6 +215,7 @@ python -m speculators.train \
     --speculator-type eagle3 \
     --target-layer-ids $TARGET_LAYER_IDS \
     --total-seq-len "$SEQ_LENGTH" \
+    --train-data-ratio "$TRAIN_DATA_RATIO" \
     --epochs "$EPOCHS" \
     --optimizer adamw \
     --lr 1e-4 \
@@ -197,8 +226,10 @@ python -m speculators.train \
     --num-workers 2 \
     --prefetch-factor 2 \
     --on-missing "$ON_MISSING" \
+    --max-train-samples "$TRAIN_SAMPLES" \
     --logger wandb \
-    --run-name "$WANDB_RUN_NAME"
+    --run-name "$WANDB_RUN_NAME" \
+    --log-dir "$RUN_DIR/logs"
 
 echo "Adapter: $CHECKPOINT_DIR/0/adapter/"
 echo "Merged drafter: $CHECKPOINT_DIR/0/"

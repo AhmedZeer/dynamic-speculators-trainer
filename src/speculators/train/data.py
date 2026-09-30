@@ -161,6 +161,7 @@ class ArrowDataset(BaseDataset):
         on_missing: Literal["generate", "skip", "warn", "raise"] = "generate",
         on_generate: Literal["cache", "delete"] = "delete",
         train_ratio: float = 1.0,
+        max_train_samples: int | None = None,
         split: Literal["train", "val"] = "train",
         transform: TransformTensors | None = None,
         hidden_states_dtype=torch.bfloat16,
@@ -182,6 +183,8 @@ class ArrowDataset(BaseDataset):
         start, stop = (
             (0, split_idx) if split == "train" else (split_idx, len(self.data))
         )
+        if split == "train" and max_train_samples is not None:
+            stop = min(stop, start + max_train_samples)
         if start >= stop:
             raise ValueError(
                 f"{split} split is empty (dataset has {len(self.data)} rows, "

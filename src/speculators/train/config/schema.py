@@ -215,6 +215,12 @@ class DataArgs(_Group):
         description="Fraction of the dataset used for training; the remainder is held "
         "out for validation.",
     )
+    max_train_samples: int | None = Field(
+        default=None,
+        ge=1,
+        description="Use at most the first N rows of the training split for this run. "
+        "The validation split is unchanged; the prepared dataset is reused.",
+    )
     noise_std: float = Field(
         default=0.05, description="Standard deviation for noise augmentation."
     )

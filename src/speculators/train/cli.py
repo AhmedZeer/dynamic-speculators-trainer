@@ -753,6 +753,7 @@ def main(cfg: TrainConfig):  # noqa: C901
         prefetch_factor=args.prefetch_factor,
         preprocess=preprocess,
         train_data_ratio=args.train_data_ratio,
+        max_train_samples=args.max_train_samples,
     )
 
     # Get trainer kwargs from model class
