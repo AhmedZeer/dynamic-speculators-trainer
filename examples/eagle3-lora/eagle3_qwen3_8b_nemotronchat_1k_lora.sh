@@ -1,0 +1,148 @@
+#!/bin/bash
+# Single-GPU offline LoRA smoke run for the published Qwen3-8B EAGLE-3 drafter.
+# Requires an editable install with the LoRA extra: pip install -e '.[lora]'
+
+set -euo pipefail
+
+MODEL="Qwen/Qwen3-8B"
+DRAFTER="RedHatAI/Qwen3-8B-speculator.eagle3"
+DATASET="hf:openeurollm/Nemotron-Post-Training-Dataset-v2-decontaminated:chat"
+RUN_DIR="/content/drive/MyDrive/dynamic-speculators-dump-v2/eagle3_qwen3_8b_nemotron_lora_v1"
+REGENERATED_DATA="$RUN_DIR/regenerated/qwen3_8b.jsonl"
+DATA_DIR="$RUN_DIR/data"
+HIDDEN_STATES_DIR="$RUN_DIR/hidden_states"
+CHECKPOINT_DIR="$RUN_DIR/checkpoints"
+VLLM_PORT=8000
+MAX_SAMPLES=1024
+SEQ_LENGTH=8192
+VLLM_MAX_MODEL_LEN=8192
+TARGET_LAYER_IDS="2 18 33"
+EPOCHS=10
+LORA_RANK=64
+LORA_ALPHA=128
+
+mkdir -p "$RUN_DIR/regenerated" "$HIDDEN_STATES_DIR"
+
+VLLM_PID=""
+cleanup() {
+    if [[ -n "$VLLM_PID" ]] && kill -0 "$VLLM_PID" 2>/dev/null; then
+        kill "$VLLM_PID" 2>/dev/null || true
+        wait "$VLLM_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
+start_vllm() {
+    if [[ -n "$VLLM_PID" ]] && kill -0 "$VLLM_PID" 2>/dev/null; then
+        return
+    fi
+
+    echo "=== Launching Qwen3-8B because a generation stage has missing outputs ==="
+    python scripts/launch_vllm.py train "$MODEL" \
+        --provenance-dir "$RUN_DIR" \
+        --hidden-states-path "$HIDDEN_STATES_DIR" \
+        --target-layer-ids $TARGET_LAYER_IDS \
+        -- \
+        --port "$VLLM_PORT" \
+        --max-model-len "$VLLM_MAX_MODEL_LEN" \
+        --gpu-memory-utilization 0.90 &
+    VLLM_PID=$!
+
+    until curl -sf "http://localhost:${VLLM_PORT}/health" >/dev/null 2>&1; do
+        sleep 2
+    done
+}
+
+# --resume skips completed prompt IDs, but --limit applies to newly queued IDs.
+# Count completed conversations first so rerunning this script does not generate
+# another MAX_SAMPLES rows after the original batch is already on Drive.
+COMPLETED_PROMPTS=$(python -c 'import json, pathlib, re, sys; p=pathlib.Path(sys.argv[1]); ids=set();
+if p.exists():
+    for line in p.open(encoding="utf-8"):
+        try:
+            row=json.loads(line); key=row.get("primary_id") or re.sub(r"_gen\d+$", "", str(row.get("id", "")))
+            if key: ids.add(str(key))
+        except (json.JSONDecodeError, AttributeError): pass
+print(len(ids))' "$REGENERATED_DATA")
+
+if (( COMPLETED_PROMPTS < MAX_SAMPLES )); then
+    REMAINING_PROMPTS=$((MAX_SAMPLES - COMPLETED_PROMPTS))
+    start_vllm
+    echo "=== Regenerating $REMAINING_PROMPTS remaining Nemotron prompts with Qwen3-8B ==="
+    speculators regenerate-responses \
+        --endpoint "http://localhost:${VLLM_PORT}/v1/chat/completions" \
+        --model "$MODEL" \
+        --dataset "$DATASET" \
+        --limit "$REMAINING_PROMPTS" \
+        --concurrency 16 \
+        --max-tokens 1024 \
+        --sampling-params '{"temperature":0,"chat_template_kwargs":{"enable_thinking":false}}' \
+        --outfile "$REGENERATED_DATA" \
+        --resume
+else
+    echo "=== Found $COMPLETED_PROMPTS generated prompts; skipping response generation ==="
+fi
+
+if compgen -G "$DATA_DIR/*.arrow" >/dev/null; then
+    echo "=== Found prepared Arrow dataset; skipping preprocessing ==="
+else
+    echo "=== Preparing regenerated token rows ==="
+    speculators prepare-data \
+        --model "$MODEL" \
+        --data "$REGENERATED_DATA" \
+        --output "$DATA_DIR" \
+        --max-samples "$MAX_SAMPLES" \
+        --seq-length "$SEQ_LENGTH"
+fi
+
+MISSING_HIDDEN_STATES=$(python -c 'from datasets import load_from_disk; from pathlib import Path; import sys; n=min(int(sys.argv[3]), len(load_from_disk(sys.argv[1]))); out=Path(sys.argv[2]); existing=set();
+if out.exists():
+    for p in out.glob("hs_*.safetensors"):
+        try: existing.add(int(p.stem[3:]))
+        except ValueError: pass
+print(sum(i not in existing for i in range(n)))' "$DATA_DIR" "$HIDDEN_STATES_DIR" "$MAX_SAMPLES")
+
+if (( MISSING_HIDDEN_STATES > 0 )); then
+    start_vllm
+    echo "=== Generating $MISSING_HIDDEN_STATES missing hidden-state files ==="
+    speculators generate-offline-data \
+        --model "$MODEL" \
+        --endpoint "http://localhost:${VLLM_PORT}/v1" \
+        --preprocessed-data "$DATA_DIR" \
+        --output "$HIDDEN_STATES_DIR" \
+        --max-samples "$MAX_SAMPLES" \
+        --concurrency 16 \
+        --validate-outputs \
+        --fail-on-error
+else
+    echo "=== Found all requested hidden states; skipping extraction ==="
+fi
+
+echo "=== Stopping vLLM and freeing the GPU ==="
+cleanup
+VLLM_PID=""
+
+echo "=== Fine-tuning EAGLE-3 with LoRA for 10 steps ==="
+python -m speculators.train \
+    --verifier-name-or-path "$MODEL" \
+    --from-pretrained "$DRAFTER" \
+    --data-path "$DATA_DIR" \
+    --hidden-states-path "$HIDDEN_STATES_DIR" \
+    --save-path "$CHECKPOINT_DIR" \
+    --speculator-type eagle3 \
+    --target-layer-ids $TARGET_LAYER_IDS \
+    --total-seq-len "$SEQ_LENGTH" \
+    --epochs "$EPOCHS" \
+    --optimizer adamw \
+    --lr 1e-4 \
+    --scheduler-type none \
+    --lora-r "$LORA_RANK" \
+    --lora-alpha "$LORA_ALPHA" \
+    --lora-dropout 0.05 \
+    --num-workers 2 \
+    --prefetch-factor 2 \
+    --on-missing raise
+
+echo "Adapter: $CHECKPOINT_DIR/0/adapter/"
+echo "Merged drafter: $CHECKPOINT_DIR/0/"
+echo "Serve with: vllm serve $MODEL --speculative-config '{\"model\":\"$CHECKPOINT_DIR/0\",\"num_speculative_tokens\":3,\"method\":\"eagle3\"}'"
