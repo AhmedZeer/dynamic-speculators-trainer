@@ -1,0 +1,62 @@
+# Paths are relative to the working directory. Use a new root for a new experiment.
+output_root: /content/drive/MyDrive/dynamic-speculators-v3/output/lora-bank-math
+models:
+  target: Qwen/Qwen3-8B
+  target_revision: main
+  drafter: RedHatAI/Qwen3-8B-speculator.eagle3
+  drafter_revision: main
+dataset:
+  source: openeurollm/Nemotron-Post-Training-Dataset-v2-decontaminated
+  revision: main
+  configuration: default
+  split: math
+  category: math
+  sample_limit: null
+partition:
+  train_examples: 1000
+  validation_examples: 100
+  seed: 0
+  subset_ids: [0, 1, 2, 3]
+responses:
+  thinking: false
+  temperature: 0.7
+  top_p: 0.8
+  top_k: 20
+  seed: 0
+  max_tokens: 4096
+  context_length: 8192
+hidden_states:
+  layer_ids: [2, 18, 33, 36]
+  dtype: bfloat16
+  sequence_length: 8192
+lora:
+  rank: 32
+  alpha: 64
+  dropout: 0.05
+  target_modules: [o_proj, v_proj]
+training:
+  seeds: [42, 43, 44]
+  warmup_epochs: 1
+  collect_epochs: 4
+  warmup_lr: 0.0001
+  collect_lr: 0.000001
+  save_interval: 10
+  weight_decay: 0.01
+  token_budget: 8192
+  noise_std: 0.05
+  ttt_steps: 3
+  ttt_step_loss_decay: 1.0
+  loss_fn: kl_div
+  log_freq: 10
+  gradient_checkpointing: false
+execution:
+  generation_endpoint: http://localhost:8000/v1/chat/completions
+  extraction_endpoint: http://localhost:8000/v1
+  concurrency: 32
+  request_timeout: 600
+  max_retries: 3
+  processes: 1
+  draft_attn_impl: simple_flex_attention
+conditioning:
+  max_examples: 32
+  states: prompt

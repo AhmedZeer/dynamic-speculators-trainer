@@ -170,28 +170,37 @@ class ArrowDataset(BaseDataset):
         max_retries: int = DEFAULT_MAX_RETRIES,
         generation_validation_retries: int = 2,
         max_consecutive_generation_failures: int = 20,
+        row_indices: list[int] | None = None,
     ):
         self.data = load_from_disk(datapath)
-        if not 0.0 < train_ratio <= 1.0:
-            raise ValueError(f"train_ratio must be in (0.0, 1.0], got {train_ratio}")
-        if split == "val" and train_ratio == 1.0:
-            raise ValueError("train_ratio=1.0 leaves no validation split")
-
-        # Both splits derive their boundary from this one expression,
-        # so they are exactly complementary.
-        split_idx = int(len(self.data) * train_ratio)
-        start, stop = (
-            (0, split_idx) if split == "train" else (split_idx, len(self.data))
-        )
-        if split == "train" and max_train_samples is not None:
-            stop = min(stop, start + max_train_samples)
-        if start >= stop:
-            raise ValueError(
-                f"{split} split is empty (dataset has {len(self.data)} rows, "
-                f"train_ratio={train_ratio} gives split_idx={split_idx})"
+        if row_indices is not None:
+            if not row_indices or len(set(row_indices)) != len(row_indices):
+                raise ValueError("Explicit row selection must be nonempty and unique")
+            if min(row_indices) < 0 or max(row_indices) >= len(self.data):
+                raise ValueError("Selected row index is outside the prepared dataset")
+            if max_train_samples is not None:
+                raise ValueError("Explicit row selection cannot use max_train_samples")
+            self.file_indices = list(row_indices)
+            self.start_file_idx = 0
+            self.data = self.data.select(row_indices)
+        else:
+            if not 0.0 < train_ratio <= 1.0:
+                raise ValueError(
+                    f"train_ratio must be in (0.0, 1.0], got {train_ratio}"
+                )
+            if split == "val" and train_ratio == 1.0:
+                raise ValueError("train_ratio=1.0 leaves no validation split")
+            split_idx = int(len(self.data) * train_ratio)
+            start, stop = (
+                (0, split_idx) if split == "train" else (split_idx, len(self.data))
             )
-        self.start_file_idx = start
-        self.data = self.data.select(range(start, stop))
+            if split == "train" and max_train_samples is not None:
+                stop = min(stop, start + max_train_samples)
+            if start >= stop:
+                raise ValueError(f"{split} split is empty")
+            self.start_file_idx = start
+            self.file_indices = list(range(start, stop))
+            self.data = self.data.select(range(start, stop))
 
         self.transfer = transfer or FileTransfer(Path(datapath) / "hidden_states")
         self.vllm_endpoint = vllm_endpoint
@@ -210,7 +219,7 @@ class ArrowDataset(BaseDataset):
         super().__init__(max_len, transform, hidden_states_dtype)
 
     def _map_to_file_idx(self, index: int):
-        return index + self.start_file_idx
+        return self.file_indices[index]
 
     def _setup_client(self):
         client = openai.OpenAI(
@@ -336,6 +345,8 @@ class ArrowDataset(BaseDataset):
                 f"match input ids {self.data[index]['input_ids']}",
                 stacklevel=1,
             )
+            if self.on_missing == "raise":
+                raise ValueError(f"Cached token ids do not match sample {index}")
             return SampleUnavailable(
                 reason=f"Cached token ids do not match sample {index}"
             )

@@ -98,3 +98,9 @@ increasing it (for example, to 10) reduces logging and timing-profiler overhead.
 
 Always pass `--provenance-dir` to `scripts/launch_vllm.py`; this example stores
 data-generation vLLM provenance under `DATA_ROOT` beside the shared artifacts.
+
+## Dataset-specific banks
+
+See [the bank design and workflow](../../docs/developer/lora_bank.md) and
+[`bank_math.yaml`](bank_math.yaml) for the rank-32 math bank: one warmup epoch,
+four collection epochs, snapshots every 10 updates, and epoch-end validation.

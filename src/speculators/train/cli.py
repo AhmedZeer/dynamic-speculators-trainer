@@ -2,6 +2,7 @@
 
 import argparse
 import gc
+import json
 import logging
 import random
 import warnings
@@ -40,7 +41,11 @@ from speculators.train.logger import (
     setup_metric_logger,
     setup_root_logger,
 )
-from speculators.train.lora import apply_lora, save_lora_checkpoint
+from speculators.train.lora import (
+    apply_lora,
+    base_speculator_model,
+    save_lora_checkpoint,
+)
 from speculators.train.trainer import Trainer, TrainerConfig
 from speculators.train.utils import resolve_mask_token_id
 from speculators.train.vocab_mapping import (
@@ -629,6 +634,19 @@ def main(cfg: TrainConfig):  # noqa: C901
             "Installed partial-neox rotary patch for HF/vLLM RoPE alignment "
             "(draft_mrope_full_head_hack=False)"
         )
+    # Reject changed bank runs before overwriting their reproducibility artifacts.
+    if cfg.bank.bank_manifest:
+        from speculators.bank.workflow import bank_context  # noqa: PLC0415
+
+        _, _, expected_context = bank_context(cfg)
+        context_path = Path(args.save_path) / "bank_context.json"
+        if context_path.exists():
+            if json.loads(context_path.read_text()) != expected_context:
+                raise ValueError("Saved bank experiment identity differs from this run")
+            if args.no_resume_from_checkpoint:
+                raise ValueError(
+                    "A bank run exists; resume it or use a new output root"
+                )
     # Write the reproducibility artifacts (run.yaml + train_command.txt) next to
     # the checkpoints at rank 0 only, so every checkpoint carries the resolved
     # config that produced it.
@@ -715,6 +733,23 @@ def main(cfg: TrainConfig):  # noqa: C901
         maybe_destroy_distributed()
         return
 
+    bank_manifest = bank_subset = bank_run_context = None
+    if cfg.bank.bank_manifest:
+        from speculators.bank.workflow import (  # noqa: PLC0415
+            bank_context,
+            validate_cache,
+        )
+
+        bank_manifest, bank_subset, bank_run_context = bank_context(cfg)
+        validate_cache(bank_manifest)
+        if (
+            list(base_speculator_model(draft_model).target_layer_ids)
+            != bank_manifest["cache_spec"]["hidden_states"]["layer_ids"][:-1]
+        ):
+            raise ValueError(
+                "Drafter target layers differ from the bank extraction layers"
+            )
+
     # Setup dataloaders
     preprocess_fns = {
         "eagle3": shift_batch,
@@ -754,6 +789,9 @@ def main(cfg: TrainConfig):  # noqa: C901
         preprocess=preprocess,
         train_data_ratio=args.train_data_ratio,
         max_train_samples=args.max_train_samples,
+        train_indices=bank_subset["train_indices"] if bank_subset else None,
+        val_indices=bank_subset["validation_indices"] if bank_subset else None,
+        sampler_seed=cfg.seed if bank_subset else None,
     )
 
     # Get trainer kwargs from model class
@@ -786,10 +824,39 @@ def main(cfg: TrainConfig):  # noqa: C901
         gradient_checkpointing=args.gradient_checkpointing,
         max_steps=args.max_steps,
     )
-    trainer = Trainer(draft_model, trainer_config, train_loader, val_loader)
+    if bank_run_context is not None:
+        from speculators.bank.artifacts import write_json  # noqa: PLC0415
+        from speculators.train.bank import BankSchedule, BankTrainer  # noqa: PLC0415
+
+        if get_rank() == 0:
+            write_json(
+                Path(cfg.trainer.save_path) / "bank_context.json", bank_run_context
+            )
+            write_json(
+                Path(cfg.trainer.save_path) / "resolved_train.json", cfg.flatten()
+            )
+        trainer = BankTrainer(
+            draft_model,
+            trainer_config,
+            train_loader,
+            val_loader,
+            schedule=BankSchedule(
+                cfg.bank.bank_warmup_epochs,
+                cfg.bank.bank_collect_epochs,
+                cfg.bank.bank_collect_lr,
+                cfg.bank.bank_save_interval,
+            ),
+            context=bank_run_context,
+        )
+    else:
+        trainer = Trainer(draft_model, trainer_config, train_loader, val_loader)
 
     # Run training
     trainer.run_training()
+    if bank_run_context is not None and not trainer.completed:
+        raise RuntimeError(
+            "Bank training interrupted; rerun to resume the durable checkpoint"
+        )
 
     # Cleanup
     del trainer, draft_model

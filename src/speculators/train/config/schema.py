@@ -409,6 +409,17 @@ class LoraArgs(_Group):
     )
 
 
+class BankArgs(_Group):
+    bank_manifest: str | None = Field(
+        default=None, description="Prepared LoRA bank manifest; enables bank training."
+    )
+    bank_subset_id: str | None = Field(default=None, description="Subset in the bank.")
+    bank_warmup_epochs: int = Field(default=1, ge=1)
+    bank_collect_epochs: int = Field(default=4, ge=1)
+    bank_collect_lr: float = Field(default=1e-6, gt=0)
+    bank_save_interval: int = Field(default=10, ge=1)
+
+
 class SchedulerArgs(_Group):
     scheduler_type: Literal["linear", "cosine", "none"] = Field(
         default="linear", description="LR scheduler type."
@@ -606,6 +617,7 @@ _GROUPS: dict[str, type[_Group]] = {
     "loss": LossArgs,
     "optimizer": OptimizerArgs,
     "lora": LoraArgs,
+    "bank": BankArgs,
     "scheduler": SchedulerArgs,
     "trainer": TrainerArgs,
     "logging": LoggingArgs,
@@ -717,6 +729,7 @@ class TrainConfig(BaseSettings):
     loss: LossArgs = Field(default_factory=LossArgs)
     optimizer: OptimizerArgs = Field(default_factory=OptimizerArgs)
     lora: LoraArgs = Field(default_factory=LoraArgs)
+    bank: BankArgs = Field(default_factory=BankArgs)
     scheduler: SchedulerArgs = Field(default_factory=SchedulerArgs)
     trainer: TrainerArgs = Field(default_factory=TrainerArgs)
     logging: LoggingArgs = Field(default_factory=LoggingArgs)
@@ -795,6 +808,44 @@ class TrainConfig(BaseSettings):
                 raise ValueError(
                     f"--dpace-alpha must be in (0, 1], got {self.dflash.dpace_alpha}"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_bank(self) -> "TrainConfig":  # noqa: C901
+        if self.bank.bank_manifest is None:
+            if self.bank.bank_subset_id is not None:
+                raise ValueError("bank_subset_id requires bank_manifest")
+            return self
+        if not self.bank.bank_subset_id:
+            raise ValueError("Bank training requires bank_subset_id")
+        if self.speculator_type != "eagle3" or self.lora.lora_r <= 0:
+            raise ValueError("Bank training requires EAGLE3 with LoRA enabled")
+        if (
+            self.optimizer.optimizer != "adamw"
+            or self.scheduler.scheduler_type != "none"
+        ):
+            raise ValueError("Bank training requires AdamW and scheduler_type=none")
+        expected = self.bank.bank_warmup_epochs + self.bank.bank_collect_epochs
+        if self.trainer.epochs != expected or self.trainer.max_steps is not None:
+            raise ValueError(
+                "Bank epochs must equal warmup + collect; max_steps conflicts"
+            )
+        if self.trainer.save_best or self.trainer.checkpoint_freq != 1:
+            raise ValueError(
+                "Bank snapshots use bank_save_interval, not best-only saves"
+            )
+        if self.trainer.fsdp_shard or self.lora.lora_save_merged:
+            raise ValueError("Bank training requires adapter-only saves without FSDP")
+        if self.data.max_train_samples is not None:
+            raise ValueError("Bank membership cannot use max_train_samples")
+        if self.data.num_workers != 0:
+            raise ValueError(
+                "Bank v1 uses num_workers=0 to resume augmentation RNG exactly"
+            )
+        if self.generation.on_missing != "raise":
+            raise ValueError("Bank training requires on_missing=raise")
+        if self.bank.bank_collect_lr >= self.optimizer.lr:
+            raise ValueError("Collection LR must be lower than warmup LR")
         return self
 
     @model_validator(mode="after")

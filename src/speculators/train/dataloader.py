@@ -62,6 +62,7 @@ def _setup_dataloader(
     prefetch_factor: int | None = 4,
     preprocess: Callable[[BatchType], BatchType] | None = None,
     max_batches: int | None = None,
+    sampler_seed: int | None = None,
 ) -> DataLoader:
     batch_sampler = MultipackDistributedBatchSamplerV2(
         batch_max_length=total_seq_len,
@@ -69,6 +70,7 @@ def _setup_dataloader(
         num_replicas=get_dp_size(),
         rank=get_dp_rank(),
         max_batches=max_batches,
+        seed=sampler_seed or 0,
     )
     use_workers = num_workers > 0
     return DataLoader(
@@ -87,6 +89,13 @@ def _setup_dataloader(
         persistent_workers=use_workers,
         multiprocessing_context="spawn" if use_workers else None,
         worker_init_fn=_worker_init_fn if use_workers else None,
+        # Iterator creation draws a worker seed even with zero workers. Keep that
+        # draw out of training's global RNG so mid-epoch resume preserves dropout.
+        generator=(
+            torch.Generator().manual_seed(sampler_seed)
+            if sampler_seed is not None
+            else None
+        ),
     )
 
 
@@ -113,6 +122,9 @@ def create_train_val_loaders(
     train_data_ratio: float = 0.9,
     max_train_samples: int | None = None,
     max_train_batches: int | None = None,
+    train_indices: list[int] | None = None,
+    val_indices: list[int] | None = None,
+    sampler_seed: int | None = None,
 ) -> tuple[DataLoader, DataLoader]:
     """Create training and validation DataLoaders.
 
@@ -123,7 +135,11 @@ def create_train_val_loaders(
     _limit_worker_threads()
     noise_transform = AddUniformNoise(std=noise_std)
 
-    if not (0.0 < train_data_ratio < 1.0):
+    if (train_indices is None) != (val_indices is None):
+        raise ValueError("Explicit training and validation selections must be paired")
+    if train_indices is not None and set(train_indices) & set(val_indices or []):
+        raise ValueError("Training and validation selections overlap")
+    if train_indices is None and not (0.0 < train_data_ratio < 1.0):
         raise ValueError(f"train_data_ratio must be in (0, 1), got {train_data_ratio}")
 
     train_dataset: BaseDataset = ArrowDataset(
@@ -137,6 +153,7 @@ def create_train_val_loaders(
         train_ratio=train_data_ratio,
         max_train_samples=max_train_samples,
         split="train",
+        row_indices=train_indices,
         model=verifier_name_or_path,
         hidden_states_dtype=hidden_states_dtype,
         request_timeout=request_timeout,
@@ -154,6 +171,7 @@ def create_train_val_loaders(
         train_ratio=train_data_ratio,
         max_train_samples=max_train_samples,
         split="val",
+        row_indices=val_indices,
         model=verifier_name_or_path,
         hidden_states_dtype=hidden_states_dtype,
         request_timeout=request_timeout,
@@ -171,6 +189,7 @@ def create_train_val_loaders(
         prefetch_factor=prefetch_factor,
         preprocess=preprocess,
         max_batches=max_train_batches,
+        sampler_seed=sampler_seed,
     )
     val_loader = _setup_dataloader(
         val_dataset,
@@ -180,6 +199,7 @@ def create_train_val_loaders(
         num_workers=num_workers,
         prefetch_factor=prefetch_factor,
         preprocess=preprocess,
+        sampler_seed=sampler_seed,
     )
 
     return train_loader, val_loader

@@ -217,16 +217,22 @@ class Trainer:
         self.resume_from_checkpoint = config.resume_from_checkpoint
         acc = torch.accelerator.current_accelerator()
         self.device_type = acc.type if acc is not None else "cuda"
-        checkpointer_class: type[BaseCheckpointer] = (
-            DistributedCheckpointer
-            if self.is_distributed and config.fsdp_shard
-            else SingleGPUCheckpointer
-        )
-        self.checkpointer: BaseCheckpointer = checkpointer_class(self.config.save_path)
+        self.checkpointer = self.create_checkpointer()
 
         self.setup_trainer()
         self.setup_model()
         self.setup_optimizer()
+
+    def create_checkpointer(self) -> BaseCheckpointer:
+        checkpointer_class = (
+            DistributedCheckpointer
+            if self.is_distributed and self.config.fsdp_shard
+            else SingleGPUCheckpointer
+        )
+        return checkpointer_class(self.config.save_path)
+
+    def after_optimizer_step(self, epoch: int, local_step: int) -> None:
+        """Extension hook after a completed update and global-step increment."""
 
     def _training_state_path(self, epoch: int) -> Path:
         return self.checkpointer.path / str(epoch) / "training_state.json"
@@ -587,6 +593,7 @@ class Trainer:
                     extra={"step": self.global_step},
                 )
             self.global_step += 1
+            self.after_optimizer_step(epoch, local_step)
 
             if (
                 self.config.max_steps is not None
