@@ -221,6 +221,14 @@ filtered, launch with `VLLM_LOGGING_LEVEL=INFO` and omit `--disable-log-stats`.
 Keep passing `--provenance-dir`. Statistics visibility also depends on the vLLM
 version and its logging configuration.
 
+Wait for `prepare --stage hidden` to finish successfully before training. The
+bank requires one cached file for every prepared row (4,400 for the full pilot
+preset). Extraction is concurrent, so higher-numbered files can appear while
+lower indices are still missing. If interrupted, rerun the same hidden stage
+against the extraction-mode server; existing files are reused. Training reports
+present/required counts and missing indices for an incomplete cache. It does not
+silently drop missing examples or generate states during training.
+
 Stop the target server to free GPU memory, then run:
 
 ```bash

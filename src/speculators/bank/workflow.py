@@ -13,6 +13,7 @@ from speculators.bank.config import BankConfig
 
 TARGET_HIDDEN_SIZE = 4096
 HIDDEN_STATE_NDIM = 3
+MISSING_CACHE_PREVIEW = 10
 
 
 def prompt_messages(row: dict) -> list[dict]:
@@ -281,6 +282,31 @@ def prepare_arrow(cfg: BankConfig, manifest: dict):
     write_json(root / "manifest.json", manifest)
 
 
+def _cache_file_metadata(path: Path, expected_count: int):
+    from speculators.data_generation.offline import (  # noqa: PLC0415
+        get_existing_hidden_state_indices,
+    )
+
+    existing = set(get_existing_hidden_state_indices(path))
+    missing = sorted(set(range(expected_count)) - existing)
+    if missing:
+        preview = ", ".join(str(index) for index in missing[:MISSING_CACHE_PREVIEW])
+        raise FileNotFoundError(
+            f"Incomplete hidden-state cache in {path}: "
+            f"{expected_count - len(missing)}/{expected_count} required files present; "
+            f"{len(missing)} missing. First missing indices: {preview}. "
+            "Start the target in extraction mode (launch_vllm.py train, with "
+            "--provenance-dir), then resume with: speculators lora-bank prepare "
+            "--config <your-bank-config.yaml> --stage hidden. Existing files are "
+            "reused. Wait for extraction to finish before starting bank training."
+        )
+    files = []
+    for index in range(expected_count):
+        stat = (path / f"hs_{index}.safetensors").stat()
+        files.append([index, stat.st_size, stat.st_mtime_ns])
+    return files
+
+
 def validate_cache(manifest: dict, cfg: BankConfig | None = None):  # noqa: C901
     from datasets import load_from_disk  # noqa: PLC0415
     from safetensors.torch import load_file  # noqa: PLC0415
@@ -293,6 +319,7 @@ def validate_cache(manifest: dict, cfg: BankConfig | None = None):  # noqa: C901
     if file_digest(root / "prompts.jsonl") != manifest["prompts_sha256"]:
         raise ValueError("Prompt identities changed after partitioning")
     data = load_from_disk(manifest["data_path"]).with_format(None)
+    files = _cache_file_metadata(Path(manifest["hidden_states_path"]), len(data))
     if digest(data.to_list()) != manifest["prepared_fingerprint"]:
         raise ValueError("Prepared token content differs from the cache fingerprint")
     for subset in manifest["subsets"]:
@@ -310,11 +337,6 @@ def validate_cache(manifest: dict, cfg: BankConfig | None = None):  # noqa: C901
         != manifest["cache_fingerprint"]
     ):
         raise ValueError("Experiment configuration does not match cached data")
-    files = []
-    for index in range(len(data)):
-        path = Path(manifest["hidden_states_path"]) / f"hs_{index}.safetensors"
-        stat = path.stat()
-        files.append([index, stat.st_size, stat.st_mtime_ns])
     validation_identity = digest(
         {
             "prepared": manifest["prepared_fingerprint"],

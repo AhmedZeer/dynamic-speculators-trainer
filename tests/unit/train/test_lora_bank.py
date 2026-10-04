@@ -396,6 +396,23 @@ def test_prepared_cache_validates_membership_and_rejects_corruption(tmp_path):
     receipt_time = receipt.stat().st_mtime_ns
     validate_cache(manifest, cfg)
     assert receipt.stat().st_mtime_ns == receipt_time
+    # A prior validation receipt must never permit training with missing rows.
+    backup = tmp_path / "cache-backup"
+    cache.rename(backup)
+    with pytest.raises(FileNotFoundError, match="0/6 required files present"):
+        validate_cache(manifest, cfg)
+    backup.rename(cache)
+    missing_paths = [cache / "hs_2.safetensors", cache / "hs_4.safetensors"]
+    saved = [path.read_bytes() for path in missing_paths]
+    for path in missing_paths:
+        path.unlink()
+    with pytest.raises(FileNotFoundError, match="4/6 required files present") as error:
+        validate_cache(manifest, cfg)
+    assert "First missing indices: 2, 4" in str(error.value)
+    assert "--stage hidden" in str(error.value)
+    assert receipt.stat().st_mtime_ns == receipt_time
+    for path, payload in zip(missing_paths, saved, strict=True):
+        path.write_bytes(payload)
     manifest["subsets"][0]["train_ids"].reverse()
     with pytest.raises(ValueError, match="membership"):
         validate_cache(manifest, cfg)
