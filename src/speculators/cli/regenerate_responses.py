@@ -10,6 +10,7 @@ import sys
 import time
 from collections import deque
 from collections.abc import Callable
+from contextlib import aclosing
 from pathlib import Path
 from typing import Annotated, Any, cast
 
@@ -20,6 +21,7 @@ from tqdm import tqdm
 from transformers import AutoTokenizer
 
 from speculators.data_generation.configs import DATASET_CONFIGS, DatasetConfig
+from speculators.data_generation.prompt_buffer import buffered_prompts, jsonl_rows
 from speculators.data_generation.response_output import ResponseOutput
 from speculators.data_generation.vllm_client import (
     DEFAULT_MAX_RETRIES,
@@ -707,9 +709,12 @@ def load_input_dataset(
             split="train",
             prompt_field="prompt",
         )
-        dataset = load_dataset(
-            "json", data_files=config.hf_path, split=config.split, streaming=True
-        )
+        if Path(dataset_name).suffix.lower() == ".jsonl":
+            dataset = jsonl_rows(Path(dataset_name))
+        else:
+            dataset = load_dataset(
+                "json", data_files=config.hf_path, split=config.split, streaming=True
+            )
         return config, dataset, config.split
 
     config = DATASET_CONFIGS[dataset_name]
@@ -741,6 +746,7 @@ async def _run(  # noqa: C901
     seed: int | None,
     response_staging_dir: Path | None = None,
     response_sync_interval: int = 1000,
+    prompt_chunk_size: int = 1000,
 ) -> None:
     """Main async function to process dataset through vLLM endpoints."""
     typer.echo(f"Using endpoint: {endpoint}")
@@ -779,6 +785,7 @@ async def _run(  # noqa: C901
     typer.echo(f"Using dataset: {dataset_id}")
     typer.echo(f"Split: {split}")
     typer.echo(f"Prompt field: {dataset_config.prompt_field}")
+    typer.echo(f"Prompt RAM chunk: {prompt_chunk_size} examples, next chunk prefetched")
     typer.echo(f"Output file: {outfile}")
     typer.echo(f"Error file: {error_outfile}")
     typer.echo()
@@ -854,70 +861,73 @@ async def _run(  # noqa: C901
             try:
                 rng = random.Random(seed)
                 processed_count = 0
-                for index, row in enumerate(hf_dataset):
-                    if limit is not None and processed_count >= limit:
-                        break
+                async with aclosing(
+                    buffered_prompts(hf_dataset, prompt_chunk_size)
+                ) as prompts:
+                    async for index, row in prompts:
+                        if limit is not None and processed_count >= limit:
+                            break
 
-                    if language_filter and row.get("language") != language_filter:
-                        continue
+                        if language_filter and row.get("language") != language_filter:
+                            continue
 
-                    prepared = prepare_row(row, dataset_config)
-                    if prepared is None:
-                        continue
-                    normalized, turns, tool_results = prepared
+                        primary_id = _primary_identifier(row)
+                        if primary_id in seen_ids:
+                            continue
 
-                    primary_id = _primary_identifier(row)
-                    if primary_id in seen_ids:
-                        continue
+                        prepared = prepare_row(row, dataset_config)
+                        if prepared is None:
+                            continue
+                        normalized, turns, tool_results = prepared
 
-                    # Broken input tool schema: record and skip.
-                    try:
-                        tools = extract_tools(normalized)
-                    except ValueError as exc:
-                        logger.warning(
-                            "Skipping row %s: input tool schema is broken (%s)",
-                            primary_id,
-                            exc,
-                        )
-                        error_output = {
-                            "id": primary_id,
-                            "metadata": {
-                                "idx": index,
-                                "error": repr(exc),
-                                "generations_completed": 0,
-                                "endpoint": endpoint,
-                            },
+                        # Broken input tool schema: record and skip.
+                        try:
+                            tools = extract_tools(normalized)
+                        except ValueError as exc:
+                            logger.warning(
+                                "Skipping row %s: input tool schema is broken (%s)",
+                                primary_id,
+                                exc,
+                            )
+                            error_output = {
+                                "id": primary_id,
+                                "metadata": {
+                                    "idx": index,
+                                    "error": repr(exc),
+                                    "generations_completed": 0,
+                                    "endpoint": endpoint,
+                                },
+                            }
+                            error_file.write(
+                                json.dumps(error_output, ensure_ascii=False) + "\n"
+                            )
+                            error_file.flush()
+                            stats["errors"] += 1
+                            progress.update(1)
+                            await output_manager.example_completed()
+                            continue
+
+                        queue_item: dict[str, Any] = {
+                            "idx": index,
+                            "primary_id": primary_id,
+                            "turns": turns,
+                            "tools": tools,
+                            "tool_results": tool_results,
                         }
-                        error_file.write(
-                            json.dumps(error_output, ensure_ascii=False) + "\n"
-                        )
-                        error_file.flush()
-                        stats["errors"] += 1
-                        progress.update(1)
-                        await output_manager.example_completed()
-                        continue
-
-                    queue_item: dict[str, Any] = {
-                        "idx": index,
-                        "primary_id": primary_id,
-                        "turns": turns,
-                        "tools": tools,
-                        "tool_results": tool_results,
-                    }
-                    if reasoning_effort_dist is not None:
-                        vals = list(reasoning_effort_dist)
-                        queue_item["reasoning_effort"] = rng.choices(
-                            vals, weights=list(reasoning_effort_dist.values())
-                        )[0]
-                    if temperature_dist is not None:
-                        queue_item["temperature"] = float(
-                            rng.choices(
-                                list(temperature_dist),
-                                weights=list(temperature_dist.values()),
+                        if reasoning_effort_dist is not None:
+                            vals = list(reasoning_effort_dist)
+                            queue_item["reasoning_effort"] = rng.choices(
+                                vals, weights=list(reasoning_effort_dist.values())
                             )[0]
-                        )
-                    await queue.put(queue_item)
-                    processed_count += 1
+                        if temperature_dist is not None:
+                            queue_item["temperature"] = float(
+                                rng.choices(
+                                    list(temperature_dist),
+                                    weights=list(temperature_dist.values()),
+                                )[0]
+                            )
+                        await queue.put(queue_item)
+                        processed_count += 1
 
                 # Signal workers to stop
                 for _ in range(len(workers)):
@@ -1007,6 +1017,10 @@ def regenerate_responses(
         int,
         typer.Option(help="Max concurrent requests"),
     ] = 64,
+    prompt_chunk_size: Annotated[
+        int,
+        typer.Option(min=1, help="Prompt examples per RAM chunk; prefetch next chunk"),
+    ] = 1000,
     max_tokens: Annotated[
         int,
         typer.Option(help="max_tokens for generation"),
@@ -1134,6 +1148,7 @@ def regenerate_responses(
                 subset=subset,
                 limit=limit,
                 concurrency=concurrency,
+                prompt_chunk_size=prompt_chunk_size,
                 max_tokens=max_tokens,
                 sampling_params=parsed_sampling_params,
                 outfile=outfile,

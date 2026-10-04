@@ -6,7 +6,8 @@ Training, eval, and vLLM-launch scripts write reproducibility artifacts so runs 
 
 - **Training** (`src/speculators/train/utils.py`): `save_train_command()` writes `train_command.txt` (timestamp, git SHA, world size, package versions, full argv) and `speculators.patch` (uncommitted diff) into the checkpoint directory.
 - **Eval** (`scripts/evaluate/evaluate.py`): `save_eval_provenance()` writes `eval_command.txt` (timestamp, git SHA, package versions, full argv) into the output directory.
-- **vLLM launch** (`scripts/launch_vllm.py`): `_save_vllm_provenance()` writes `vllm_command.txt`, `vllm.patch`, and `checkpoint_sha256.txt` (plus `drafter_checkpoint_sha256.txt` in eval mode) — but **only when `--provenance-dir` is passed**. Two subcommands:
+- **vLLM launch** (`scripts/launch_vllm.py`): `_save_vllm_provenance()` writes `vllm_command.txt`, `vllm.patch`, and `checkpoint_sha256.txt` (plus `drafter_checkpoint_sha256.txt` in eval mode) — but **only when `--provenance-dir` is passed**. Three subcommands:
+  - `launch_vllm.py responses MODEL`: target response generation without hidden-state extraction.
   - `launch_vllm.py train MODEL` (default): hidden-states extraction for training data generation.
   - `launch_vllm.py eval MODEL --spec-model DRAFTER`: speculative decoding serving for evaluation.
 

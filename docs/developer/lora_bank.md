@@ -108,6 +108,7 @@ Values below are initial experimental defaults, not established optimal values.
 | `training` | Seeds, warmup/collection epochs and LRs, save interval | Controls optimization trajectories and bank density |
 | `training` | Weight decay, noise, token budget, TTT count/decay, loss | Changes exposure and training objective; token budget also changes updates/epoch |
 | `execution` | Endpoints, request timeout/retries, concurrency | Controls server interaction and throughput, not generator batch size |
+| `execution` | Prompt RAM chunk size | Controls bounded input prefetch without changing request concurrency |
 | `execution` | Response staging directory, sync interval | Controls local durability and destination-write frequency; `null` disables staging |
 | `execution` | Processes, attention implementation | Controls distributed execution and numerical behavior |
 | `conditioning` | Maximum examples, prompt-state policy | Records the future generator contract; does not affect bank training |
@@ -144,40 +145,59 @@ Start with selection, which pins model/dataset revisions and writes membership:
 speculators lora-bank prepare --config examples/eagle3-lora/bank_math.yaml --stage select
 ```
 
-Read `manifest.json` for `revisions.target_sha`. Launch the target with that SHA
-and the configured context limit. **Always pass `--provenance-dir`**:
+Read `manifest.json` for `revisions.target_sha`. First launch ordinary target
+serving for response generation, using that SHA and context limit. This mode
+adds no extraction model, hidden-state connector, or scale-out endpoint defaults.
+**Always pass `--provenance-dir`**:
+
+```bash
+python scripts/launch_vllm.py responses Qwen/Qwen3-8B \
+  --provenance-dir output/lora-bank-math/provenance/response-server \
+  -- --revision TARGET_SHA --max-model-len 8192
+
+speculators lora-bank prepare --config examples/eagle3-lora/bank_math.yaml --stage responses
+speculators lora-bank prepare --config examples/eagle3-lora/bank_math.yaml --stage data
+```
+
+Keep the served model name `Qwen/Qwen3-8B`. The response endpoint must support
+exact prompt and completion token IDs. Stop the response server, then launch
+extraction against the same pinned target. Its layer order and dtype must match
+the recipe:
 
 ```bash
 python scripts/launch_vllm.py train Qwen/Qwen3-8B \
   --target-layer-ids 2 18 33 --include-last-layer \
-  --provenance-dir output/lora-bank-math/provenance/target-server \
+  --provenance-dir output/lora-bank-math/provenance/extraction-server \
   -- --revision TARGET_SHA --max-model-len 8192
-```
 
-Keep the served model name `Qwen/Qwen3-8B`, or adjust the serving recipe to match
-the configured endpoint model identity. The endpoint must support exact token
-IDs and the repository's hidden-state connector. Use the configured hidden-state
-dtype when launching. Server provenance and layer order must match the recipe.
-
-Against the running server:
-
-```bash
-speculators lora-bank prepare --config examples/eagle3-lora/bank_math.yaml --stage responses
-speculators lora-bank prepare --config examples/eagle3-lora/bank_math.yaml --stage data
 speculators lora-bank prepare --config examples/eagle3-lora/bank_math.yaml --stage hidden
 ```
 
-`--stage all` performs those stages together. Separate generation and extraction
-endpoints can be configured when separate servers are preferable. Responses
-resume by stable prompt identity; Arrow preparation reorders asynchronous output
-by that identity. Extraction resumes missing cache files and checks token
-alignment, shape, dtype, and finite values. A changed cache recipe or prepared
-content is rejected; use another output root for another experiment.
+Extraction processes the exact saved prompt-plus-response tokens. Enabling it
+during response generation captures states that the response stage does not use,
+so splitting the servers avoids redundant activation storage and transfer.
+Separate generation/extraction endpoints are also supported. `--stage all`
+requires both capabilities to be available already; use the separate stages
+above to switch one GPU between serving modes.
+
+Responses resume by stable prompt identity. Local JSONL input is opened once
+with buffered reads. `execution.prompt_chunk_size` (default 1000) controls the
+RAM chunk size; the next chunk is prefetched off-thread while the current one
+feeds the request queue. At most two prompt chunks plus the bounded request
+queue and in-flight requests are retained. Chunk size, concurrent requests, and
+Drive sync interval are independent controls. Input order and IDs are preserved,
+and unfinished source iterators close on completion or interruption.
+
+Arrow preparation reorders asynchronous output by prompt identity. Extraction
+resumes missing cache files and checks token alignment, shape, dtype, and finite
+values. A changed cache recipe or prepared content is rejected; use another
+output root for another experiment.
 
 Response generation stages both JSONL outputs on local disk by default:
 
 ```yaml
 execution:
+  prompt_chunk_size: 1000
   response_staging_dir: /tmp/speculators-responses
   response_sync_interval: 1000
 ```

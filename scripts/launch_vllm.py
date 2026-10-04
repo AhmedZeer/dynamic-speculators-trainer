@@ -182,9 +182,15 @@ def _add_shared_args(parser: argparse.ArgumentParser) -> None:
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Launch vLLM for training or evaluation",
+        description="Launch vLLM for responses, hidden-state extraction, or evaluation",
     )
     sub = parser.add_subparsers(dest="subcommand")
+
+    response_parser = sub.add_parser(
+        "responses", help="Target response generation without hidden-state extraction"
+    )
+    response_parser.add_argument("model", help="Target model name or path")
+    _add_shared_args(response_parser)
 
     # --- train subcommand (default when no subcommand given) ---
     train_parser = sub.add_parser(
@@ -506,6 +512,17 @@ def _build_train_cmd(args, vllm_args):
     ]
 
 
+def _build_response_cmd(args, vllm_args):
+    return [
+        sys.executable,
+        "-m",
+        "vllm.entrypoints.cli.main",
+        "serve",
+        args.model,
+        *vllm_args,
+    ]
+
+
 def _build_eval_cmd(args, vllm_args):
     cmd = [
         sys.executable,
@@ -529,7 +546,9 @@ def main():
     if "--" in vllm_args:
         vllm_args.remove("--")
 
-    if args.subcommand == "train":
+    if args.subcommand == "responses":
+        cmd = _build_response_cmd(args, vllm_args)
+    elif args.subcommand == "train":
         cmd = _build_train_cmd(args, vllm_args)
     elif args.subcommand == "eval":
         cmd = _build_eval_cmd(args, vllm_args)
@@ -554,8 +573,8 @@ def main():
         )
 
     if not args.dry_run:
-        # Render tuning applies to the train pipeline only; eval serving skips it.
-        if args.subcommand == "train" and "--headless" not in vllm_args:
+        # Bound frontend CPU threads for data generation; eval keeps its settings.
+        if args.subcommand in ("train", "responses") and "--headless" not in vllm_args:
             _set_render_thread_defaults()
         # Replace this process without pipes, log files, or descriptor redirection.
         # vLLM's statistics logger therefore uses the caller's stdout/stderr.

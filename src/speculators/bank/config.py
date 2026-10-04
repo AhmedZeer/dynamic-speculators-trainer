@@ -88,6 +88,7 @@ class Execution(Settings):
     generation_endpoint: str = "http://localhost:8000/v1/chat/completions"
     extraction_endpoint: str = "http://localhost:8000/v1"
     concurrency: int = Field(default=32, ge=1)
+    prompt_chunk_size: int = Field(default=1000, ge=1)
     response_staging_dir: Path | None = Path("/tmp/speculators-responses")  # noqa: S108
     response_sync_interval: int = Field(default=1000, ge=1)
     request_timeout: float = Field(default=600, gt=0)

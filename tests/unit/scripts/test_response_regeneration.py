@@ -1102,6 +1102,7 @@ def test_run_stages_and_resumes_local_progress_with_changed_concurrency(
         "seed": 0,
         "response_staging_dir": tmp_path / "local",
         "response_sync_interval": 2,
+        "prompt_chunk_size": 2,
     }
     asyncio.run(regeneration._run(**settings, concurrency=2))
     assert session.calls == 2
@@ -1114,6 +1115,7 @@ def test_run_stages_and_resumes_local_progress_with_changed_concurrency(
     source.append(
         {"id": "row-3", "messages": [{"role": "user", "content": "Unsynced"}]}
     )
+    settings["prompt_chunk_size"] = 1
     asyncio.run(regeneration._run(**settings, concurrency=1))
     assert session.calls == 2  # No extra request for the unsynced local response.
     assert load_seen(str(output)) == {"row-0", "row-1", "row-2", "row-3"}

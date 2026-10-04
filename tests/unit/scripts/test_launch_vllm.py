@@ -109,3 +109,43 @@ def test_launch_inherits_output_and_preserves_statistics_logging(
     assert calls == [(command[0], command)]
     assert "--disable-log-stats" not in calls[0][1]
     assert "inherited stdout/stderr" in capsys.readouterr().out
+
+
+def test_response_mode_has_no_extraction_or_frontend_scale_out_defaults(
+    monkeypatch, tmp_path, capsys
+):
+    monkeypatch.setattr(
+        launch_vllm.sys,
+        "argv",
+        [
+            "launch_vllm.py",
+            "responses",
+            "Qwen/Qwen3-8B",
+            "--dry-run",
+            "--provenance-dir",
+            str(tmp_path),
+            "--",
+            "--revision",
+            "pinned-sha",
+            "--max-model-len",
+            "8192",
+        ],
+    )
+    recorded = []
+    monkeypatch.setattr(
+        launch_vllm,
+        "_save_vllm_provenance",
+        lambda command, *a, **kw: recorded.append(command),
+    )
+    launch_vllm.main()
+    command = recorded[0]
+    assert command[-4:] == ["--revision", "pinned-sha", "--max-model-len", "8192"]
+    for flag in [
+        "--speculative_config",
+        "--kv_transfer_config",
+        "--enable-scale-out",
+        "--api-server-count",
+        "--renderer-num-workers",
+    ]:
+        assert flag not in command
+    assert "inherited stdout/stderr" in capsys.readouterr().out

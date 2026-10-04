@@ -171,6 +171,7 @@ def regenerate(cfg: BankConfig, manifest: dict):
         subset=None,
         limit=None,
         concurrency=cfg.execution.concurrency,
+        prompt_chunk_size=cfg.execution.prompt_chunk_size,
         max_tokens=cfg.responses.max_tokens,
         sampling_params=json.dumps(
             {
