@@ -52,7 +52,7 @@ training:
 execution:
   generation_endpoint: http://localhost:8000/v1/chat/completions
   extraction_endpoint: http://localhost:8000/v1
-  concurrency: 32
+  concurrency: 256
   request_timeout: 600
   max_retries: 3
   processes: 1
