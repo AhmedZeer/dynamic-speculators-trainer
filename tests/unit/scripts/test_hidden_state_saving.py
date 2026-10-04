@@ -377,3 +377,50 @@ def test_resume_progress_includes_existing_rows_and_only_published_files(  # noq
     assert (
         "finished: 3/4 complete | reused=2 saved=1 failed=1 remaining=1" in caplog.text
     )
+
+
+def test_slow_startup_stage_logs_before_completion(caplog):
+    started, release = threading.Event(), threading.Event()
+
+    def slow_load():
+        started.set()
+        assert release.wait(timeout=2)
+        return "dataset"
+
+    async def run():
+        task = asyncio.create_task(
+            extraction._run_logged_stage(
+                "Loading dataset",
+                slow_load,
+                interval=0.01,
+            )
+        )
+        try:
+            assert await asyncio.to_thread(started.wait, 1)
+            await asyncio.sleep(0.035)
+            assert "Loading dataset: starting" in caplog.text
+            assert "Loading dataset: still running" in caplog.text
+            assert not task.done()
+        finally:
+            release.set()
+        assert await task == "dataset"
+
+    caplog.set_level("INFO", logger=extraction.__name__)
+    asyncio.run(run())
+    assert "Loading dataset: completed" in caplog.text
+
+
+def test_startup_failure_is_logged_and_propagated(caplog):
+    def fail_load():
+        raise OSError("Drive unavailable")
+
+    caplog.set_level("INFO", logger=extraction.__name__)
+    with pytest.raises(OSError, match="Drive unavailable"):
+        asyncio.run(
+            extraction._run_logged_stage(
+                "Loading dataset",
+                fail_load,
+                interval=0.01,
+            )
+        )
+    assert "Loading dataset: stopped" in caplog.text

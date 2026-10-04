@@ -42,6 +42,34 @@ from speculators.train.logger import setup_root_logger
 logger = logging.getLogger(__name__)
 
 
+async def _run_logged_stage(label, function, *args, interval):
+    """Keep startup visible while filesystem work runs outside the event loop."""
+    started = time.perf_counter()
+    logger.info("%s: starting", label)
+    task = asyncio.create_task(asyncio.to_thread(function, *args))
+    try:
+        while True:
+            done, _ = await asyncio.wait({task}, timeout=interval)
+            if done:
+                result = task.result()
+                logger.info(
+                    "%s: completed in %.1fs", label, time.perf_counter() - started
+                )
+                return result
+            logger.info(
+                "%s: still running (%.1fs elapsed)",
+                label,
+                time.perf_counter() - started,
+            )
+    except BaseException:
+        logger.info("%s: stopped after %.1fs", label, time.perf_counter() - started)
+        # A filesystem thread cannot be cancelled. Consume its eventual exception.
+        task.add_done_callback(
+            lambda finished: finished.exception() if not finished.cancelled() else None
+        )
+        raise
+
+
 class _ProgressLogger:
     """Periodic console summaries using in-memory counters only."""
 
@@ -284,6 +312,11 @@ def _verified_existing_indices(directory, dataset, validate):
     return verified
 
 
+def _prepare_hidden_state_cache(directory, dataset, validate):
+    directory.mkdir(parents=True, exist_ok=True)
+    return _verified_existing_indices(directory, dataset, validate)
+
+
 async def _generate_and_save_hidden_states(
     model: str | None,
     endpoint: str,
@@ -301,19 +334,26 @@ async def _generate_and_save_hidden_states(
     write_concurrency: int = 2,
     progress_log_interval: float = 10.0,
 ):
-    dataset = load_from_disk(preprocessed_data)
+    dataset = await _run_logged_stage(
+        f"Loading preprocessed dataset from {preprocessed_data}",
+        load_from_disk,
+        preprocessed_data,
+        interval=progress_log_interval,
+    )
+    logger.info("Dataset loaded: %d rows", len(dataset))
 
     if output is None:
         hidden_states_dir = Path(preprocessed_data) / "hidden_states"
     else:
         hidden_states_dir = Path(output)
-    hidden_states_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info(
-        "Checking existing hidden-state files for resume in %s", hidden_states_dir
-    )
-    existing_file_indices = await asyncio.to_thread(
-        _verified_existing_indices, hidden_states_dir, dataset, validate_outputs
+    existing_file_indices = await _run_logged_stage(
+        f"Checking existing hidden-state files for resume in {hidden_states_dir}",
+        _prepare_hidden_state_cache,
+        hidden_states_dir,
+        dataset,
+        validate_outputs,
+        interval=progress_log_interval,
     )
     num_samples = len(dataset)
 

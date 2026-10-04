@@ -313,3 +313,7 @@ every `execution.hidden_state_log_interval` seconds (default 10), including whil
 requests are pending. Failed rows remain in the remaining count. Summaries use
 in-memory counters and add no Drive reads or writes. The standalone extraction
 CLI exposes the same setting as `--progress-log-interval`.
+
+Startup also logs dataset loading and the resume scan immediately, with periodic
+`still running` messages at the same interval. These filesystem stages run in a
+background thread so slow Drive access does not block the logging heartbeat.
