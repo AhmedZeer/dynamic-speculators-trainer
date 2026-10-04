@@ -107,7 +107,8 @@ Values below are initial experimental defaults, not established optimal values.
 | `lora` | Rank, fixed alpha, dropout, target modules | Controls update capacity, scaling, and regularization |
 | `training` | Seeds, warmup/collection epochs and LRs, save interval | Controls optimization trajectories and bank density |
 | `training` | Weight decay, noise, token budget, TTT count/decay, loss | Changes exposure and training objective; token budget also changes updates/epoch |
-| `execution` | Endpoints, request timeout/retries, concurrency | Controls server interaction and throughput, not generator batch size |
+| `execution` | Endpoints, request timeout/retries, response concurrency | Controls server interaction and throughput, not generator batch size |
+| `execution` | Hidden-state request/write concurrency | Separates GPU requests from bounded CPU validation and Drive copies |
 | `execution` | Prompt RAM chunk size | Controls bounded input prefetch without changing request concurrency |
 | `execution` | Response staging directory, sync interval | Controls local durability and destination-write frequency; `null` disables staging |
 | `execution` | Processes, attention implementation | Controls distributed execution and numerical behavior |
@@ -190,7 +191,24 @@ and unfinished source iterators close on completion or interruption.
 
 Arrow preparation reorders asynchronous output by prompt identity. Extraction
 resumes missing cache files and checks token alignment, shape, dtype, and finite
-values. A changed cache recipe or prepared content is rejected; use another
+values. Before reusing existing files, it checks safetensors structure, token IDs,
+and sequence length without scanning the entire activation payload. Files with broken headers, mismatched
+token IDs, or incorrect sequence lengths are regenerated. New activations are validated on local
+server storage, copied to a hidden `.pending` destination, then renamed to the
+final `hs_<row_index>.safetensors` name after the copy succeeds. Resume ignores
+pending filenames. Full activation validation still runs before bank training.
+
+The preset uses 16 hidden-state requests and 2 concurrent validation/publication
+workers, independently of 256 response-generation requests. File-lock waiting
+uses the configured request timeout (600 seconds by default), rather than a
+separate fixed 10-second timeout. On a fail-fast error, extraction stops scheduling
+new rows, finishes in-flight requests/saves, and reports the failing row and phase.
+It no longer calls `os._exit`, which could kill other Drive writes halfway through.
+Files complete out of index order; successful files are retained on failure.
+These publication guarantees rely on filesystem rename semantics, including those
+provided by the Drive mount.
+
+A changed cache recipe or prepared content is rejected; use another
 output root for another experiment.
 
 Response generation stages both JSONL outputs on local disk by default:

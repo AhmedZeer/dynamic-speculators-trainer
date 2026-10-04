@@ -53,6 +53,8 @@ execution:
   generation_endpoint: http://localhost:8000/v1/chat/completions
   extraction_endpoint: http://localhost:8000/v1
   concurrency: 256
+  hidden_state_concurrency: 16
+  hidden_state_write_concurrency: 2
   prompt_chunk_size: 1000
   response_staging_dir: /tmp/speculators-responses
   response_sync_interval: 1000

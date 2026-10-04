@@ -14,8 +14,6 @@ Usage::
 
 import asyncio
 import logging
-import os
-import shutil
 import sys
 import time
 from pathlib import Path
@@ -24,13 +22,13 @@ from typing import Annotated, Any
 import openai
 import typer
 from datasets import load_from_disk
-from safetensors.torch import load_file
 from tqdm import tqdm
 
 from speculators.data_generation.offline import (
-    check_hidden_states,
+    check_hidden_state_file_header,
     get_existing_hidden_state_indices,
     get_indices_to_process,
+    publish_hidden_states,
 )
 from speculators.data_generation.vllm_client import (
     DEFAULT_MAX_RETRIES,
@@ -97,8 +95,11 @@ async def _worker(  # noqa: C901
 
         target_hidden_states_path = hidden_states_output_dir / f"hs_{idx}.safetensors"
 
+        stage = "request"
         try:
             async with vllm_semaphore:
+                if cancel_event.is_set():
+                    continue
                 t_vllm = time.perf_counter()
                 hidden_states_path = await generate_hidden_states_async(
                     client,
@@ -108,36 +109,41 @@ async def _worker(  # noqa: C901
                     max_retries=max_retries,
                 )
                 vllm_s = time.perf_counter() - t_vllm
+            stage = "server-file lock"
             lock_path = hidden_states_path + ".lock"
             if Path(lock_path).exists():  # noqa: ASYNC240
-                await wait_for_lock_async(lock_path)
+                await wait_for_lock_async(lock_path, timeout=request_timeout)
 
+            stage = "validation/publication"
             async with write_semaphore:
                 t_write = time.perf_counter()
-                await asyncio.to_thread(
-                    shutil.move, hidden_states_path, target_hidden_states_path
+                save = asyncio.create_task(
+                    asyncio.to_thread(
+                        publish_hidden_states,
+                        Path(hidden_states_path),
+                        target_hidden_states_path,
+                        item["input_ids"],
+                        validate_outputs,
+                    )
                 )
+                try:
+                    await asyncio.shield(save)
+                except asyncio.CancelledError:
+                    # A copy thread cannot be cancelled; let its publication finish.
+                    await save
+                    raise
                 write_s = time.perf_counter() - t_write
-                if validate_outputs:
-
-                    def _load_and_check(
-                        path=target_hidden_states_path,
-                        tokens=item["input_ids"],
-                    ):
-                        loaded = load_file(path)
-                        check_hidden_states(loaded, tokens)
-
-                    await asyncio.to_thread(_load_and_check)
         except Exception as e:
-            if fail_on_error:
-                logger.exception(
-                    "Fatal: sample %d aborted with --fail-on-error: %s", idx, e
-                )
-                logging.shutdown()
-                os._exit(1)
-            logger.warning("Skipping sample %d due to error: %s", idx, e)
             skipped_indices.append(idx)
             stats["errors"] += 1
+            if fail_on_error:
+                cancel_event.set()
+                logger.exception("Fatal: sample %d failed during %s: %s", idx, stage, e)
+                raise RuntimeError(
+                    f"Extraction failed for row {idx} during {stage}: {e}. "
+                    "Completed files are retained; rerun to resume missing rows."
+                ) from e
+            logger.warning("Skipping sample %d during %s: %s", idx, stage, e)
             if failure_tracker is not None and failure_tracker.record_failure():
                 cancel_event.set()
                 raise RuntimeError(
@@ -187,23 +193,47 @@ async def _feed_queue(to_process, dataset, queue, cancel_event):
                 await asyncio.sleep(0.1)
 
 
-async def _shutdown_workers(workers, queue, cancel_event):
-    """Shut down workers and propagate the first real exception."""
-    logger.info("Waiting for remaining file saves to complete...")
+async def _shutdown_workers(workers, queue, cancel_event, *, propagate_errors=True):
+    """Stop scheduling after failure, finish in-flight saves, and report errors."""
+    logger.info("Waiting for in-flight requests and file saves to complete...")
     if cancel_event.is_set():
-        for w in workers:
-            if not w.done():
-                w.cancel()
-    else:
-        for _ in range(len(workers)):
+        while not queue.empty():
+            queue.get_nowait()
+            queue.task_done()
+    for worker in workers:
+        if not worker.done():
             await queue.put(None)
     results = await asyncio.gather(*workers, return_exceptions=True)
+    if propagate_errors:
+        for result in results:
+            if isinstance(result, Exception):
+                raise result
 
-    for result in results:
-        if isinstance(result, Exception) and not isinstance(
-            result, asyncio.CancelledError
-        ):
-            raise result
+
+def _verified_existing_indices(directory, dataset, validate):
+    existing = get_existing_hidden_state_indices(directory)
+    if not validate:
+        return existing
+    verified = []
+    for index in existing:
+        if index < 0 or index >= len(dataset):
+            continue
+        try:
+            tokens = dataset[index]["input_ids"]
+            if hasattr(tokens, "tolist"):
+                tokens = tokens.tolist()
+            check_hidden_state_file_header(
+                directory / f"hs_{index}.safetensors", tokens
+            )
+        except Exception as exc:  # noqa: BLE001 -- invalid legacy files are regenerated
+            logger.warning(
+                "Cached row %d is incomplete or misaligned; regenerating: %s",
+                index,
+                exc,
+            )
+        else:
+            verified.append(index)
+    return verified
 
 
 async def _generate_and_save_hidden_states(
@@ -220,6 +250,7 @@ async def _generate_and_save_hidden_states(
     max_consecutive_errors: int | None,
     world_size: int,
     rank: int,
+    write_concurrency: int = 2,
 ):
     dataset = load_from_disk(preprocessed_data)
 
@@ -229,7 +260,9 @@ async def _generate_and_save_hidden_states(
         hidden_states_dir = Path(output)
     hidden_states_dir.mkdir(parents=True, exist_ok=True)
 
-    existing_file_indices = get_existing_hidden_state_indices(hidden_states_dir)
+    existing_file_indices = await asyncio.to_thread(
+        _verified_existing_indices, hidden_states_dir, dataset, validate_outputs
+    )
     num_samples = len(dataset)
 
     to_process = get_indices_to_process(
@@ -242,11 +275,17 @@ async def _generate_and_save_hidden_states(
     if not to_process:
         return
 
-    logger.info(f"Processing {len(to_process)} samples")
+    logger.info(
+        "Cache: %d reusable files; %d rows pending; request concurrency=%d, writes=%d",
+        len(existing_file_indices),
+        len(to_process),
+        concurrency,
+        write_concurrency,
+    )
 
     queue: asyncio.Queue = asyncio.Queue(maxsize=concurrency * 4)
     vllm_semaphore = asyncio.Semaphore(concurrency)
-    write_semaphore = asyncio.Semaphore(concurrency)
+    write_semaphore = asyncio.Semaphore(write_concurrency)
 
     skipped_indices: list[int] = []
     cancel_event = asyncio.Event()
@@ -304,8 +343,16 @@ async def _generate_and_save_hidden_states(
                 for _ in range(concurrency * 2)
             ]
 
-            await _feed_queue(to_process, dataset, queue, cancel_event)
-            await _shutdown_workers(workers, queue, cancel_event)
+            try:
+                await _feed_queue(to_process, dataset, queue, cancel_event)
+            except BaseException:
+                cancel_event.set()
+                await _shutdown_workers(
+                    workers, queue, cancel_event, propagate_errors=False
+                )
+                raise
+            else:
+                await _shutdown_workers(workers, queue, cancel_event)
 
     elapsed = time.perf_counter() - stats["start_time"]
     if stats["ok"] > 0:
@@ -318,7 +365,7 @@ async def _generate_and_save_hidden_states(
             stats["total_write_s"] / stats["ok"] * 1000,
         )
 
-    num_saved = len(to_process) - len(skipped_indices)
+    num_saved = stats["ok"]
     logger.info(f"Saved {num_saved} new data points to {hidden_states_dir}")
     if skipped_indices:
         logger.warning(
@@ -374,6 +421,13 @@ def generate_offline_data(
             ),
         ),
     ] = 32,
+    write_concurrency: Annotated[
+        int,
+        typer.Option(
+            min=1,
+            help="Concurrent validation/file publications (independent of requests)",
+        ),
+    ] = 2,
     validate_outputs: Annotated[
         bool,
         typer.Option(
@@ -443,8 +497,8 @@ def generate_offline_data(
     Connects to a running vLLM instance, sends preprocessed samples, and saves
     the extracted hidden states to disk for offline training.
     """
-    if concurrency < 1:
-        raise typer.BadParameter("--concurrency must be >= 1")
+    if concurrency < 1 or write_concurrency < 1:
+        raise typer.BadParameter("--concurrency and --write-concurrency must be >= 1")
     if rank < 0 or rank >= world_size:
         raise typer.BadParameter("--rank must be in range [0, world_size)")
     setup_root_logger()
@@ -460,6 +514,7 @@ def generate_offline_data(
                 output=output,
                 max_samples=max_samples,
                 concurrency=concurrency,
+                write_concurrency=write_concurrency,
                 validate_outputs=validate_outputs,
                 request_timeout=request_timeout,
                 max_retries=max_retries,

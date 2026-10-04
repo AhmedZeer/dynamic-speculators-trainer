@@ -1,7 +1,11 @@
 import logging
+import shutil
+import uuid
 from pathlib import Path
 
 import torch
+from safetensors import safe_open
+from safetensors.torch import load_file
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +55,36 @@ def check_hidden_states(data: dict, tokens: list[int]):
         if affected_layers:
             details += f", affected layer slots={sorted(affected_layers)}"
         raise ValueError(f"Hidden states contain non-finite values ({details})")
+
+
+def check_hidden_state_file_header(path: Path, tokens: list[int]):
+    """Check complete safetensors structure and token alignment without a full scan."""
+    with safe_open(path, framework="pt", device="cpu") as data:
+        required = {"token_ids", "hidden_states"}
+        if not required.issubset(data.keys()):
+            raise ValueError("Hidden-state file is missing required tensors")
+        if data.get_tensor("token_ids").tolist() != tokens:
+            raise ValueError("Hidden-state file token IDs differ from prepared row")
+        shape = data.get_slice("hidden_states").get_shape()
+        if not shape or shape[0] != len(tokens):
+            raise ValueError(
+                "Hidden-state file sequence length differs from prepared row"
+            )
+
+
+def publish_hidden_states(
+    source: Path, target: Path, tokens: list[int], validate: bool
+):
+    """Validate locally, then publish only a complete destination file."""
+    if validate:
+        check_hidden_states(load_file(source), tokens)
+    pending = target.with_name(f".{target.name}.{uuid.uuid4().hex}.pending")
+    try:
+        # Across filesystems this copies first; the final name remains invisible.
+        shutil.move(str(source), str(pending))
+        pending.replace(target)
+    finally:
+        pending.unlink(missing_ok=True)
 
 
 def get_existing_hidden_state_indices(output_path: Path) -> list[int]:
