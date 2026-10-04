@@ -20,6 +20,7 @@ from tqdm import tqdm
 from transformers import AutoTokenizer
 
 from speculators.data_generation.configs import DATASET_CONFIGS, DatasetConfig
+from speculators.data_generation.response_output import ResponseOutput
 from speculators.data_generation.vllm_client import (
     DEFAULT_MAX_RETRIES,
     InvalidResponseError,
@@ -578,6 +579,7 @@ async def _worker(
     progress,
     stats: dict[str, Any],
     detokenize: Callable[[list[int]], str],
+    output_manager: ResponseOutput | None = None,
 ):
     """Pull conversations off the queue and regenerate them into boundary rows.
 
@@ -660,6 +662,8 @@ async def _worker(
             progress.set_postfix(postfix, refresh=False)
             progress.update(1)
             queue.task_done()
+            if output_manager is not None:
+                await output_manager.example_completed()
 
 
 def load_input_dataset(
@@ -670,10 +674,10 @@ def load_input_dataset(
         parts = dataset_name.removeprefix("hf:").split(":")
         if len(parts) == 1:
             hf_id, resolved_subset, resolved_split = parts[0], None, "train"
-        elif len(parts) == 2:
+        elif len(parts) == 2:  # noqa: PLR2004
             hf_id, resolved_split = parts
             resolved_subset = None
-        elif len(parts) == 3:
+        elif len(parts) == 3:  # noqa: PLR2004
             hf_id, resolved_subset, resolved_split = parts
         else:
             raise ValueError(
@@ -735,6 +739,8 @@ async def _run(  # noqa: C901
     reasoning_effort_dist: dict[str, float] | None,
     temperature_dist: dict[str, float] | None,
     seed: int | None,
+    response_staging_dir: Path | None = None,
+    response_sync_interval: int = 1000,
 ) -> None:
     """Main async function to process dataset through vLLM endpoints."""
     typer.echo(f"Using endpoint: {endpoint}")
@@ -777,8 +783,6 @@ async def _run(  # noqa: C901
     typer.echo(f"Error file: {error_outfile}")
     typer.echo()
 
-    seen_ids = load_seen(outfile) if resume else set()
-
     queue: asyncio.Queue = asyncio.Queue(maxsize=concurrency * 4)
 
     ensure_parent_dirs(outfile, error_outfile)
@@ -792,19 +796,31 @@ async def _run(  # noqa: C901
         "Content-Type": "application/json",
     }
 
-    async with aiohttp.ClientSession(
-        timeout=timeout, connector=connector, headers=headers
-    ) as session:
-        with (
-            Path(outfile).open("a", encoding="utf-8") as output_file,  # noqa: ASYNC230
-            Path(error_outfile).open("a", encoding="utf-8") as error_file,  # noqa: ASYNC230
-            tqdm(
-                total=limit,
-                desc="Generating responses",
-                unit="sample",
-                dynamic_ncols=True,
-            ) as progress,
-        ):
+    async with (
+        aiohttp.ClientSession(
+            timeout=timeout, connector=connector, headers=headers
+        ) as session,
+        ResponseOutput(
+            Path(outfile),
+            Path(error_outfile),
+            response_staging_dir,
+            response_sync_interval,
+        ) as output_manager,
+    ):
+        output_file, error_file = output_manager.files
+        seen_ids = load_seen(str(output_manager.paths[0])) if resume else set()
+        if response_staging_dir is not None:
+            typer.echo(f"Local response staging: {output_manager.paths[0].parent}")
+            typer.echo(
+                f"Destination sync: every {response_sync_interval} completed examples "
+                "and on exit"
+            )
+        with tqdm(
+            total=limit,
+            desc="Generating responses",
+            unit="sample",
+            dynamic_ncols=True,
+        ) as progress:
             stats = {
                 "ok": 0,
                 "errors": 0,
@@ -829,81 +845,91 @@ async def _run(  # noqa: C901
                         progress=progress,
                         stats=stats,
                         detokenize=detokenize,
+                        output_manager=output_manager,
                     )
                 )
                 for _ in range(concurrency)
             ]
 
-            rng = random.Random(seed)
-            processed_count = 0
-            for index, row in enumerate(hf_dataset):
-                if limit is not None and processed_count >= limit:
-                    break
+            try:
+                rng = random.Random(seed)
+                processed_count = 0
+                for index, row in enumerate(hf_dataset):
+                    if limit is not None and processed_count >= limit:
+                        break
 
-                if language_filter and row.get("language") != language_filter:
-                    continue
+                    if language_filter and row.get("language") != language_filter:
+                        continue
 
-                prepared = prepare_row(row, dataset_config)
-                if prepared is None:
-                    continue
-                normalized, turns, tool_results = prepared
+                    prepared = prepare_row(row, dataset_config)
+                    if prepared is None:
+                        continue
+                    normalized, turns, tool_results = prepared
 
-                primary_id = _primary_identifier(row)
-                if primary_id in seen_ids:
-                    continue
+                    primary_id = _primary_identifier(row)
+                    if primary_id in seen_ids:
+                        continue
 
-                # Broken input tool schema: record and skip (don't crash the run).
-                try:
-                    tools = extract_tools(normalized)
-                except ValueError as exc:
-                    logger.warning(
-                        "Skipping row %s: input tool schema is broken (%s)",
-                        primary_id,
-                        exc,
-                    )
-                    error_output = {
-                        "id": primary_id,
-                        "metadata": {
-                            "idx": index,
-                            "error": repr(exc),
-                            "generations_completed": 0,
-                            "endpoint": endpoint,
-                        },
+                    # Broken input tool schema: record and skip.
+                    try:
+                        tools = extract_tools(normalized)
+                    except ValueError as exc:
+                        logger.warning(
+                            "Skipping row %s: input tool schema is broken (%s)",
+                            primary_id,
+                            exc,
+                        )
+                        error_output = {
+                            "id": primary_id,
+                            "metadata": {
+                                "idx": index,
+                                "error": repr(exc),
+                                "generations_completed": 0,
+                                "endpoint": endpoint,
+                            },
+                        }
+                        error_file.write(
+                            json.dumps(error_output, ensure_ascii=False) + "\n"
+                        )
+                        error_file.flush()
+                        stats["errors"] += 1
+                        progress.update(1)
+                        await output_manager.example_completed()
+                        continue
+
+                    queue_item: dict[str, Any] = {
+                        "idx": index,
+                        "primary_id": primary_id,
+                        "turns": turns,
+                        "tools": tools,
+                        "tool_results": tool_results,
                     }
-                    error_file.write(
-                        json.dumps(error_output, ensure_ascii=False) + "\n"
-                    )
-                    error_file.flush()
-                    stats["errors"] += 1
-                    progress.update(1)
-                    continue
-
-                queue_item: dict[str, Any] = {
-                    "idx": index,
-                    "primary_id": primary_id,
-                    "turns": turns,
-                    "tools": tools,
-                    "tool_results": tool_results,
-                }
-                if reasoning_effort_dist is not None:
-                    vals = list(reasoning_effort_dist)
-                    queue_item["reasoning_effort"] = rng.choices(
-                        vals, weights=list(reasoning_effort_dist.values())
-                    )[0]
-                if temperature_dist is not None:
-                    queue_item["temperature"] = float(
-                        rng.choices(
-                            list(temperature_dist),
-                            weights=list(temperature_dist.values()),
+                    if reasoning_effort_dist is not None:
+                        vals = list(reasoning_effort_dist)
+                        queue_item["reasoning_effort"] = rng.choices(
+                            vals, weights=list(reasoning_effort_dist.values())
                         )[0]
-                    )
-                await queue.put(queue_item)
-                processed_count += 1
+                    if temperature_dist is not None:
+                        queue_item["temperature"] = float(
+                            rng.choices(
+                                list(temperature_dist),
+                                weights=list(temperature_dist.values()),
+                            )[0]
+                        )
+                    await queue.put(queue_item)
+                    processed_count += 1
 
-            # Signal workers to stop
-            for _ in range(len(workers)):
-                await queue.put(None)
-            await asyncio.gather(*workers)
+                # Signal workers to stop
+                for _ in range(len(workers)):
+                    await queue.put(None)
+                await asyncio.gather(*workers)
+
+            finally:
+                # Stop writers before final sync/close, including Ctrl+C.
+                for worker in workers:
+                    if not worker.done():
+                        worker.cancel()
+                await asyncio.gather(*workers, return_exceptions=True)
 
             _log_summary(stats)
 
@@ -1000,6 +1026,16 @@ def regenerate_responses(
             help="Output JSONL path (auto-generated if not specified)",
         ),
     ] = None,
+    response_staging_dir: Annotated[
+        Path | None,
+        typer.Option(
+            help="Local directory for response staging; periodically sync to outfile"
+        ),
+    ] = None,
+    response_sync_interval: Annotated[
+        int,
+        typer.Option(min=1, help="Sync staged files every N completed examples"),
+    ] = 1000,
     resume: Annotated[
         bool,
         typer.Option(
@@ -1102,6 +1138,8 @@ def regenerate_responses(
                 sampling_params=parsed_sampling_params,
                 outfile=outfile,
                 resume=resume,
+                response_staging_dir=response_staging_dir,
+                response_sync_interval=response_sync_interval,
                 language_filter=language_filter,
                 max_retries=max_retries,
                 reasoning_effort_dist=parsed_reasoning_effort,

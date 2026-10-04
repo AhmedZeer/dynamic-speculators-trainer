@@ -53,6 +53,8 @@ execution:
   generation_endpoint: http://localhost:8000/v1/chat/completions
   extraction_endpoint: http://localhost:8000/v1
   concurrency: 256
+  response_staging_dir: /tmp/speculators-responses
+  response_sync_interval: 1000
   request_timeout: 600
   max_retries: 3
   processes: 1

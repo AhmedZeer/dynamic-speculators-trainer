@@ -538,6 +538,11 @@ def main():
 
     print("Running command:")
     print(" ".join(cmd))
+    print(
+        "vLLM log destination: inherited stdout/stderr; "
+        f"VLLM_LOGGING_LEVEL={os.environ.get('VLLM_LOGGING_LEVEL', '(vLLM default)')}",
+        flush=True,
+    )
 
     if args.provenance_dir:
         _save_vllm_provenance(
@@ -552,6 +557,8 @@ def main():
         # Render tuning applies to the train pipeline only; eval serving skips it.
         if args.subcommand == "train" and "--headless" not in vllm_args:
             _set_render_thread_defaults()
+        # Replace this process without pipes, log files, or descriptor redirection.
+        # vLLM's statistics logger therefore uses the caller's stdout/stderr.
         os.execvp(cmd[0], cmd)  # noqa: S606
 
 

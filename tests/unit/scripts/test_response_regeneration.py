@@ -9,6 +9,7 @@ import asyncio
 import copy
 import json
 import time
+from importlib import import_module
 from typing import Any
 
 import pytest
@@ -31,6 +32,7 @@ from speculators.cli.regenerate_responses import (
 from speculators.data_generation import vllm_client
 from speculators.data_generation.configs import DATASET_CONFIGS, DatasetConfig
 from speculators.data_generation.preprocessing import _preprocess_batch
+from speculators.data_generation.response_output import ResponseOutput
 from speculators.data_generation.vllm_client import InvalidResponseError
 
 
@@ -1046,3 +1048,72 @@ def test_tools_and_results_are_read_from_the_normalized_row():
     assert tool_results == [("sunny", [])]
     # the raw row hides the conversation behind `input`: results would be lost
     assert extract_conversation(row, None)[1] == []
+
+
+def test_run_stages_and_resumes_local_progress_with_changed_concurrency(
+    tmp_path, monkeypatch
+):
+    regeneration = import_module("speculators.cli.regenerate_responses")
+
+    output = tmp_path / "drive/responses.jsonl"
+    output.parent.mkdir()
+    output.write_text('{"primary_id":"row-0"}\n')
+    source = [
+        {"id": f"row-{i}", "messages": [{"role": "user", "content": f"Question {i}"}]}
+        for i in range(3)
+    ]
+    session = _FakeSession([_ok([1, 2], [3], "answer") for _ in range(2)])
+
+    class SessionContext:
+        async def __aenter__(self):
+            return session
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(
+        regeneration.aiohttp, "ClientSession", lambda **kw: SessionContext()
+    )
+    monkeypatch.setattr(regeneration, "build_detokenizer", lambda _: _detok)
+    monkeypatch.setattr(
+        regeneration,
+        "load_input_dataset",
+        lambda *args: (
+            DatasetConfig(name="local", hf_path="local", split="train"),
+            source,
+            "train",
+        ),
+    )
+    settings = {
+        "endpoint": "http://x/v1/chat/completions",
+        "model": "m",
+        "dataset_name": "local",
+        "split": None,
+        "subset": None,
+        "limit": None,
+        "max_tokens": 16,
+        "sampling_params": {},
+        "outfile": str(output),
+        "resume": True,
+        "language_filter": None,
+        "max_retries": 0,
+        "reasoning_effort_dist": None,
+        "temperature_dist": None,
+        "seed": 0,
+        "response_staging_dir": tmp_path / "local",
+        "response_sync_interval": 2,
+    }
+    asyncio.run(regeneration._run(**settings, concurrency=2))
+    assert session.calls == 2
+    assert load_seen(str(output)) == {"row-0", "row-1", "row-2"}
+    staging = ResponseOutput(
+        output, output.with_name("responses.errors.jsonl"), tmp_path / "local", 2
+    )
+    with staging.paths[0].open("a") as stream:
+        stream.write('{"primary_id":"row-3"}\n')
+    source.append(
+        {"id": "row-3", "messages": [{"role": "user", "content": "Unsynced"}]}
+    )
+    asyncio.run(regeneration._run(**settings, concurrency=1))
+    assert session.calls == 2  # No extra request for the unsynced local response.
+    assert load_seen(str(output)) == {"row-0", "row-1", "row-2", "row-3"}

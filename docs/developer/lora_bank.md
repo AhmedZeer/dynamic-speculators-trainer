@@ -108,6 +108,7 @@ Values below are initial experimental defaults, not established optimal values.
 | `training` | Seeds, warmup/collection epochs and LRs, save interval | Controls optimization trajectories and bank density |
 | `training` | Weight decay, noise, token budget, TTT count/decay, loss | Changes exposure and training objective; token budget also changes updates/epoch |
 | `execution` | Endpoints, request timeout/retries, concurrency | Controls server interaction and throughput, not generator batch size |
+| `execution` | Response staging directory, sync interval | Controls local durability and destination-write frequency; `null` disables staging |
 | `execution` | Processes, attention implementation | Controls distributed execution and numerical behavior |
 | `conditioning` | Maximum examples, prompt-state policy | Records the future generator contract; does not affect bank training |
 
@@ -172,6 +173,33 @@ resume by stable prompt identity; Arrow preparation reorders asynchronous output
 by that identity. Extraction resumes missing cache files and checks token
 alignment, shape, dtype, and finite values. A changed cache recipe or prepared
 content is rejected; use another output root for another experiment.
+
+Response generation stages both JSONL outputs on local disk by default:
+
+```yaml
+execution:
+  response_staging_dir: /tmp/speculators-responses
+  response_sync_interval: 1000
+```
+
+Each completed example is flushed locally. Every 1,000 completed examples
+(including failed examples), the client copies a flushed snapshot of the response
+and error files to `output_root` in a background thread. Other workers continue
+while that copy runs. A final sync runs on completion and ordinary Ctrl+C; forced
+termination or runtime loss can lose responses not yet synced to Drive. Local
+staging is retained, so restarting in the same runtime resumes those responses.
+A new runtime resumes from the last Drive snapshot. Existing Drive responses are
+copied locally on first use; divergent local/Drive files are rejected. Run only
+one response-generation process per output root. Set `response_staging_dir: null`
+to use the original direct append behavior. Staging and sync controls do not alter
+the cache identity and can be changed for an existing experiment.
+
+The launcher uses `os.execvp` and inherits stdout/stderr; it does not redirect
+statistics to another file or suppress them. Look in the server process's output,
+including any redirection used by the Colab cell that started it. If logs are
+filtered, launch with `VLLM_LOGGING_LEVEL=INFO` and omit `--disable-log-stats`.
+Keep passing `--provenance-dir`. Statistics visibility also depends on the vLLM
+version and its logging configuration.
 
 Stop the target server to free GPU memory, then run:
 

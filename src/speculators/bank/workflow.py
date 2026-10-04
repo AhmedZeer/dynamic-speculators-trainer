@@ -185,6 +185,8 @@ def regenerate(cfg: BankConfig, manifest: dict):
         ),
         outfile=str(root / "responses.jsonl"),
         resume=True,
+        response_staging_dir=cfg.execution.response_staging_dir,
+        response_sync_interval=cfg.execution.response_sync_interval,
         language_filter=None,
         max_retries=cfg.execution.max_retries,
         reasoning_effort=None,

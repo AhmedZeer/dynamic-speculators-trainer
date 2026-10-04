@@ -1,5 +1,7 @@
 import os
+from argparse import Namespace
 
+from scripts import launch_vllm
 from scripts.launch_vllm import (
     DEFAULT_RENDERER_NUM_WORKERS,
     _preprocessing_workers,
@@ -75,3 +77,35 @@ def test_sizing_uses_one_combined_budget():
     assert preprocessing_workers == 30
     assert api_servers == 7
     assert preprocessing_workers * 3 + api_servers * 4 <= int(160 * 0.75)
+
+
+def test_launch_inherits_output_and_preserves_statistics_logging(
+    monkeypatch, tmp_path, capsys
+):
+    args = Namespace(
+        subcommand="train",
+        provenance_dir=str(tmp_path),
+        model="target",
+        no_hash_checkpoints=True,
+        dry_run=False,
+    )
+    command = ["python", "-m", "vllm.entrypoints.cli.main", "serve", "target"]
+    calls = []
+    monkeypatch.setattr(launch_vllm, "parse_args", lambda: (args, []))
+    monkeypatch.setattr(launch_vllm, "_build_train_cmd", lambda *_: command)
+    monkeypatch.setattr(launch_vllm, "_save_vllm_provenance", lambda *a, **kw: None)
+    monkeypatch.setattr(launch_vllm, "_set_render_thread_defaults", lambda: None)
+    monkeypatch.setenv("VLLM_LOGGING_LEVEL", "INFO")
+    stdout, stderr = os.fstat(1), os.fstat(2)
+
+    def execvp(executable, argv):
+        assert os.fstat(1) == stdout
+        assert os.fstat(2) == stderr
+        assert os.environ["VLLM_LOGGING_LEVEL"] == "INFO"
+        calls.append((executable, argv))
+
+    monkeypatch.setattr(launch_vllm.os, "execvp", execvp)
+    launch_vllm.main()
+    assert calls == [(command[0], command)]
+    assert "--disable-log-stats" not in calls[0][1]
+    assert "inherited stdout/stderr" in capsys.readouterr().out
