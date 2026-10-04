@@ -42,6 +42,49 @@ from speculators.train.logger import setup_root_logger
 logger = logging.getLogger(__name__)
 
 
+class _ProgressLogger:
+    """Periodic console summaries using in-memory counters only."""
+
+    def __init__(self, stats: dict[str, Any], interval: float):
+        self.stats = stats
+        self.interval = interval
+        self.stop = asyncio.Event()
+
+    def report(self, phase: str):
+        stats = self.stats
+        completed = stats["reused"] + stats["ok"]
+        elapsed = time.perf_counter() - stats["start_time"]
+        logger.info(
+            "Hidden states %s: %d/%d complete | reused=%d saved=%d "
+            "failed=%d remaining=%d | %.2f files/s",
+            phase,
+            completed,
+            stats["total"],
+            stats["reused"],
+            stats["ok"],
+            stats["errors"],
+            stats["total"] - completed,
+            stats["ok"] / elapsed if elapsed > 0 else 0,
+        )
+
+    async def heartbeat(self):
+        while not self.stop.is_set():
+            try:
+                await asyncio.wait_for(self.stop.wait(), timeout=self.interval)
+            except TimeoutError:
+                self.report("running")
+
+    async def __aenter__(self):
+        self.report("starting")
+        self.task = asyncio.create_task(self.heartbeat())
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self.stop.set()
+        await self.task
+        self.report("stopped" if exc_type else "finished")
+
+
 class _FailureTracker:
     """Tracks consecutive sample failures across async workers.
 
@@ -96,6 +139,7 @@ async def _worker(  # noqa: C901
         target_hidden_states_path = hidden_states_output_dir / f"hs_{idx}.safetensors"
 
         stage = "request"
+        published = False
         try:
             async with vllm_semaphore:
                 if cancel_event.is_set():
@@ -131,7 +175,10 @@ async def _worker(  # noqa: C901
                 except asyncio.CancelledError:
                     # A copy thread cannot be cancelled; let its publication finish.
                     await save
+                    published = True
+                    write_s = time.perf_counter() - t_write
                     raise
+                published = True
                 write_s = time.perf_counter() - t_write
         except Exception as e:
             skipped_indices.append(idx)
@@ -151,9 +198,6 @@ async def _worker(  # noqa: C901
                     "errored out. The vLLM server may be unreachable."
                 ) from e
         else:
-            stats["ok"] += 1
-            stats["total_vllm_s"] += vllm_s
-            stats["total_write_s"] += write_s
             logger.debug(
                 "Sample %d: vLLM %.0f ms, write %.0f ms",
                 idx,
@@ -163,6 +207,11 @@ async def _worker(  # noqa: C901
             if failure_tracker is not None:
                 failure_tracker.record_success()
         finally:
+            if published:
+                stats["ok"] += 1
+                stats["total_vllm_s"] += vllm_s
+                stats["total_write_s"] += write_s
+                pbar.update(1)
             elapsed = time.perf_counter() - stats["start_time"]
             postfix = {"ok": stats["ok"], "err": stats["errors"]}
             if elapsed > 0 and stats["ok"] > 0:
@@ -172,7 +221,6 @@ async def _worker(  # noqa: C901
                     f"{stats['total_write_s'] / stats['ok'] * 1000:.0f}ms"
                 )
             pbar.set_postfix(postfix, refresh=False)
-            pbar.update(1)
             queue.task_done()
 
 
@@ -251,6 +299,7 @@ async def _generate_and_save_hidden_states(
     world_size: int,
     rank: int,
     write_concurrency: int = 2,
+    progress_log_interval: float = 10.0,
 ):
     dataset = load_from_disk(preprocessed_data)
 
@@ -260,6 +309,9 @@ async def _generate_and_save_hidden_states(
         hidden_states_dir = Path(output)
     hidden_states_dir.mkdir(parents=True, exist_ok=True)
 
+    logger.info(
+        "Checking existing hidden-state files for resume in %s", hidden_states_dir
+    )
     existing_file_indices = await asyncio.to_thread(
         _verified_existing_indices, hidden_states_dir, dataset, validate_outputs
     )
@@ -272,12 +324,22 @@ async def _generate_and_save_hidden_states(
         world_size,
         rank,
     )
+    target = max(
+        0, min(max_samples, num_samples) if max_samples is not None else num_samples
+    )
+    shard_total = target // world_size + int(rank < target % world_size)
+    reused = shard_total - len(to_process)
     if not to_process:
+        logger.info(
+            "Hidden states complete: %d/%d reusable files; no requests needed",
+            reused,
+            shard_total,
+        )
         return
 
     logger.info(
         "Cache: %d reusable files; %d rows pending; request concurrency=%d, writes=%d",
-        len(existing_file_indices),
+        reused,
         len(to_process),
         concurrency,
         write_concurrency,
@@ -291,6 +353,8 @@ async def _generate_and_save_hidden_states(
     cancel_event = asyncio.Event()
     stats: dict[str, Any] = {
         "ok": 0,
+        "reused": reused,
+        "total": shard_total,
         "errors": 0,
         "total_vllm_s": 0.0,
         "total_write_s": 0.0,
@@ -302,9 +366,10 @@ async def _generate_and_save_hidden_states(
         max_consec = concurrency
     failure_tracker = _FailureTracker(max_consec) if not fail_on_error else None
 
-    async with openai.AsyncOpenAI(
-        base_url=endpoint, api_key="EMPTY", max_retries=0
-    ) as client:
+    async with (
+        _ProgressLogger(stats, progress_log_interval),
+        openai.AsyncOpenAI(base_url=endpoint, api_key="EMPTY", max_retries=0) as client,
+    ):
         list_models = await client.models.list()
         if not list_models.data:
             raise RuntimeError(
@@ -319,7 +384,9 @@ async def _generate_and_save_hidden_states(
                 "Please make sure --endpoint is set to the correct vllm instance."
             )
 
-        with tqdm(total=len(to_process)) as pbar:
+        with tqdm(
+            total=shard_total, initial=reused, desc="Hidden states", unit="files"
+        ) as pbar:
             workers = [
                 asyncio.create_task(
                     _worker(
@@ -428,6 +495,10 @@ def generate_offline_data(
             help="Concurrent validation/file publications (independent of requests)",
         ),
     ] = 2,
+    progress_log_interval: Annotated[
+        float,
+        typer.Option(min=0.1, help="Seconds between console progress summaries"),
+    ] = 10.0,
     validate_outputs: Annotated[
         bool,
         typer.Option(
@@ -502,6 +573,7 @@ def generate_offline_data(
     if rank < 0 or rank >= world_size:
         raise typer.BadParameter("--rank must be in range [0, world_size)")
     setup_root_logger()
+    logger.setLevel(logging.INFO)
 
     logger.info("EAGLE Offline Data Generation")
 
@@ -515,6 +587,7 @@ def generate_offline_data(
                 max_samples=max_samples,
                 concurrency=concurrency,
                 write_concurrency=write_concurrency,
+                progress_log_interval=progress_log_interval,
                 validate_outputs=validate_outputs,
                 request_timeout=request_timeout,
                 max_retries=max_retries,

@@ -385,6 +385,7 @@ def extract(cfg: BankConfig, manifest: dict):
         max_samples=None,
         concurrency=cfg.execution.hidden_state_concurrency,
         write_concurrency=cfg.execution.hidden_state_write_concurrency,
+        progress_log_interval=cfg.execution.hidden_state_log_interval,
         validate_outputs=True,
         request_timeout=cfg.execution.request_timeout,
         max_retries=cfg.execution.max_retries,

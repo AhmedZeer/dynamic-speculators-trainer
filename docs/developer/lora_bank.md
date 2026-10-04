@@ -304,3 +304,12 @@ Relevant precedent:
 
 These results motivate the pipeline; they do not set optimal EAGLE3 subset size,
 checkpoint count, or conditioning budget.
+
+Hidden-state extraction resumes by row ID, filling missing or invalid files even
+when higher-numbered files already exist. The progress bar includes reused files
+and advances only after a new file has been published successfully. Console
+summaries show completed/total, reused, saved, failed, remaining, and files/second
+every `execution.hidden_state_log_interval` seconds (default 10), including while
+requests are pending. Failed rows remain in the remaining count. Summaries use
+in-memory counters and add no Drive reads or writes. The standalone extraction
+CLI exposes the same setting as `--progress-log-interval`.

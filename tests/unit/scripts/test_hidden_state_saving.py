@@ -3,6 +3,7 @@
 import asyncio
 import threading
 from importlib import import_module
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -208,10 +209,13 @@ def test_bank_uses_separate_extraction_concurrency(monkeypatch):
     )
     monkeypatch.setattr(workflow, "validate_cache", lambda *args: None)
     manifest = {"prepared": True, "data_path": "data", "hidden_states_path": "states"}
-    cfg = BankConfig.model_validate({"execution": {"concurrency": 256}})
+    cfg = BankConfig.model_validate(
+        {"execution": {"concurrency": 256, "hidden_state_log_interval": 3}}
+    )
     workflow.extract(cfg, manifest)
     assert captured[0]["concurrency"] == 16
     assert captured[0]["write_concurrency"] == 2
+    assert captured[0]["progress_log_interval"] == 3
 
 
 def test_waiting_request_is_not_started_after_failure(tmp_path, monkeypatch):
@@ -275,3 +279,101 @@ def test_cancelled_worker_finishes_started_publication(tmp_path, monkeypatch):
         assert not list(tmp_path.glob("*.pending"))
 
     asyncio.run(run())
+
+
+def test_heartbeat_reports_stalled_work_and_final_error(caplog):
+    async def run():
+        counters = stats() | {"reused": 7, "total": 10}
+        async with extraction._ProgressLogger(counters, 0.01):
+            await asyncio.sleep(0.035)
+            counters["ok"] = 1
+            counters["errors"] = 1
+            raise RuntimeError("server stopped")
+
+    caplog.set_level("INFO", logger=extraction.__name__)
+    with pytest.raises(RuntimeError, match="server stopped"):
+        asyncio.run(run())
+    assert (
+        "running: 7/10 complete | reused=7 saved=0 failed=0 remaining=3" in caplog.text
+    )
+    assert (
+        "stopped: 8/10 complete | reused=7 saved=1 failed=1 remaining=2" in caplog.text
+    )
+
+
+def test_resume_progress_includes_existing_rows_and_only_published_files(  # noqa: C901
+    tmp_path, monkeypatch, caplog
+):
+    data, cache = tmp_path / "data", tmp_path / "cache"
+    cache.mkdir()
+    Dataset.from_list([{"input_ids": [1, 2]} for _ in range(4)]).save_to_disk(data)
+    make_states(cache / "hs_0.safetensors")
+    make_states(cache / "hs_2.safetensors")
+    bars = []
+    requested = []
+
+    class Bar(Progress):
+        def __init__(self, **kwargs):
+            self.options = kwargs
+            self.advanced = 0
+            bars.append(self)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def update(self, n):
+            self.advanced += n
+
+    class Client:
+        def __init__(self, **kwargs):
+            self.models = self
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def list(self):
+            return SimpleNamespace(data=[SimpleNamespace(id="target")])
+
+    async def generate(client, model, item, **kwargs):
+        requested.append(item["idx"])
+        if item["idx"] == 3:
+            raise TimeoutError("unavailable")
+        source = tmp_path / "request.safetensors"
+        make_states(source)
+        return str(source)
+
+    monkeypatch.setattr(extraction, "tqdm", Bar)
+    monkeypatch.setattr(extraction.openai, "AsyncOpenAI", Client)
+    monkeypatch.setattr(extraction, "build_client_item", lambda row: row)
+    monkeypatch.setattr(extraction, "generate_hidden_states_async", generate)
+    caplog.set_level("INFO", logger=extraction.__name__)
+    asyncio.run(
+        extraction._generate_and_save_hidden_states(
+            model="target",
+            endpoint="http://unused",
+            preprocessed_data=str(data),
+            output=str(cache),
+            max_samples=None,
+            concurrency=1,
+            validate_outputs=True,
+            request_timeout=600,
+            max_retries=0,
+            fail_on_error=False,
+            max_consecutive_errors=10,
+            world_size=1,
+            rank=0,
+        )
+    )
+    assert requested == [1, 3]
+    assert bars[0].options["initial"] == 2
+    assert bars[0].options["total"] == 4
+    assert bars[0].advanced == 1
+    assert (
+        "finished: 3/4 complete | reused=2 saved=1 failed=1 remaining=1" in caplog.text
+    )
