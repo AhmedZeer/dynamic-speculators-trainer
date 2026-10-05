@@ -6,6 +6,7 @@ import json
 import logging
 import random
 import warnings
+from contextlib import nullcontext
 from copy import deepcopy
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from transformers.models.auto.configuration_auto import AutoConfig
 from transformers.models.qwen3.configuration_qwen3 import Qwen3Config
 
 from hs_connectors import HiddenStatesBackend
+from speculators.bank.progress import report, stage_progress
 from speculators.model import SpeculatorModel
 from speculators.models.eagle3.data import shift_batch
 from speculators.models.eagle3.rotary_partial import install_partial_neox_rotary
@@ -599,6 +601,12 @@ def build_draft_model(
     )
 
 
+def _bank_stage(cfg: TrainConfig, label: str):
+    if not cfg.bank.bank_manifest or get_rank() != 0:
+        return nullcontext()
+    return stage_progress(f"subset={cfg.bank.bank_subset_id} seed={cfg.seed} | {label}")
+
+
 def main(cfg: TrainConfig):  # noqa: C901
     # Phase-1 adapter: the model layer still consumes a flat vars(args)-shaped
     # dict via **kwargs, so flatten the typed config back into a namespace here.
@@ -617,6 +625,11 @@ def main(cfg: TrainConfig):  # noqa: C901
 
     # Setup distributed training
     maybe_setup_distributed()
+    if cfg.bank.bank_manifest and get_rank() == 0:
+        report(
+            f"Training startup: subset={cfg.bank.bank_subset_id}, seed={cfg.seed}, "
+            f"output={cfg.trainer.save_path}, step log interval={cfg.trainer.log_freq}"
+        )
 
     # Publish train config to metric backends that support hyperparameter logging
     log_run_config(cfg)
@@ -670,7 +683,8 @@ def main(cfg: TrainConfig):  # noqa: C901
         d2t, t2d, draft_vocab_size = None, None, None
         args.mask_token_id = None
     else:
-        d2t, t2d, draft_vocab_size = parse_vocab_mappings(args)
+        with _bank_stage(cfg, "Loading vocabulary mappings"):
+            d2t, t2d, draft_vocab_size = parse_vocab_mappings(args)
 
         if args.full_attention_indices and args.speculator_type == "mtp":
             raise ValueError(
@@ -686,7 +700,8 @@ def main(cfg: TrainConfig):  # noqa: C901
 
     model_class = registry[args.speculator_type]
 
-    draft_model = build_draft_model(args, model_class, t2d, d2t, draft_vocab_size)
+    with _bank_stage(cfg, f"Loading drafter: {cfg.draft.from_pretrained}"):
+        draft_model = build_draft_model(args, model_class, t2d, d2t, draft_vocab_size)
 
     # Get target layer IDs from the model (resolved at model level)
     num_target_layers = len(draft_model.target_layer_ids)  # type: ignore[arg-type]
@@ -698,14 +713,19 @@ def main(cfg: TrainConfig):  # noqa: C901
     if args.lora_r > 0:
         if args.fsdp_shard:
             raise ValueError("LoRA fine-tuning does not yet support --fsdp-shard")
-        draft_model = apply_lora(
-            draft_model,
-            r=args.lora_r,
-            alpha=args.lora_alpha,
-            dropout=args.lora_dropout,
-            target_modules=args.lora_target_modules,
-            save_merged=args.lora_save_merged,
-        )  # type: ignore[assignment]
+        with _bank_stage(
+            cfg,
+            f"Installing LoRA: r={cfg.lora.lora_r}, "
+            f"alpha={cfg.lora.lora_alpha}, projections={cfg.lora.lora_target_modules}",
+        ):
+            draft_model = apply_lora(
+                draft_model,
+                r=args.lora_r,
+                alpha=args.lora_alpha,
+                dropout=args.lora_dropout,
+                target_modules=args.lora_target_modules,
+                save_merged=args.lora_save_merged,
+            )  # type: ignore[assignment]
 
     # Dry-run: persist an initialized checkpoint and exit before training so the
     # config/weights can be validated (e.g. in vLLM). The saved checkpoint can be
@@ -768,31 +788,34 @@ def main(cfg: TrainConfig):  # noqa: C901
     # the mirror complete so nothing read here was dropped during resolution.
     transfer = backend_cls.from_train_args(args, args.data_path)
 
-    train_loader, val_loader = create_train_val_loaders(
-        data_path=args.data_path,
-        total_seq_len=args.total_seq_len,
-        hidden_states_dtype=hidden_states_dtype,
-        noise_std=args.noise_std,
-        transfer=transfer,
-        vllm_endpoint=args.vllm_endpoint,
-        on_missing=args.on_missing,
-        on_generate=args.on_generate,
-        verifier_name_or_path=args.verifier_name_or_path,
-        request_timeout=args.request_timeout,
-        max_retries=args.max_retries,
-        generation_validation_retries=args.generation_validation_retries,
-        max_consecutive_generation_failures=args.max_consecutive_generation_failures,
-        hidden_size=hidden_size,
-        num_target_layers=num_target_layers,
-        num_workers=args.num_workers,
-        prefetch_factor=args.prefetch_factor,
-        preprocess=preprocess,
-        train_data_ratio=args.train_data_ratio,
-        max_train_samples=args.max_train_samples,
-        train_indices=bank_subset["train_indices"] if bank_subset else None,
-        val_indices=bank_subset["validation_indices"] if bank_subset else None,
-        sampler_seed=cfg.seed if bank_subset else None,
-    )
+    with _bank_stage(
+        cfg, "Loading saved training/validation data and building packed batches"
+    ):
+        train_loader, val_loader = create_train_val_loaders(
+            data_path=args.data_path,
+            total_seq_len=args.total_seq_len,
+            hidden_states_dtype=hidden_states_dtype,
+            noise_std=args.noise_std,
+            transfer=transfer,
+            vllm_endpoint=args.vllm_endpoint,
+            on_missing=args.on_missing,
+            on_generate=args.on_generate,
+            verifier_name_or_path=args.verifier_name_or_path,
+            request_timeout=args.request_timeout,
+            max_retries=args.max_retries,
+            generation_validation_retries=args.generation_validation_retries,
+            max_consecutive_generation_failures=args.max_consecutive_generation_failures,
+            hidden_size=hidden_size,
+            num_target_layers=num_target_layers,
+            num_workers=args.num_workers,
+            prefetch_factor=args.prefetch_factor,
+            preprocess=preprocess,
+            train_data_ratio=args.train_data_ratio,
+            max_train_samples=args.max_train_samples,
+            train_indices=bank_subset["train_indices"] if bank_subset else None,
+            val_indices=bank_subset["validation_indices"] if bank_subset else None,
+            sampler_seed=cfg.seed if bank_subset else None,
+        )
 
     # Get trainer kwargs from model class
     train_call_kwargs, val_call_kwargs = model_class.get_trainer_kwargs(**vars(args))
@@ -835,19 +858,20 @@ def main(cfg: TrainConfig):  # noqa: C901
             write_json(
                 Path(cfg.trainer.save_path) / "resolved_train.json", cfg.flatten()
             )
-        trainer = BankTrainer(
-            draft_model,
-            trainer_config,
-            train_loader,
-            val_loader,
-            schedule=BankSchedule(
-                cfg.bank.bank_warmup_epochs,
-                cfg.bank.bank_collect_epochs,
-                cfg.bank.bank_collect_lr,
-                cfg.bank.bank_save_interval,
-            ),
-            context=bank_run_context,
-        )
+        with _bank_stage(cfg, "Initializing optimizer, device, and recovery state"):
+            trainer = BankTrainer(
+                draft_model,
+                trainer_config,
+                train_loader,
+                val_loader,
+                schedule=BankSchedule(
+                    cfg.bank.bank_warmup_epochs,
+                    cfg.bank.bank_collect_epochs,
+                    cfg.bank.bank_collect_lr,
+                    cfg.bank.bank_save_interval,
+                ),
+                context=bank_run_context,
+            )
     else:
         trainer = Trainer(draft_model, trainer_config, train_loader, val_loader)
 

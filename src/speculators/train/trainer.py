@@ -477,6 +477,9 @@ class Trainer:
             )
         return skip_steps
 
+    def on_train_epoch_start(self, epoch: int, num_steps: int, skip_steps: int) -> None:
+        """Hook for reporting full epoch size and restored data position."""
+
     def train_epoch(self, epoch: int):
         self.model.train()
         if hasattr(self.train_loader.batch_sampler, "set_epoch"):
@@ -487,6 +490,7 @@ class Trainer:
 
         # Determine how many batches to skip for mid-epoch resume.
         skip_steps = self._prepare_resume_skip(epoch)
+        self.on_train_epoch_start(epoch, num_steps, skip_steps)
 
         train_loader = self.train_loader
         if self.rank == 0:

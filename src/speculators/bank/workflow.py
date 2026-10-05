@@ -4,6 +4,7 @@ import json
 import random
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import yaml
@@ -465,8 +466,18 @@ def train(cfg: BankConfig):
             paths[role] = snapshot_download(
                 getattr(cfg.models, role), revision=manifest["revisions"][f"{role}_sha"]
             )
+    total_runs = len(manifest["subsets"]) * len(cfg.training.seeds)
+    run_number = 0
+    report(
+        f"Bank schedule: {len(manifest['subsets'])} subsets, "
+        f"{len(cfg.training.seeds)} seeds, {total_runs} runs; "
+        f"warmup={cfg.training.warmup_epochs} epochs, "
+        f"collect={cfg.training.collect_epochs} epochs, "
+        f"snapshot interval={cfg.training.save_interval} collection steps"
+    )
     for subset in manifest["subsets"]:
         for seed in cfg.training.seeds:
+            run_number += 1
             settings = train_config(
                 cfg, manifest, subset["id"], seed, paths["target"], paths["drafter"]
             )
@@ -493,9 +504,20 @@ def train(cfg: BankConfig):
                     f"--nproc-per-node={cfg.execution.processes}",
                     *command[2:],
                 ]
-            report(f"Starting training: subset={subset['id']}, seed={seed}, run={run}")
+            report(
+                f"Starting training run {run_number}/{total_runs}: "
+                f"subset={subset['id']}, seed={seed}, "
+                f"train examples={len(subset['train_indices'])}, "
+                f"validation examples={len(subset['validation_indices'])}, output={run}"
+            )
+            started = time.monotonic()
             subprocess.run(command, check=True)  # noqa: S603 -- argv, never a shell
-    return inspect_bank(cfg)
+            report(
+                f"Training run {run_number}/{total_runs} completed in "
+                f"{time.monotonic() - started:.1f}s: subset={subset['id']}, seed={seed}"
+            )
+    with stage_progress("Building final LoRA bank index", interval):
+        return inspect_bank(cfg)
 
 
 def bank_context(train_cfg):

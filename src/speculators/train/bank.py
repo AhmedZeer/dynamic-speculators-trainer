@@ -3,7 +3,9 @@
 import json
 import random
 import shutil
+import time
 import uuid
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,10 +15,11 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 
 from speculators.bank.artifacts import copy_provenance, file_digest, write_json
+from speculators.bank.progress import report, stage_progress
 from speculators.train.checkpointer import SingleGPUCheckpointer
 from speculators.train.graceful_shutdown import with_graceful_shutdown
 from speculators.train.lora import is_lora_model, save_lora_checkpoint
-from speculators.train.trainer import Trainer, root_logger
+from speculators.train.trainer import Trainer
 
 
 @dataclass(frozen=True)
@@ -196,6 +199,28 @@ class BankTrainer(Trainer):
                 )
             self._save_recovery(0, 0, epoch_complete=False)
 
+    def _label(self, message):
+        return (
+            f"subset={self.context.get('subset_id', 'bank')} "
+            f"seed={self.context.get('seed', '?')} | {message}"
+        )
+
+    def _report(self, message):
+        if self.rank == 0:
+            report(self._label(message))
+
+    def _stage(self, message):
+        return stage_progress(self._label(message)) if self.rank == 0 else nullcontext()
+
+    def on_train_epoch_start(self, epoch, num_steps, skip_steps):
+        self._epoch_steps = num_steps
+        self._epoch_started = time.perf_counter()
+        self._epoch_resume_step = skip_steps
+        self._report(
+            f"Epoch {epoch + 1}: {num_steps} optimizer batches; "
+            f"resumed after {skip_steps}; remaining={num_steps - skip_steps}"
+        )
+
     def create_checkpointer(self):
         return BankCheckpointer(Path(self.config.save_path) / "recovery")
 
@@ -216,6 +241,15 @@ class BankTrainer(Trainer):
         self._resume_local_step = (
             0 if state.get("epoch_complete") else state.get("local_step", 0)
         )
+        self._report(
+            f"{'Resuming' if state else 'Starting new run'}: "
+            f"phase={self.schedule.phase(self.current_epoch)}, "
+            f"epoch={min(self.current_epoch + 1, self.config.num_epochs)}/"
+            f"{self.config.num_epochs}, "
+            f"restored step={self._resume_local_step}, "
+            f"global_step={state.get('global_step', 0)}, "
+            f"collection_step={state.get('collection_step', 0)}"
+        )
         self.global_step = state.get("global_step", 0)
         self._resume_global_step = self.global_step
         self.collection_step = state.get("collection_step", 0)
@@ -226,25 +260,32 @@ class BankTrainer(Trainer):
         self._last_local_step = state.get("local_step", 0)
 
     def _save_recovery(self, epoch, local_step, *, epoch_complete):
-        self.checkpointer.save_state(
-            self.model,
-            self.optimizers,
-            {
-                "epoch": epoch,
-                "local_step": local_step,
-                "epoch_complete": epoch_complete,
-                "global_step": self.global_step,
-                "collection_step": self.collection_step,
-                "phase": self.schedule.phase(epoch + int(epoch_complete)),
-                "best_val_loss": self.best_val_loss
-                if np.isfinite(self.best_val_loss)
-                else None,
-                "schedule": self.schedule.__dict__,
-                "context": self.context,
-            },
-        )
+        with self._stage(
+            f"Saving recovery: epoch={epoch + 1}, step={local_step}, "
+            f"epoch_complete={epoch_complete}"
+        ):
+            self.checkpointer.save_state(
+                self.model,
+                self.optimizers,
+                {
+                    "epoch": epoch,
+                    "local_step": local_step,
+                    "epoch_complete": epoch_complete,
+                    "global_step": self.global_step,
+                    "collection_step": self.collection_step,
+                    "phase": self.schedule.phase(epoch + int(epoch_complete)),
+                    "best_val_loss": self.best_val_loss
+                    if np.isfinite(self.best_val_loss)
+                    else None,
+                    "schedule": self.schedule.__dict__,
+                    "context": self.context,
+                },
+            )
 
     def _publish_snapshot(self, epoch):
+        self._report(
+            f"Publishing LoRA snapshot: collection step={self.collection_step}"
+        )
         error = None
         if self.rank == 0:
             try:
@@ -275,6 +316,12 @@ class BankTrainer(Trainer):
             error = result[0]
         if error:
             raise RuntimeError(f"Bank snapshot save failed: {error}")
+        destination = (
+            Path(self.config.save_path)
+            / "snapshots"
+            / f"step-{self.collection_step:08d}"
+        )
+        self._report(f"LoRA snapshot ready: {destination}")
 
     def _write_snapshot(self, source, root, destination, expected_hash, epoch):
         pending = root / f".pending-{uuid.uuid4().hex}"
@@ -302,19 +349,46 @@ class BankTrainer(Trainer):
 
     def after_optimizer_step(self, epoch, local_step):
         self._last_epoch, self._last_local_step = epoch, local_step
-        if self.schedule.phase(epoch) != "collect":
-            return
-        self.collection_step += 1
-        if self.collection_step % self.schedule.save_interval == 0:
+        phase = self.schedule.phase(epoch)
+        if phase == "collect":
+            self.collection_step += 1
+        if (
+            local_step == 1
+            or local_step % self.config.log_freq == 0
+            or local_step == self._epoch_steps
+        ):
+            elapsed = time.perf_counter() - self._epoch_started
+            steps = local_step - self._epoch_resume_step
+            rate = steps / elapsed if elapsed > 0 else 0
+            eta = (self._epoch_steps - local_step) / rate if rate > 0 else 0
+            lr = self.optimizers[0].param_groups[0]["lr"]
+            next_save = (
+                self.schedule.save_interval
+                - self.collection_step % self.schedule.save_interval
+            )
+            self._report(
+                f"{phase}: epoch={epoch + 1}/{self.config.num_epochs}, "
+                f"step={local_step}/{self._epoch_steps}, "
+                f"global_step={self.global_step}, "
+                f"collection_step={self.collection_step}, lr={lr:g}, "
+                f"{rate:.2f} steps/s, epoch ETA={eta:.0f}s"
+                + (
+                    f", next snapshot in {next_save} collection steps"
+                    if phase == "collect"
+                    else ""
+                )
+            )
+        if (
+            phase == "collect"
+            and self.collection_step % self.schedule.save_interval == 0
+        ):
             self._save_recovery(epoch, local_step, epoch_complete=False)
             self._publish_snapshot(epoch)
 
     def maybe_save_checkpoint(self, epoch, local_step=0):  # noqa: ARG002
         # Signals may interrupt an optimizer update. Resume from the last committed
         # boundary instead of persisting a partially updated model or stale counters.
-        root_logger.info(
-            "Bank interrupted; restart from the last durable recovery checkpoint"
-        )
+        self._report("Interrupted; restart from the last durable recovery checkpoint")
 
     @with_graceful_shutdown()
     def run_training(self):
@@ -328,16 +402,18 @@ class BankTrainer(Trainer):
             for opt in self.optimizers:
                 for group in opt.param_groups:
                     group["lr"] = lr
-            root_logger.info(
-                "Bank epoch %s/%s: %s, lr=%s",
-                epoch + 1,
-                self.config.num_epochs,
-                self.schedule.phase(epoch),
-                lr,
-            )
-            self.train_epoch(epoch)
+            with self._stage(
+                f"Epoch {epoch + 1}/{self.config.num_epochs}: "
+                f"{self.schedule.phase(epoch)}, lr={lr:g}"
+            ):
+                self.train_epoch(epoch)
             self._save_recovery(epoch, self._last_local_step, epoch_complete=False)
-            metrics = self.val_epoch(epoch)
+            with self._stage(f"Epoch {epoch + 1}: evaluating held-out examples"):
+                metrics = self.val_epoch(epoch)
+            self._report(
+                f"Epoch {epoch + 1} validation metrics: "
+                f"{json.dumps(metrics, sort_keys=True)}"
+            )
             if metrics and "loss_epoch" in metrics:
                 self.best_val_loss = min(self.best_val_loss, metrics["loss_epoch"])
             if self.rank == 0:
@@ -355,3 +431,8 @@ class BankTrainer(Trainer):
             self._save_recovery(epoch, self._last_local_step, epoch_complete=True)
             self._last_local_step = 0
         self.completed = True
+        self._report(
+            f"Run complete: optimizer updates={self.global_step}, "
+            f"collected LoRAs={self.collection_step // self.schedule.save_interval}, "
+            f"output={self.config.save_path}"
+        )

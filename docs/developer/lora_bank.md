@@ -345,3 +345,20 @@ Bank extraction enables `trust_existing_outputs` automatically. The standalone
 extraction CLI exposes this as `--trust-existing-outputs`; its default remains
 header validation when `--validate-outputs` is used. Normal training loads the
 selected samples as needed by the dataloader.
+
+Training console output identifies the subset and seed throughout each run. It
+reports model/vocabulary loading, LoRA installation, packed dataloader creation,
+optimizer/device/recovery initialization, and restored epoch/step counters.
+Warmup and collection epochs have explicit start/end messages and timed
+heartbeats every 10 seconds. Epoch-end evaluation prints its metrics, recovery
+saves print their stage, and published LoRA snapshots print their destination.
+The parent command reports the run number out of the subset/seed total and
+completion of the final bank index.
+
+`training.log_freq` controls optimizer-step progress messages (default 10 in the
+math recipe), alongside existing training metrics. The first and final steps of
+each epoch are always reported. Progress includes full-epoch step totals, global
+updates, collection updates, LR, steps/second, approximate epoch ETA, and updates
+until the next snapshot. Mid-epoch resume uses the original epoch denominator.
+Only rank zero emits these stage/progress messages under DDP. Logging adds no
+activation scans, extra evaluations, or extra checkpoint writes.

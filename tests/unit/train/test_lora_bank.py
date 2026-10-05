@@ -245,7 +245,9 @@ class CpuBankTrainer(BankTrainer):
     def train_epoch(self, epoch):
         self.model.train()
         self.train_loader.batch_sampler.set_epoch(epoch)
+        num_steps = len(self.train_loader)
         skip = self._prepare_resume_skip(epoch)
+        self.on_train_epoch_start(epoch, num_steps, skip)
         for local_step, _batch in enumerate(self.train_loader, 1 + skip):
             x = torch.randn(2, 3) + random.random() + np.random.rand()
             loss = self.model(x).square().mean()
@@ -283,7 +285,7 @@ def cpu_trainer(path, *, resume=False, stop_at=None):
     return trainer
 
 
-def test_epoch_schedule_and_continuous_collection_cadence(tmp_path):
+def test_epoch_schedule_and_continuous_collection_cadence(tmp_path, capsys):
     trainer = cpu_trainer(tmp_path)
     trainer.run_training()
     assert trainer.completed
@@ -303,13 +305,25 @@ def test_epoch_schedule_and_continuous_collection_cadence(tmp_path):
         4,
     ]
     assert len(list((tmp_path / "recovery").iterdir())) == 2
+    logs = capsys.readouterr().err
+    assert "Epoch 1/5: warmup, lr=0.001" in logs
+    assert "Epoch 2/5: collect, lr=1e-05" in logs
+    assert "warmup: epoch=1/5, step=3/3" in logs
+    assert "collect: epoch=2/5, step=7/7" in logs
+    assert logs.count("evaluating held-out examples: starting") == 5
+    assert logs.count("validation metrics:") == 5
+    assert logs.count("LoRA snapshot ready:") == 3
+    assert "Run complete: optimizer updates=33, collected LoRAs=3" in logs
     resumed = cpu_trainer(tmp_path, resume=True)
     resumed.run_training()
     assert resumed.updates == []
     assert resumed.evaluations == []
+    logs = capsys.readouterr().err
+    assert "Resuming: phase=done" in logs
+    assert "evaluating held-out examples" not in logs
 
 
-def test_mid_epoch_resume_replays_to_identical_adapter(tmp_path):
+def test_mid_epoch_resume_replays_to_identical_adapter(tmp_path, capsys):
     uninterrupted = cpu_trainer(tmp_path / "full")
     uninterrupted.run_training()
     interrupted = cpu_trainer(tmp_path / "resumed", stop_at=17)
@@ -317,6 +331,9 @@ def test_mid_epoch_resume_replays_to_identical_adapter(tmp_path):
         interrupted.run_training()
     resumed = cpu_trainer(tmp_path / "resumed", resume=True)
     resumed.run_training()
+    logs = capsys.readouterr().err
+    assert "Resuming: phase=collect, epoch=3/5, restored step=3" in logs
+    assert "Epoch 3: 8 optimizer batches; resumed after 3; remaining=5" in logs
     assert resumed.collection_step == 30
     for name, value in uninterrupted.model.state_dict().items():
         assert torch.equal(value, resumed.model.state_dict()[name]), name
