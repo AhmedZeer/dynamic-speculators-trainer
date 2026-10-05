@@ -124,9 +124,9 @@ configured extraction length; preprocessing does not silently truncate them.
 
 Store layers `[2,18,33,36]`: the first three are concatenated EAGLE3 input
 features, while the final target state supplies token-distribution supervision.
-The current workflow validates Qwen3-8B's width of 4096 and the released drafter's
-one `o_proj` and one `v_proj`; supporting another model shape needs a compatible
-recipe and validation update.
+The recipe assumes Qwen3-8B's width of 4096 and the released drafter's one
+`o_proj` and one `v_proj`; supporting another model shape needs a compatible
+recipe.
 
 Bank v1 uses the file backend and zero dataloader workers so augmentation RNG
 can be restored without losing prefetched worker state. The dataloader has its
@@ -189,14 +189,13 @@ queue and in-flight requests are retained. Chunk size, concurrent requests, and
 Drive sync interval are independent controls. Input order and IDs are preserved,
 and unfinished source iterators close on completion or interruption.
 
-Arrow preparation reorders asynchronous output by prompt identity. Extraction
-resumes missing cache files and checks token alignment, shape, dtype, and finite
-values. Before reusing existing files, it checks safetensors structure, token IDs,
-and sequence length without scanning the entire activation payload. Files with broken headers, mismatched
-token IDs, or incorrect sequence lengths are regenerated. New activations are validated on local
-server storage, copied to a hidden `.pending` destination, then renamed to the
-final `hs_<row_index>.safetensors` name after the copy succeeds. Resume ignores
-pending filenames. Full activation validation still runs before bank training.
+Arrow preparation reorders asynchronous output by prompt identity. Bank extraction
+trusts saved final `hs_<row_index>.safetensors` files and resumes missing rows by
+filename alone, without opening existing headers or payloads. New activations
+are validated on local server storage before their first publication, copied to
+a hidden `.pending` destination, then renamed to the final name after the copy
+succeeds. Resume ignores pending filenames. There is no post-extraction or
+pre-training activation scan.
 
 The preset uses 16 hidden-state requests and 2 concurrent validation/publication
 workers, independently of 256 response-generation requests. File-lock waiting
@@ -305,7 +304,7 @@ Relevant precedent:
 These results motivate the pipeline; they do not set optimal EAGLE3 subset size,
 checkpoint count, or conditioning budget.
 
-Hidden-state extraction resumes by row ID, filling missing or invalid files even
+Bank hidden-state extraction resumes by row ID, filling missing files even
 when higher-numbered files already exist. The progress bar includes reused files
 and advances only after a new file has been published successfully. Console
 summaries show completed/total, reused, saved, failed, remaining, and files/second
@@ -321,7 +320,7 @@ background thread so slow Drive access does not block the logging heartbeat.
 The bank prepare entry point emits plain stderr diagnostics before loading the
 configuration or manifest, including the code path, resolved output root, PID,
 and client process RSS. Stage heartbeats also cover manifest/source loading and
-post-extraction validation, independently of the root training logger. RSS is
+post-extraction presence checking, independently of the root training logger. RSS is
 this process's resident memory; Colab's overall RAM includes the vLLM server and
 filesystem cache too. `--stage hidden` requires an existing manifest and fails
 immediately if it is missing, instead of selecting the full source corpus. Check
@@ -335,16 +334,14 @@ also works when Python's event loop or logging is blocked. The watchdog is
 cancelled when the cache is already complete, when the server is ready for
 requests, or when the command exits. A stack dump is diagnostic, not an abort.
 
-Bank training logs manifest loading, cache validation, snapshot resolution, and
-each subset/seed subprocess launch. Before GPU training, the first validation
-scans every hidden-state payload for finite values in slices of at most 256
-tokens, verifying token IDs, full shape, and dtype too. Heartbeats show completed
-files, the current row, bytes scanned this invocation, and client RSS. Filesystem
-page cache can still affect Colab's total RAM; bounded slices do not bound the
-machine's overall filesystem cache.
+Bank training logs manifest loading, cache presence checking, snapshot resolution,
+and each subset/seed subprocess launch. Saved artifacts are assumed valid. Startup
+checks only the experiment configuration and whether all final filenames listed
+by the manifest's row count exist. It does not reopen the prepared dataset, hash
+its token contents, stat each cache file, or scan activation payloads. Existing
+`hidden_states_validation.json` receipts are ignored and left untouched.
 
-`hidden_states_validation.json` also stores a validated prefix during the scan.
-It is updated every 100 completed files and on normal exit or a clean exception.
-A compatible restart resumes that prefix; a hard kill can repeat up to 99 files.
-Changes to prepared data, experiment identity, or cache file size/mtime invalidate
-the receipt. A completed receipt skips payload scanning on subsequent runs.
+Bank extraction enables `trust_existing_outputs` automatically. The standalone
+extraction CLI exposes this as `--trust-existing-outputs`; its default remains
+header validation when `--validate-outputs` is used. Normal training loads the
+selected samples as needed by the dataloader.

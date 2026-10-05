@@ -216,6 +216,8 @@ def test_bank_uses_separate_extraction_concurrency(monkeypatch):
     assert captured[0]["concurrency"] == 16
     assert captured[0]["write_concurrency"] == 2
     assert captured[0]["progress_log_interval"] == 3
+    assert captured[0]["trust_existing_outputs"] is True
+    assert captured[0]["validate_outputs"] is True
 
 
 def test_waiting_request_is_not_started_after_failure(tmp_path, monkeypatch):
@@ -473,3 +475,38 @@ def test_startup_watchdog_always_cancelled(monkeypatch, failed):
     else:
         run()
     assert calls == [30, "cancelled"]
+
+
+def test_trusted_resume_does_not_open_saved_payloads_or_contact_server(
+    tmp_path, monkeypatch, caplog
+):
+    data, cache = tmp_path / "data", tmp_path / "cache"
+    cache.mkdir()
+    Dataset.from_list([{"input_ids": [1, 2]}]).save_to_disk(data)
+    (cache / "hs_0.safetensors").write_bytes(b"already saved")
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Trusted saved files must not be inspected or regenerated")
+
+    monkeypatch.setattr(extraction, "check_hidden_state_file_header", forbidden)
+    monkeypatch.setattr(extraction.openai, "AsyncOpenAI", forbidden)
+    caplog.set_level("INFO", logger=extraction.__name__)
+    asyncio.run(
+        extraction._generate_and_save_hidden_states(
+            model="target",
+            endpoint="http://unused",
+            preprocessed_data=str(data),
+            output=str(cache),
+            max_samples=None,
+            concurrency=1,
+            validate_outputs=True,
+            request_timeout=600,
+            max_retries=0,
+            fail_on_error=True,
+            max_consecutive_errors=None,
+            world_size=1,
+            rank=0,
+            trust_existing_outputs=True,
+        )
+    )
+    assert "1/1 reusable files; no requests needed" in caplog.text

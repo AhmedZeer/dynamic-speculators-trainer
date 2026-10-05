@@ -12,7 +12,6 @@ from speculators.bank.artifacts import digest, file_digest, load_subset, write_j
 from speculators.bank.config import BankConfig
 from speculators.bank.progress import report, stage_progress
 
-TARGET_HIDDEN_SIZE = 4096
 MISSING_CACHE_PREVIEW = 10
 
 
@@ -290,7 +289,7 @@ def prepare_arrow(cfg: BankConfig, manifest: dict):
     write_json(root / "manifest.json", manifest)
 
 
-def _cache_file_metadata(path: Path, expected_count: int):
+def _check_cache_file_presence(path: Path, expected_count: int):
     from speculators.data_generation.offline import (  # noqa: PLC0415
         get_existing_hidden_state_indices,
     )
@@ -308,108 +307,25 @@ def _cache_file_metadata(path: Path, expected_count: int):
             "--config <your-bank-config.yaml> --stage hidden. Existing files are "
             "reused. Wait for extraction to finish before starting bank training."
         )
-    files = []
-    for index in range(expected_count):
-        stat = (path / f"hs_{index}.safetensors").stat()
-        files.append([index, stat.st_size, stat.st_mtime_ns])
-    return files
 
 
-def validate_cache(manifest: dict, cfg: BankConfig | None = None):  # noqa: C901
-    from datasets import load_from_disk  # noqa: PLC0415
-
-    from speculators.data_generation.offline import (  # noqa: PLC0415
-        check_hidden_state_file,
-    )
-
+def validate_cache(manifest: dict, cfg: BankConfig | None = None):
+    """Trust saved artifacts; check experiment compatibility and missing rows only."""
     interval = cfg.execution.hidden_state_log_interval if cfg else 10.0
-    with stage_progress("Checking prepared data and cache metadata", interval):
+    with stage_progress(
+        "Checking cache presence and experiment compatibility", interval
+    ):
         if not manifest.get("prepared"):
             raise ValueError("Run prepare --stage data before extracting/training")
-        root = Path(manifest["root"])
-        if file_digest(root / "prompts.jsonl") != manifest["prompts_sha256"]:
-            raise ValueError("Prompt identities changed after partitioning")
-        data = load_from_disk(manifest["data_path"]).with_format(None)
-        files = _cache_file_metadata(Path(manifest["hidden_states_path"]), len(data))
-        if digest(data.to_list()) != manifest["prepared_fingerprint"]:
-            raise ValueError(
-                "Prepared token content differs from the cache fingerprint"
-            )
-        for subset in manifest["subsets"]:
-            for split, identity_key in (
-                ("train_indices", "train_ids"),
-                ("validation_indices", "validation_ids"),
-            ):
-                selected = [data[index]["primary_id"] for index in subset[split]]
-                if selected != subset[identity_key]:
-                    raise ValueError(
-                        "Subset membership does not match prepared identities"
-                    )
-            load_subset(root / "manifest.json", subset["id"])
         if (
             cfg
             and digest(cache_spec(cfg, manifest["revisions"]))
             != manifest["cache_fingerprint"]
         ):
             raise ValueError("Experiment configuration does not match cached data")
-        validation_identity = digest(
-            {
-                "prepared": manifest["prepared_fingerprint"],
-                "cache": manifest["cache_fingerprint"],
-                "files": files,
-            }
-        )
-    layers = manifest["cache_spec"]["hidden_states"]["layer_ids"]
-    expected_dtype = manifest["cache_spec"]["hidden_states"]["dtype"]
-    receipt = root / "hidden_states_validation.json"
-    previous = json.loads(receipt.read_text()) if receipt.exists() else {}
-    completed = (
-        previous.get("validated_files", 0)
-        if previous.get("identity") == validation_identity
-        else 0
-    )
-    if not isinstance(completed, int) or not 0 <= completed <= len(files):
-        completed = 0
-    if completed == len(files):
-        report(f"Hidden-state cache already validated: {completed}/{len(files)} files")
-        return
-    progress = {"completed": completed, "row": completed, "bytes": 0}
-
-    def details():
-        return (
-            f"{progress['completed']}/{len(files)} files validated; "
-            f"current row={progress['row']}; "
-            f"scanned={progress['bytes'] / (1024**3):.2f} GiB"
-        )
-
-    def save_progress():
-        write_json(
-            receipt,
-            {"identity": validation_identity, "validated_files": progress["completed"]},
-        )
-
-    with stage_progress("Scanning hidden-state payloads", interval, details=details):
-        try:
-            for index in range(completed, len(data)):
-                progress["row"] = index
-                row = data[index]
-                path = Path(manifest["hidden_states_path"]) / f"hs_{index}.safetensors"
-                try:
-                    check_hidden_state_file(
-                        path,
-                        row["input_ids"],
-                        (len(row["input_ids"]), len(layers), TARGET_HIDDEN_SIZE),
-                        expected_dtype,
-                    )
-                except ValueError as exc:
-                    raise ValueError(f"Invalid cache at row {index}: {exc}") from exc
-                progress["completed"] = index + 1
-                progress["bytes"] += files[index][1]
-                if progress["completed"] % 100 == 0:
-                    save_progress()
-        finally:
-            if progress["completed"] > completed:
-                save_progress()
+        expected = manifest["examples"]
+        _check_cache_file_presence(Path(manifest["hidden_states_path"]), expected)
+        report(f"Using {expected} saved hidden-state files; payload checks skipped")
 
 
 def extract(cfg: BankConfig, manifest: dict):
@@ -429,6 +345,7 @@ def extract(cfg: BankConfig, manifest: dict):
         write_concurrency=cfg.execution.hidden_state_write_concurrency,
         progress_log_interval=cfg.execution.hidden_state_log_interval,
         validate_outputs=True,
+        trust_existing_outputs=True,
         request_timeout=cfg.execution.request_timeout,
         max_retries=cfg.execution.max_retries,
         fail_on_error=True,
@@ -437,7 +354,7 @@ def extract(cfg: BankConfig, manifest: dict):
         rank=0,
     )
     with stage_progress(
-        "Validating completed hidden-state cache",
+        "Checking completed hidden-state cache presence",
         cfg.execution.hidden_state_log_interval,
     ):
         validate_cache(manifest, cfg)

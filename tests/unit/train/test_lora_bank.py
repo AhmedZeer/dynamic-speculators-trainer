@@ -16,7 +16,7 @@ from peft import LoraConfig, get_peft_model
 from safetensors.torch import load_file, save_file
 from torch import nn
 
-from speculators.bank.artifacts import digest, file_digest, write_json
+from speculators.bank.artifacts import digest, file_digest
 from speculators.bank.config import BankConfig
 from speculators.bank.inspect import factors, update_distance
 from speculators.bank.workflow import (
@@ -345,7 +345,7 @@ def test_resume_repairs_unpublished_snapshot(tmp_path):
     assert len(list((tmp_path / "snapshots").glob("step-*"))) == 3
 
 
-def test_prepared_cache_validates_membership_and_rejects_corruption(
+def test_prepared_cache_trusts_payloads_and_rejects_missing_files(
     tmp_path, monkeypatch
 ):
     cfg = small_config()
@@ -393,37 +393,19 @@ def test_prepared_cache_validates_membership_and_rejects_corruption(
             },
             str(cache / f"hs_{i}.safetensors"),
         )
-    validate_cache(manifest, cfg)
+    import datasets  # noqa: PLC0415
+    import safetensors.torch  # noqa: PLC0415
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Bank startup must not reopen saved token data or tensor payloads")
+
+    monkeypatch.setattr(datasets, "load_from_disk", forbidden)
+    monkeypatch.setattr(safetensors.torch, "load_file", forbidden)
+    # Legacy validation receipts have no effect on the new presence-only path.
     receipt = tmp_path / "hidden_states_validation.json"
-    # A clean interruption resumes at the first unvalidated row, not row zero.
-    from speculators.data_generation import offline  # noqa: PLC0415
-
-    receipt.unlink()
-    checker = offline.check_hidden_state_file
-    visited = []
-
-    def interrupted(path, *args):
-        visited.append(path.name)
-        if path.name == "hs_3.safetensors":
-            raise InterruptedError("interrupted validation")
-        return checker(path, *args)
-
-    monkeypatch.setattr(offline, "check_hidden_state_file", interrupted)
-    with pytest.raises(InterruptedError, match="interrupted validation"):
-        validate_cache(manifest, cfg)
-    assert json.loads(receipt.read_text())["validated_files"] == 3
-    visited.clear()
-
-    def resumed(path, *args):
-        visited.append(path.name)
-        return checker(path, *args)
-
-    monkeypatch.setattr(offline, "check_hidden_state_file", resumed)
-    validate_cache(manifest, cfg)
-    assert visited == [f"hs_{i}.safetensors" for i in range(3, 6)]
+    receipt.write_text("legacy receipt")
     receipt_time = receipt.stat().st_mtime_ns
     validate_cache(manifest, cfg)
-    assert receipt.stat().st_mtime_ns == receipt_time
     # A prior validation receipt must never permit training with missing rows.
     backup = tmp_path / "cache-backup"
     cache.rename(backup)
@@ -441,17 +423,11 @@ def test_prepared_cache_validates_membership_and_rejects_corruption(
     assert receipt.stat().st_mtime_ns == receipt_time
     for path, payload in zip(missing_paths, saved, strict=True):
         path.write_bytes(payload)
-    manifest["subsets"][0]["train_ids"].reverse()
-    with pytest.raises(ValueError, match="membership"):
-        validate_cache(manifest, cfg)
-    manifest["subsets"][0]["train_ids"].reverse()
-    write_json(tmp_path / "manifest.json", manifest)
-    save_file(
-        {
-            "token_ids": torch.tensor([99, 2, 3]),
-            "hidden_states": torch.zeros(3, 4, 4096, dtype=torch.bfloat16),
-        },
-        str(cache / "hs_0.safetensors"),
-    )
-    with pytest.raises(ValueError, match="Token ids"):
-        validate_cache(manifest, cfg)
+    # Saved data is trusted, including payloads that would fail a full scan.
+    (cache / "hs_0.safetensors").write_bytes(b"saved artifact")
+    validate_cache(manifest, cfg)
+    assert receipt.stat().st_mtime_ns == receipt_time
+    incompatible = cfg.model_copy(deep=True)
+    incompatible.models.target = "another/target"
+    with pytest.raises(ValueError, match="Experiment configuration"):
+        validate_cache(manifest, incompatible)

@@ -3,7 +3,6 @@
 import os
 import threading
 import time
-from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -27,21 +26,16 @@ def report(message: str):
 
 
 @contextmanager
-def stage_progress(
-    label: str, interval: float = 10.0, details: Callable[[], str] | None = None
-):
+def stage_progress(label: str, interval: float = 10.0):
     """Report stages immediately and during blocking I/O, without root filters."""
     started = time.monotonic()
     stopped = threading.Event()
 
-    def describe():
-        return f"{label}; {details()}" if details else label
-
     def heartbeat():
         while not stopped.wait(interval):
-            report(f"{describe()}: still running ({time.monotonic() - started:.1f}s)")
+            report(f"{label}: still running ({time.monotonic() - started:.1f}s)")
 
-    report(f"{describe()}: starting")
+    report(f"{label}: starting")
     thread = threading.Thread(target=heartbeat, daemon=True)
     thread.start()
     outcome = "completed"
@@ -53,4 +47,4 @@ def stage_progress(
     finally:
         stopped.set()
         thread.join()
-        report(f"{describe()}: {outcome} ({time.monotonic() - started:.1f}s)")
+        report(f"{label}: {outcome} ({time.monotonic() - started:.1f}s)")

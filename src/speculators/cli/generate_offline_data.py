@@ -382,6 +382,7 @@ async def _generate_and_save_hidden_states(
     write_concurrency: int = 2,
     progress_log_interval: float = 10.0,
     on_startup_complete: Callable[[], None] | None = None,
+    trust_existing_outputs: bool = False,
 ):
     dataset = await _run_logged_stage(
         f"Loading preprocessed dataset from {preprocessed_data}",
@@ -401,7 +402,7 @@ async def _generate_and_save_hidden_states(
         _prepare_hidden_state_cache,
         hidden_states_dir,
         dataset,
-        validate_outputs,
+        validate_outputs and not trust_existing_outputs,
         interval=progress_log_interval,
     )
     num_samples = len(dataset)
@@ -592,6 +593,10 @@ def generate_offline_data(
         float,
         typer.Option(min=0.1, help="Seconds between console progress summaries"),
     ] = 10.0,
+    trust_existing_outputs: Annotated[
+        bool,
+        typer.Option(help="Reuse saved files by row ID without opening their payloads"),
+    ] = False,
     validate_outputs: Annotated[
         bool,
         typer.Option(
@@ -689,6 +694,7 @@ def generate_offline_data(
                     progress_log_interval=progress_log_interval,
                     on_startup_complete=watchdog.finish,
                     validate_outputs=validate_outputs,
+                    trust_existing_outputs=trust_existing_outputs,
                     request_timeout=request_timeout,
                     max_retries=max_retries,
                     fail_on_error=fail_on_error,
