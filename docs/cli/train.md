@@ -257,10 +257,6 @@ All speculator types (except `mtp`) use sliding window attention on all draft la
 
 - **`--prefetch-factor`** (int, default: `4`) Number of batches to prefetch per worker.
 
-- **`--raw-prefetch-batches`** (int, default: `0`) Read this many future packed batches' raw hidden-state files in a background thread. Requires the file backend, `--num-workers 0`, and `--on-missing raise`. Augmentation stays on the training thread.
-
-- **`--raw-cache-gib`** (float, default: `8`) Maximum retained raw tensor cache per process when raw prefetch is enabled. Current batches and in-flight reads consume additional memory.
-
 - **`--noise-std`** (float, default: `0.05`) Standard deviation for noise augmentation on hidden states.
 
 ### Checkpoint Arguments

@@ -104,7 +104,7 @@ def test_training_startup_stack_watchdog_stops_on_readiness_or_failure(
         lambda: calls.append("cancel"),
     )
 
-    def run(cfg, startup_ready=None, resources=None):
+    def run(cfg, startup_ready=None):
         if failed:
             raise OSError("startup blocked")
         assert calls == [60]

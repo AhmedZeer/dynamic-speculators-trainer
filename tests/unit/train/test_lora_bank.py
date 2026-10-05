@@ -20,7 +20,6 @@ from speculators.bank.artifacts import digest, file_digest
 from speculators.bank.config import BankConfig
 from speculators.bank.inspect import factors, update_distance
 from speculators.bank.workflow import (
-    bank_context,
     cache_spec,
     partition_rows,
     prepare_arrow,
@@ -154,74 +153,6 @@ def test_generated_train_configuration_roundtrips(tmp_path):
     assert resolved.lora.lora_target_modules == ["o_proj", "v_proj"]
     with pytest.raises(SystemExit):
         TrainConfig.resolve(["--config", str(path), "--max-steps", "10"])
-
-
-def test_prefetch_settings_preserve_bank_resume_identity(tmp_path):
-    cfg = BankConfig()
-    manifest = {
-        "root": str(tmp_path),
-        "data_path": str(tmp_path / "data"),
-        "hidden_states_path": str(tmp_path / "hidden_states"),
-        "category": "math",
-        "cache_fingerprint": "cached",
-        "prepared_fingerprint": "prepared",
-        "cache_spec": {"models": {}},
-        "subsets": [
-            {"id": "math-00000", "train_indices": [0], "validation_indices": [1]}
-        ],
-    }
-    (tmp_path / "manifest.json").write_text(json.dumps(manifest))
-    settings = train_config(cfg, manifest, "math-00000", 42, "target", "draft")
-    resolved = TrainConfig.model_validate(settings["train"])
-    _, _, baseline = bank_context(resolved)
-    resolved.data.raw_prefetch_batches = 5
-    resolved.data.raw_cache_gib = 16
-    assert bank_context(resolved)[2] == baseline
-    resolved.optimizer.lr /= 2
-    assert bank_context(resolved)[2] != baseline
-
-
-def test_bank_launcher_accepts_prefetch_changes_on_existing_runs(tmp_path, monkeypatch):
-    from speculators.bank import workflow  # noqa: PLC0415
-
-    cfg = BankConfig()
-    cfg.training.seeds = [42]
-    manifest = {
-        "root": str(tmp_path),
-        "data_path": str(tmp_path / "data"),
-        "hidden_states_path": str(tmp_path / "hidden_states"),
-        "revisions": {"target_sha": "target", "drafter_sha": "draft"},
-        "subsets": [
-            {"id": "math-00000", "train_indices": [0], "validation_indices": [1]}
-        ],
-    }
-    settings = train_config(cfg, manifest, "math-00000", 42, "target", "draft")
-    # Runs made before this optimization have neither of the new data fields.
-    settings["train"]["data"].pop("raw_prefetch_batches")
-    settings["train"]["data"].pop("raw_cache_gib")
-    run = tmp_path / "runs" / "math-00000" / "seed-42"
-    run.mkdir(parents=True)
-    path = run / "bank_train.yaml"
-    path.write_text(yaml.safe_dump(settings))
-    launches = []
-    monkeypatch.setattr(workflow, "select_data", lambda cfg: manifest)
-    monkeypatch.setattr(workflow, "validate_cache", lambda *args: None)
-    monkeypatch.setattr(workflow, "inspect_bank", lambda cfg: {})
-    monkeypatch.setattr(
-        "huggingface_hub.snapshot_download", lambda model, revision: revision
-    )
-    monkeypatch.setattr(
-        workflow.subprocess, "run", lambda command, check: launches.append(command)
-    )
-    workflow.train(cfg)
-    cfg.execution.training_cache_gib = 16
-    cfg.execution.training_prefetch_batches = 5
-    workflow.train(cfg)
-    assert len(launches) == 2
-    assert yaml.safe_load(path.read_text())["train"]["data"]["raw_cache_gib"] == 16
-    cfg.training.warmup_lr /= 2
-    with pytest.raises(ValueError, match="Run settings changed"):
-        workflow.train(cfg)
 
 
 def test_effective_update_distance_is_factorization_invariant():

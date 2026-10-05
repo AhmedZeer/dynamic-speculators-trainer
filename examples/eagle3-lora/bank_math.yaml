@@ -56,8 +56,6 @@ execution:
   hidden_state_concurrency: 16
   hidden_state_write_concurrency: 2
   hidden_state_log_interval: 10
-  training_prefetch_batches: 2
-  training_cache_gib: 8
   prompt_chunk_size: 1000
   response_staging_dir: /tmp/speculators-responses
   response_sync_interval: 1000

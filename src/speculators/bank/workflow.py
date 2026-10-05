@@ -413,8 +413,6 @@ def train_config(
                 "hidden_states_dtype": cfg.hidden_states.dtype,
                 "noise_std": cfg.training.noise_std,
                 "num_workers": 0,
-                "raw_prefetch_batches": cfg.execution.training_prefetch_batches,
-                "raw_cache_gib": cfg.execution.training_cache_gib,
             },
             "generation": {"on_missing": "raise"},
             "backend": {"hidden_states_path": manifest["hidden_states_path"]},
@@ -487,15 +485,8 @@ def train(cfg: BankConfig):
             run.mkdir(parents=True, exist_ok=True)
             config_path = run / "bank_train.yaml"
             text = yaml.safe_dump(settings, sort_keys=False)
-            if config_path.exists():
-                previous = yaml.safe_load(config_path.read_text())
-                proposed = yaml.safe_load(text)
-                for settings_to_compare in (previous, proposed):
-                    data_settings = settings_to_compare["train"]["data"]
-                    data_settings.pop("raw_prefetch_batches", None)
-                    data_settings.pop("raw_cache_gib", None)
-                if previous != proposed:
-                    raise ValueError("Run settings changed; choose a new output root")
+            if config_path.exists() and config_path.read_text() != text:
+                raise ValueError("Run settings changed; choose a new output root")
             config_path.write_text(text)
             command = [
                 sys.executable,
@@ -536,8 +527,6 @@ def bank_context(train_cfg):
     values = train_cfg.flatten()
     # Operational resume switches do not change the experiment identity.
     values.pop("no_resume_from_checkpoint", None)
-    values.pop("raw_prefetch_batches", None)
-    values.pop("raw_cache_gib", None)
     context = {
         "cache_fingerprint": manifest["cache_fingerprint"],
         "prepared_fingerprint": manifest["prepared_fingerprint"],

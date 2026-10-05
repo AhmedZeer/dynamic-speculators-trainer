@@ -136,24 +136,6 @@ conflicting max-step caps, LR schedulers, merged-per-snapshot saves, and
 best-only checkpointing. Resolved trainer settings are saved in
 `resolved_train.json` rather than inferred from future package defaults.
 
-Bank training reads upcoming packed batches in a background thread and retains
-raw hidden states in a bounded RAM cache. The example configuration uses:
-
-```yaml
-execution:
-  training_prefetch_batches: 2
-  training_cache_gib: 8
-```
-
-The lookahead counts future packed batches. The cache budget is per training
-process; retained tensors are reused across batches and epochs while they fit.
-It excludes the current batch, an in-flight read, and filesystem page cache.
-Noise augmentation and packing still run on the training thread, preserving
-seed and resume behavior. No hidden-state validation scan is added. Set
-`training_prefetch_batches: 0` to disable it; these two I/O settings can change
-when resuming an existing run. Each epoch logs cache bytes, sample count, file
-reads, cache hits, and consumer waits to help tune the budget.
-
 ## Running the pipeline
 
 Install the LoRA extra (`pip install -e '.[lora]'`). Preparation requires a target

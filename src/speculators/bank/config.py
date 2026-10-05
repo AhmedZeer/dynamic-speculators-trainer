@@ -91,8 +91,6 @@ class Execution(Settings):
     hidden_state_concurrency: int = Field(default=16, ge=1)
     hidden_state_write_concurrency: int = Field(default=2, ge=1)
     hidden_state_log_interval: float = Field(default=10.0, ge=0.1)
-    training_prefetch_batches: int = Field(default=2, ge=0)
-    training_cache_gib: float = Field(default=8.0, gt=0)
     prompt_chunk_size: int = Field(default=1000, ge=1)
     response_staging_dir: Path | None = Path("/tmp/speculators-responses")  # noqa: S108
     response_sync_interval: int = Field(default=1000, ge=1)
