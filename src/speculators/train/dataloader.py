@@ -72,6 +72,22 @@ def _setup_dataloader(
         max_batches=max_batches,
         seed=sampler_seed or 0,
     )
+    from speculators.train.prefetch import (  # noqa: PLC0415
+        PrefetchBatchSampler,
+        RawPrefetchTransfer,
+    )
+
+    transfer = getattr(dataset, "transfer", None)
+    if isinstance(transfer, RawPrefetchTransfer):
+        if num_workers != 0:
+            raise ValueError(
+                "Raw prefetch requires num_workers=0 for deterministic augmentation"
+            )
+        batch_sampler = PrefetchBatchSampler(
+            batch_sampler,
+            transfer,
+            dataset._map_to_file_idx,  # noqa: SLF001
+        )
     use_workers = num_workers > 0
     return DataLoader(
         dataset,

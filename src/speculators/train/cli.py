@@ -6,7 +6,7 @@ import json
 import logging
 import random
 import warnings
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 from copy import deepcopy
 from pathlib import Path
 
@@ -608,13 +608,16 @@ def _bank_stage(cfg: TrainConfig, label: str):
 
 
 def main(cfg: TrainConfig):
-    if not cfg.bank.bank_manifest:
-        return _run_training(cfg)
-    with StartupWatchdog(timeout=60) as watchdog:
-        return _run_training(cfg, startup_ready=watchdog.finish)
+    with ExitStack() as resources:
+        if not cfg.bank.bank_manifest:
+            return _run_training(cfg, resources=resources)
+        with StartupWatchdog(timeout=60) as watchdog:
+            return _run_training(
+                cfg, startup_ready=watchdog.finish, resources=resources
+            )
 
 
-def _run_training(cfg: TrainConfig, startup_ready=None):  # noqa: C901
+def _run_training(cfg: TrainConfig, startup_ready=None, resources=None):  # noqa: C901
     # Phase-1 adapter: the model layer still consumes a flat vars(args)-shaped
     # dict via **kwargs, so flatten the typed config back into a namespace here.
     # New code should read cfg.<group>.<field> directly and must NOT add new
@@ -800,6 +803,32 @@ def _run_training(cfg: TrainConfig, startup_ready=None):  # noqa: C901
     # than the plugin depending on pydantic. test_backend_reconciliation.py keeps
     # the mirror complete so nothing read here was dropped during resolution.
     transfer = backend_cls.from_train_args(args, args.data_path)
+    if cfg.data.raw_prefetch_batches:
+        from hs_connectors.transfer import FileTransfer  # noqa: PLC0415
+
+        from speculators.train.prefetch import RawPrefetchTransfer  # noqa: PLC0415
+
+        if (
+            not isinstance(transfer, FileTransfer)
+            or cfg.data.num_workers != 0
+            or cfg.generation.on_missing != "raise"
+        ):
+            raise ValueError(
+                "Raw prefetch requires file backend, num_workers=0, "
+                "and on_missing=raise"
+            )
+        transfer = RawPrefetchTransfer(
+            transfer,
+            int(cfg.data.raw_cache_gib * 1024**3),
+            cfg.data.raw_prefetch_batches,
+        )
+        resources.callback(transfer.close)
+        if get_rank() == 0:
+            report(
+                "Raw hidden-state prefetch: "
+                f"{cfg.data.raw_prefetch_batches} batches ahead, "
+                f"RAM cache limit={cfg.data.raw_cache_gib:g} GiB, one background reader"
+            )
 
     with _bank_stage(
         cfg, "Loading saved training/validation data and building packed batches"

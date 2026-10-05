@@ -428,6 +428,15 @@ class BankTrainer(Trainer):
                         "metrics": metrics,
                     },
                 )
+            transfer = (
+                getattr(self.train_loader.dataset, "transfer", None)
+                if hasattr(self.train_loader, "dataset")
+                else None
+            )
+            if hasattr(transfer, "stats"):
+                self._report(
+                    f"Raw data cache: {json.dumps(transfer.stats(), sort_keys=True)}"
+                )
             self._save_recovery(epoch, self._last_local_step, epoch_complete=True)
             self._last_local_step = 0
         self.completed = True
