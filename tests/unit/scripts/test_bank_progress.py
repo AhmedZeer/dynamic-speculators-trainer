@@ -83,3 +83,40 @@ def test_hidden_stage_missing_manifest_fails_without_loading_source(
     ):
         workflow.prepare(cfg, "hidden")
     assert str(tmp_path) in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("failed", [True, False])
+def test_training_startup_stack_watchdog_stops_on_readiness_or_failure(
+    monkeypatch, failed
+):
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    cli = import_module("speculators.train.cli")
+    calls = []
+    monkeypatch.setattr(
+        progress.faulthandler,
+        "dump_traceback_later",
+        lambda timeout, **kwargs: calls.append(timeout),
+    )
+    monkeypatch.setattr(
+        progress.faulthandler,
+        "cancel_dump_traceback_later",
+        lambda: calls.append("cancel"),
+    )
+
+    def run(cfg, startup_ready=None):
+        if failed:
+            raise OSError("startup blocked")
+        assert calls == [60]
+        startup_ready()
+        assert calls == [60, "cancel"]
+        return "completed"
+
+    monkeypatch.setattr(cli, "_run_training", run)
+    cfg = SimpleNamespace(bank=SimpleNamespace(bank_manifest="manifest.json"))
+    if failed:
+        with pytest.raises(OSError, match="startup blocked"):
+            cli.main(cfg)
+    else:
+        assert cli.main(cfg) == "completed"
+    assert calls == [60, "cancel"]

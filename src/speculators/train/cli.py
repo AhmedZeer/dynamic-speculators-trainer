@@ -20,7 +20,7 @@ from transformers.models.auto.configuration_auto import AutoConfig
 from transformers.models.qwen3.configuration_qwen3 import Qwen3Config
 
 from hs_connectors import HiddenStatesBackend
-from speculators.bank.progress import report, stage_progress
+from speculators.bank.progress import StartupWatchdog, report, stage_progress
 from speculators.model import SpeculatorModel
 from speculators.models.eagle3.data import shift_batch
 from speculators.models.eagle3.rotary_partial import install_partial_neox_rotary
@@ -607,7 +607,14 @@ def _bank_stage(cfg: TrainConfig, label: str):
     return stage_progress(f"subset={cfg.bank.bank_subset_id} seed={cfg.seed} | {label}")
 
 
-def main(cfg: TrainConfig):  # noqa: C901
+def main(cfg: TrainConfig):
+    if not cfg.bank.bank_manifest:
+        return _run_training(cfg)
+    with StartupWatchdog(timeout=60) as watchdog:
+        return _run_training(cfg, startup_ready=watchdog.finish)
+
+
+def _run_training(cfg: TrainConfig, startup_ready=None):  # noqa: C901
     # Phase-1 adapter: the model layer still consumes a flat vars(args)-shaped
     # dict via **kwargs, so flatten the typed config back into a namespace here.
     # New code should read cfg.<group>.<field> directly and must NOT add new
@@ -618,7 +625,7 @@ def main(cfg: TrainConfig):  # noqa: C901
     set_seed(args.seed, args.deterministic_cuda)
 
     # Setup logging
-    setup_root_logger()
+    setup_root_logger(use_rich=not bool(cfg.bank.bank_manifest))
     setup_metric_logger(
         loggers=args.logger, run_name=args.run_name, output_dir=args.log_dir
     )
@@ -632,7 +639,8 @@ def main(cfg: TrainConfig):  # noqa: C901
         )
 
     # Publish train config to metric backends that support hyperparameter logging
-    log_run_config(cfg)
+    with _bank_stage(cfg, "Publishing training configuration to metric backends"):
+        log_run_config(cfg)
 
     if args.fsdp_shard and not is_distributed():
         raise ValueError(
@@ -642,7 +650,8 @@ def main(cfg: TrainConfig):  # noqa: C901
 
     # Install partial-neox rotary patch if not using full-head hack
     if not args.draft_mrope_full_head_hack:
-        install_partial_neox_rotary()
+        with _bank_stage(cfg, "Installing rotary alignment"):
+            install_partial_neox_rotary()
         logger.info(
             "Installed partial-neox rotary patch for HF/vLLM RoPE alignment "
             "(draft_mrope_full_head_hack=False)"
@@ -651,20 +660,24 @@ def main(cfg: TrainConfig):  # noqa: C901
     if cfg.bank.bank_manifest:
         from speculators.bank.workflow import bank_context  # noqa: PLC0415
 
-        _, _, expected_context = bank_context(cfg)
-        context_path = Path(args.save_path) / "bank_context.json"
-        if context_path.exists():
-            if json.loads(context_path.read_text()) != expected_context:
-                raise ValueError("Saved bank experiment identity differs from this run")
-            if args.no_resume_from_checkpoint:
-                raise ValueError(
-                    "A bank run exists; resume it or use a new output root"
-                )
+        with _bank_stage(cfg, "Checking saved run identity"):
+            _, _, expected_context = bank_context(cfg)
+            context_path = Path(args.save_path) / "bank_context.json"
+            if context_path.exists():
+                if json.loads(context_path.read_text()) != expected_context:
+                    raise ValueError(
+                        "Saved bank experiment identity differs from this run"
+                    )
+                if args.no_resume_from_checkpoint:
+                    raise ValueError(
+                        "A bank run exists; resume it or use a new output root"
+                    )
     # Write the reproducibility artifacts (run.yaml + train_command.txt) next to
     # the checkpoints at rank 0 only, so every checkpoint carries the resolved
     # config that produced it.
     if get_rank() == 0:
-        cfg.save(args.save_path)
+        with _bank_stage(cfg, "Writing training config and provenance"):
+            cfg.save(args.save_path)
 
     hidden_states_dtype = getattr(torch, args.hidden_states_dtype)
 
@@ -876,6 +889,8 @@ def main(cfg: TrainConfig):  # noqa: C901
         trainer = Trainer(draft_model, trainer_config, train_loader, val_loader)
 
     # Run training
+    if startup_ready is not None:
+        startup_ready()
     trainer.run_training()
     if bank_run_context is not None and not trainer.completed:
         raise RuntimeError(

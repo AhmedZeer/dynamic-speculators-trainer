@@ -34,3 +34,36 @@ def test_global_rank0_filter_passes_only_global_rank0(monkeypatch, clean_rank_en
 def test_override_bypasses_filter(clean_rank_env, monkeypatch):
     monkeypatch.setenv("RANK", "3")
     assert IsRank0Filter().filter(_record(override_rank0_filter=True)) is True
+
+
+def test_plain_bank_console_skips_hparams_but_keeps_training_metrics(
+    monkeypatch, capsys, clean_rank_env
+):
+    from speculators.train import logger as module  # noqa: PLC0415
+
+    captured = {}
+    monkeypatch.setattr(
+        logging, "basicConfig", lambda **kwargs: captured.update(kwargs)
+    )
+
+    def rich_forbidden(*args, **kwargs):
+        pytest.fail("Plain bank console must not instantiate RichHandler")
+
+    monkeypatch.setattr(module, "RichHandler", rich_forbidden)
+    module.setup_root_logger(use_rich=False)
+    assert captured["force"] is True
+    handler = captured["handlers"][0]
+    delivered = []
+
+    class Backend(logging.Handler):
+        def emit(self, record):
+            delivered.append(record.msg.copy())
+
+    isolated = logging.Logger("test-metrics", level=logging.INFO)
+    isolated.addHandler(Backend())
+    isolated.addHandler(handler)
+    isolated.info({"config": "saved"}, extra={"hparams": True})
+    assert delivered == [{"config": "saved"}]
+    assert not capsys.readouterr().err
+    isolated.info({"train": {"loss": 0.25}})
+    assert "train/loss=0.25" in capsys.readouterr().err

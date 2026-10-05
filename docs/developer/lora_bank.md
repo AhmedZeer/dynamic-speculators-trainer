@@ -362,3 +362,12 @@ updates, collection updates, LR, steps/second, approximate epoch ETA, and update
 until the next snapshot. Mid-epoch resume uses the original epoch denominator.
 Only rank zero emits these stage/progress messages under DDP. Logging adds no
 activation scans, extra evaluations, or extra checkpoint writes.
+
+Bank training uses a plain root console handler. Full hyperparameter records
+are persisted in `run.yaml` and delivered to configured metric backends without
+rendering the entire configuration in the terminal. Training metrics still
+appear in the console. Startup stages cover metric-configuration publishing,
+rotary alignment, run-identity checks, and provenance writes before vocabulary
+and model loading. If initialization has not reached the training loop within
+60 seconds, a one-time thread stack dump appears on stderr. It is cancelled
+when training becomes ready or initialization exits.

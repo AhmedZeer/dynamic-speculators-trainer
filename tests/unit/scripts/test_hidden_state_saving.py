@@ -10,6 +10,7 @@ import torch
 from datasets import Dataset
 from safetensors.torch import load_file, save_file
 
+from speculators.bank import progress
 from speculators.bank.config import BankConfig
 from speculators.data_generation import offline
 from speculators.data_generation.offline import publish_hidden_states
@@ -452,12 +453,12 @@ def test_extraction_console_bypasses_root_handlers(monkeypatch, capsys):
 def test_startup_watchdog_always_cancelled(monkeypatch, failed):
     calls = []
     monkeypatch.setattr(
-        extraction.faulthandler,
+        progress.faulthandler,
         "dump_traceback_later",
         lambda timeout, **kw: calls.append(timeout),
     )
     monkeypatch.setattr(
-        extraction.faulthandler,
+        progress.faulthandler,
         "cancel_dump_traceback_later",
         lambda: calls.append("cancelled"),
     )

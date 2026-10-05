@@ -13,7 +13,6 @@ Usage::
 """
 
 import asyncio
-import faulthandler
 import logging
 import sys
 import time
@@ -26,6 +25,7 @@ import typer
 from datasets import load_from_disk
 from tqdm import tqdm
 
+from speculators.bank.progress import StartupWatchdog as _StartupWatchdog
 from speculators.data_generation.offline import (
     check_hidden_state_file_header,
     get_existing_hidden_state_indices,
@@ -41,31 +41,6 @@ from speculators.data_generation.vllm_client import (
 from speculators.train.data import build_client_item
 
 logger = logging.getLogger(__name__)
-
-
-class _StartupWatchdog:
-    """Obtain thread stacks even when Python logging or its event loop is blocked."""
-
-    def __init__(self):
-        self.armed = False
-
-    def __enter__(self):
-        try:
-            faulthandler.dump_traceback_later(30, file=sys.stderr, repeat=False)
-            self.armed = True
-        except (OSError, RuntimeError, ValueError):
-            logger.warning(
-                "Startup stack diagnostics unavailable on this stderr stream"
-            )
-        return self
-
-    def finish(self):
-        if self.armed:
-            faulthandler.cancel_dump_traceback_later()
-            self.armed = False
-
-    def __exit__(self, *args):
-        self.finish()
 
 
 def _configure_extraction_logger():

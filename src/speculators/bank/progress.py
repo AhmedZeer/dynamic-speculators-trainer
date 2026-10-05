@@ -1,6 +1,8 @@
 """Console stage diagnostics independent of training logger configuration."""
 
+import faulthandler
 import os
+import sys
 import threading
 import time
 from contextlib import contextmanager
@@ -48,3 +50,29 @@ def stage_progress(label: str, interval: float = 10.0):
         stopped.set()
         thread.join()
         report(f"{label}: {outcome} ({time.monotonic() - started:.1f}s)")
+
+
+class StartupWatchdog:
+    """Obtain thread stacks even when Python logging or its event loop is blocked."""
+
+    def __init__(self, timeout: float = 30.0):
+        self.timeout = timeout
+        self.armed = False
+
+    def __enter__(self):
+        try:
+            faulthandler.dump_traceback_later(
+                self.timeout, file=sys.stderr, repeat=False
+            )
+            self.armed = True
+        except (OSError, RuntimeError, ValueError):
+            report("Startup stack diagnostics unavailable on this stderr stream")
+        return self
+
+    def finish(self):
+        if self.armed:
+            faulthandler.cancel_dump_traceback_later()
+            self.armed = False
+
+    def __exit__(self, *args):
+        self.finish()

@@ -621,18 +621,27 @@ class MLFlowHandler(logging.Handler):
 ### Main functions
 
 
-def setup_root_logger(level="INFO"):
-    """Configure the root logger with rich formatting.
+def setup_root_logger(level="INFO", *, use_rich: bool = True):
+    """Configure the root console logger.
 
-    This function sets up the root logger with a RichHandler for
-    console output and adds the FormatDictFilter for better dictionary message
-    formatting.
+    Rich formatting is the default. Bank training selects a plain handler and
+    replaces existing root handlers; full hyperparameter records are omitted from
+    its console while remaining available to metric backends and saved config.
+    Both modes format metric dictionaries and filter distributed ranks.
     """
-    handler = RichHandler()
+    handler = RichHandler() if use_rich else logging.StreamHandler()
+    if not use_rich:
+        # Configuration is persisted and still sent to metric backends; keep the
+        # bank console focused on stages rather than rendering the whole config.
+        handler.addFilter(lambda record: not getattr(record, "hparams", False))
     handler.addFilter(FormatDictFilter())
     handler.addFilter(IsRank0Filter())
     logging.basicConfig(
-        level=level, format="%(message)s", datefmt="[%X]", handlers=[handler]
+        level=level,
+        format="%(message)s",
+        datefmt="[%X]",
+        handlers=[handler],
+        force=not use_rich,
     )
 
     # Disable verbose HTTP response logs from httpx
