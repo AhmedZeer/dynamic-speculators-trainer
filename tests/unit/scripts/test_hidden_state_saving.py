@@ -311,6 +311,7 @@ def test_resume_progress_includes_existing_rows_and_only_published_files(  # noq
     make_states(cache / "hs_2.safetensors")
     bars = []
     requested = []
+    startup_complete = []
 
     class Bar(Progress):
         def __init__(self, **kwargs):
@@ -341,6 +342,7 @@ def test_resume_progress_includes_existing_rows_and_only_published_files(  # noq
             return SimpleNamespace(data=[SimpleNamespace(id="target")])
 
     async def generate(client, model, item, **kwargs):
+        assert startup_complete == [True]
         requested.append(item["idx"])
         if item["idx"] == 3:
             raise TimeoutError("unavailable")
@@ -368,6 +370,7 @@ def test_resume_progress_includes_existing_rows_and_only_published_files(  # noq
             max_consecutive_errors=10,
             world_size=1,
             rank=0,
+            on_startup_complete=lambda: startup_complete.append(True),
         )
     )
     assert requested == [1, 3]
@@ -424,3 +427,49 @@ def test_startup_failure_is_logged_and_propagated(caplog):
             )
         )
     assert "Loading dataset: stopped" in caplog.text
+
+
+def test_extraction_console_bypasses_root_handlers(monkeypatch, capsys):
+    monkeypatch.setattr(extraction.logger, "handlers", [])
+    monkeypatch.setattr(extraction.logger, "propagate", True)
+    monkeypatch.setattr(extraction.logger, "level", extraction.logging.WARNING)
+
+    class BrokenHandler(extraction.logging.Handler):
+        def emit(self, record):
+            pytest.fail("Extraction records must not enter root/Rich handlers")
+
+    monkeypatch.setattr(extraction.logging.getLogger(), "handlers", [BrokenHandler()])
+    extraction._configure_extraction_logger()
+    extraction._configure_extraction_logger()
+    assert len(extraction.logger.handlers) == 1
+    extraction.logger.info("Loading dataset immediately")
+    assert "Loading dataset immediately" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("failed", [True, False])
+def test_startup_watchdog_always_cancelled(monkeypatch, failed):
+    calls = []
+    monkeypatch.setattr(
+        extraction.faulthandler,
+        "dump_traceback_later",
+        lambda timeout, **kw: calls.append(timeout),
+    )
+    monkeypatch.setattr(
+        extraction.faulthandler,
+        "cancel_dump_traceback_later",
+        lambda: calls.append("cancelled"),
+    )
+
+    def run():
+        with extraction._StartupWatchdog() as watchdog:
+            if failed:
+                raise OSError("startup failed")
+            watchdog.finish()
+            watchdog.finish()
+
+    if failed:
+        with pytest.raises(OSError, match="startup failed"):
+            run()
+    else:
+        run()
+    assert calls == [30, "cancelled"]

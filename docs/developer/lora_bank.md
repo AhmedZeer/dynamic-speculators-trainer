@@ -326,3 +326,11 @@ this process's resident memory; Colab's overall RAM includes the vLLM server and
 filesystem cache too. `--stage hidden` requires an existing manifest and fails
 immediately if it is missing, instead of selecting the full source corpus. Check
 the Drive mount and `output_root` when this happens.
+
+Extraction uses a plain console handler independently of Rich and root logging
+filters. It prints an event-loop startup marker, dataset/cache stages, and the
+server model/endpoint once connected. If startup has not completed within 30
+seconds, a one-time faulthandler thread stack dump is printed to stderr. This
+also works when Python's event loop or logging is blocked. The watchdog is
+cancelled when the cache is already complete, when the server is ready for
+requests, or when the command exits. A stack dump is diagnostic, not an abort.

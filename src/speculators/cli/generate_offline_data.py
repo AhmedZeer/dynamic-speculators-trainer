@@ -13,9 +13,11 @@ Usage::
 """
 
 import asyncio
+import faulthandler
 import logging
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -37,9 +39,50 @@ from speculators.data_generation.vllm_client import (
     wait_for_lock_async,
 )
 from speculators.train.data import build_client_item
-from speculators.train.logger import setup_root_logger
 
 logger = logging.getLogger(__name__)
+
+
+class _StartupWatchdog:
+    """Obtain thread stacks even when Python logging or its event loop is blocked."""
+
+    def __init__(self):
+        self.armed = False
+
+    def __enter__(self):
+        try:
+            faulthandler.dump_traceback_later(30, file=sys.stderr, repeat=False)
+            self.armed = True
+        except (OSError, RuntimeError, ValueError):
+            logger.warning(
+                "Startup stack diagnostics unavailable on this stderr stream"
+            )
+        return self
+
+    def finish(self):
+        if self.armed:
+            faulthandler.cancel_dump_traceback_later()
+            self.armed = False
+
+    def __exit__(self, *args):
+        self.finish()
+
+
+def _configure_extraction_logger():
+    """Use a local plain console handler, independent of Rich/root filters."""
+    if not any(
+        handler.get_name() == "speculators-extraction" for handler in logger.handlers
+    ):
+        handler = logging.StreamHandler(sys.stderr)
+        handler.set_name("speculators-extraction")
+        handler.setFormatter(
+            logging.Formatter(
+                "[%(asctime)s] %(levelname)s %(message)s", datefmt="%H:%M:%S"
+            )
+        )
+        logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
 
 
 async def _run_logged_stage(label, function, *args, interval):
@@ -317,6 +360,11 @@ def _prepare_hidden_state_cache(directory, dataset, validate):
     return _verified_existing_indices(directory, dataset, validate)
 
 
+def _finish_startup(callback):
+    if callback is not None:
+        callback()
+
+
 async def _generate_and_save_hidden_states(
     model: str | None,
     endpoint: str,
@@ -333,6 +381,7 @@ async def _generate_and_save_hidden_states(
     rank: int,
     write_concurrency: int = 2,
     progress_log_interval: float = 10.0,
+    on_startup_complete: Callable[[], None] | None = None,
 ):
     dataset = await _run_logged_stage(
         f"Loading preprocessed dataset from {preprocessed_data}",
@@ -370,6 +419,7 @@ async def _generate_and_save_hidden_states(
     shard_total = target // world_size + int(rank < target % world_size)
     reused = shard_total - len(to_process)
     if not to_process:
+        _finish_startup(on_startup_complete)
         logger.info(
             "Hidden states complete: %d/%d reusable files; no requests needed",
             reused,
@@ -423,6 +473,9 @@ async def _generate_and_save_hidden_states(
                 f" found model_id {model_id}."
                 "Please make sure --endpoint is set to the correct vllm instance."
             )
+
+        _finish_startup(on_startup_complete)
+        logger.info("Server ready: model=%s, endpoint=%s", model_id, endpoint)
 
         with tqdm(
             total=shard_total, initial=reused, desc="Hidden states", unit="files"
@@ -612,31 +665,38 @@ def generate_offline_data(
         raise typer.BadParameter("--concurrency and --write-concurrency must be >= 1")
     if rank < 0 or rank >= world_size:
         raise typer.BadParameter("--rank must be in range [0, world_size)")
-    setup_root_logger()
-    logger.setLevel(logging.INFO)
-
-    logger.info("EAGLE Offline Data Generation")
+    _configure_extraction_logger()
 
     try:
-        asyncio.run(
-            _generate_and_save_hidden_states(
-                model=model,
-                endpoint=endpoint,
-                preprocessed_data=preprocessed_data,
-                output=output,
-                max_samples=max_samples,
-                concurrency=concurrency,
-                write_concurrency=write_concurrency,
-                progress_log_interval=progress_log_interval,
-                validate_outputs=validate_outputs,
-                request_timeout=request_timeout,
-                max_retries=max_retries,
-                fail_on_error=fail_on_error,
-                max_consecutive_errors=max_consecutive_errors,
-                world_size=world_size,
-                rank=rank,
+        with _StartupWatchdog() as watchdog:
+            logger.info(
+                "EAGLE Offline Data Generation; startup stacks after 30s if pending"
             )
-        )
+            logger.info(
+                "Starting extraction event loop; data=%s; endpoint=%s",
+                preprocessed_data,
+                endpoint,
+            )
+            asyncio.run(
+                _generate_and_save_hidden_states(
+                    model=model,
+                    endpoint=endpoint,
+                    preprocessed_data=preprocessed_data,
+                    output=output,
+                    max_samples=max_samples,
+                    concurrency=concurrency,
+                    write_concurrency=write_concurrency,
+                    progress_log_interval=progress_log_interval,
+                    on_startup_complete=watchdog.finish,
+                    validate_outputs=validate_outputs,
+                    request_timeout=request_timeout,
+                    max_retries=max_retries,
+                    fail_on_error=fail_on_error,
+                    max_consecutive_errors=max_consecutive_errors,
+                    world_size=world_size,
+                    rank=rank,
+                )
+            )
     except KeyboardInterrupt:
         sys.exit(130)
     except Exception:
