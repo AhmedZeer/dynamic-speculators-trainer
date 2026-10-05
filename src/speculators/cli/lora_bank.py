@@ -8,6 +8,7 @@ import typer
 
 from speculators.bank import workflow
 from speculators.bank.config import BankConfig
+from speculators.bank.progress import report, stage_progress
 
 app = typer.Typer(
     help="Prepare, collect, and inspect dataset-specific EAGLE3 LoRA banks."
@@ -21,7 +22,12 @@ def prepare(
     stage: Literal["select", "responses", "data", "hidden", "all"] = "all",
 ):
     """Prepare selected target responses and their shared hidden-state cache."""
-    result = workflow.prepare(BankConfig.load(config), stage)
+    report(
+        f"prepare --stage {stage}; config={config.resolve()}; code={workflow.__file__}"
+    )
+    with stage_progress("Loading bank configuration"):
+        cfg = BankConfig.load(config)
+    result = workflow.prepare(cfg, stage)
     typer.echo(json.dumps({"root": result["root"], "subsets": len(result["subsets"])}))
 
 

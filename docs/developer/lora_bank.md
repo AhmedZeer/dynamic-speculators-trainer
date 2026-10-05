@@ -317,3 +317,12 @@ CLI exposes the same setting as `--progress-log-interval`.
 Startup also logs dataset loading and the resume scan immediately, with periodic
 `still running` messages at the same interval. These filesystem stages run in a
 background thread so slow Drive access does not block the logging heartbeat.
+
+The bank prepare entry point emits plain stderr diagnostics before loading the
+configuration or manifest, including the code path, resolved output root, PID,
+and client process RSS. Stage heartbeats also cover manifest/source loading and
+post-extraction validation, independently of the root training logger. RSS is
+this process's resident memory; Colab's overall RAM includes the vLLM server and
+filesystem cache too. `--stage hidden` requires an existing manifest and fails
+immediately if it is missing, instead of selecting the full source corpus. Check
+the Drive mount and `output_root` when this happens.

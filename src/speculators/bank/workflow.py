@@ -10,6 +10,7 @@ import yaml
 
 from speculators.bank.artifacts import digest, file_digest, load_subset, write_json
 from speculators.bank.config import BankConfig
+from speculators.bank.progress import report, stage_progress
 
 TARGET_HIDDEN_SIZE = 4096
 HIDDEN_STATE_NDIM = 3
@@ -106,6 +107,7 @@ def select_data(cfg: BankConfig) -> dict:
     root = cfg.output_root.resolve()
     manifest_path = root / "manifest.json"
     if manifest_path.exists():
+        report(f"Reusing manifest at {manifest_path}")
         manifest = json.loads(manifest_path.read_text())
         spec = cache_spec(cfg, manifest["revisions"])
         if digest(spec) != manifest["cache_fingerprint"]:
@@ -113,6 +115,7 @@ def select_data(cfg: BankConfig) -> dict:
                 "Incompatible cache configuration; use another output_root"
             )
         return manifest
+    report(f"No manifest at {manifest_path}; selecting source data")
     api = HfApi()
     revisions = {
         "target_sha": api.model_info(
@@ -125,13 +128,19 @@ def select_data(cfg: BankConfig) -> dict:
             cfg.dataset.source, revision=cfg.dataset.revision
         ).sha,
     }
-    dataset = load_dataset(
-        cfg.dataset.source,
-        name=cfg.dataset.configuration,
-        split=cfg.dataset.split,
-        revision=revisions["dataset_sha"],
-    )
-    selected, subsets, stats = partition_rows(dataset, cfg)
+    with stage_progress(
+        "Loading source dataset", cfg.execution.hidden_state_log_interval
+    ):
+        dataset = load_dataset(
+            cfg.dataset.source,
+            name=cfg.dataset.configuration,
+            split=cfg.dataset.split,
+            revision=revisions["dataset_sha"],
+        )
+    with stage_progress(
+        "Partitioning source prompts", cfg.execution.hidden_state_log_interval
+    ):
+        selected, subsets, stats = partition_rows(dataset, cfg)
     root.mkdir(parents=True, exist_ok=True)
     prompts = root / "prompts.jsonl"
     prompts.write_text("".join(json.dumps(r) + "\n" for r in selected))
@@ -394,19 +403,35 @@ def extract(cfg: BankConfig, manifest: dict):
         world_size=1,
         rank=0,
     )
-    validate_cache(manifest, cfg)
+    with stage_progress(
+        "Validating completed hidden-state cache",
+        cfg.execution.hidden_state_log_interval,
+    ):
+        validate_cache(manifest, cfg)
 
 
 def prepare(cfg: BankConfig, stage: str):
-    manifest = select_data(cfg)
+    interval = cfg.execution.hidden_state_log_interval
+    report(f"Output root: {cfg.output_root.resolve()}")
+    manifest_path = cfg.output_root.resolve() / "manifest.json"
+    if stage == "hidden" and not manifest_path.is_file():
+        raise FileNotFoundError(
+            "Hidden-state extraction requires the existing manifest at "
+            f"{manifest_path}. "
+            "Check output_root and the Drive mount, or run prepare --stage data first. "
+            "The hidden stage will not load and repartition the source dataset."
+        )
+    with stage_progress("Loading or selecting bank manifest", interval):
+        manifest = select_data(cfg)
     stages = ("responses", "data", "hidden") if stage == "all" else (stage,)
     for current in stages:
-        if current == "responses":
-            regenerate(cfg, manifest)
-        elif current == "data":
-            prepare_arrow(cfg, manifest)
-        elif current == "hidden":
-            extract(cfg, manifest)
+        with stage_progress(f"Prepare stage {current}", interval):
+            if current == "responses":
+                regenerate(cfg, manifest)
+            elif current == "data":
+                prepare_arrow(cfg, manifest)
+            elif current == "hidden":
+                extract(cfg, manifest)
     write_json(Path(manifest["root"]) / "experiment.json", cfg.model_dump(mode="json"))
     return manifest
 
