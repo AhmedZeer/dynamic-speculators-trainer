@@ -34,7 +34,10 @@ def prepare(
 @app.command()
 def train(config: ConfigOption):
     """Train all configured subset/seed runs; resume compatible existing runs."""
-    result = workflow.train(BankConfig.load(config))
+    report(f"train; config={config.resolve()}; code={workflow.__file__}")
+    with stage_progress("Loading bank configuration"):
+        cfg = BankConfig.load(config)
+    result = workflow.train(cfg)
     typer.echo(f"Collected {result['candidate_count']} adapter candidates")
 
 

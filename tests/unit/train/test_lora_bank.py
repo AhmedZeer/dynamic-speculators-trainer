@@ -345,7 +345,9 @@ def test_resume_repairs_unpublished_snapshot(tmp_path):
     assert len(list((tmp_path / "snapshots").glob("step-*"))) == 3
 
 
-def test_prepared_cache_validates_membership_and_rejects_corruption(tmp_path):
+def test_prepared_cache_validates_membership_and_rejects_corruption(
+    tmp_path, monkeypatch
+):
     cfg = small_config()
     selected, subsets, _ = partition_rows(source_rows(), cfg)
     prompts = tmp_path / "prompts.jsonl"
@@ -393,6 +395,32 @@ def test_prepared_cache_validates_membership_and_rejects_corruption(tmp_path):
         )
     validate_cache(manifest, cfg)
     receipt = tmp_path / "hidden_states_validation.json"
+    # A clean interruption resumes at the first unvalidated row, not row zero.
+    from speculators.data_generation import offline  # noqa: PLC0415
+
+    receipt.unlink()
+    checker = offline.check_hidden_state_file
+    visited = []
+
+    def interrupted(path, *args):
+        visited.append(path.name)
+        if path.name == "hs_3.safetensors":
+            raise InterruptedError("interrupted validation")
+        return checker(path, *args)
+
+    monkeypatch.setattr(offline, "check_hidden_state_file", interrupted)
+    with pytest.raises(InterruptedError, match="interrupted validation"):
+        validate_cache(manifest, cfg)
+    assert json.loads(receipt.read_text())["validated_files"] == 3
+    visited.clear()
+
+    def resumed(path, *args):
+        visited.append(path.name)
+        return checker(path, *args)
+
+    monkeypatch.setattr(offline, "check_hidden_state_file", resumed)
+    validate_cache(manifest, cfg)
+    assert visited == [f"hs_{i}.safetensors" for i in range(3, 6)]
     receipt_time = receipt.stat().st_mtime_ns
     validate_cache(manifest, cfg)
     assert receipt.stat().st_mtime_ns == receipt_time

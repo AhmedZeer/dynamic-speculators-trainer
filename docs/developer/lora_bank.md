@@ -334,3 +334,17 @@ seconds, a one-time faulthandler thread stack dump is printed to stderr. This
 also works when Python's event loop or logging is blocked. The watchdog is
 cancelled when the cache is already complete, when the server is ready for
 requests, or when the command exits. A stack dump is diagnostic, not an abort.
+
+Bank training logs manifest loading, cache validation, snapshot resolution, and
+each subset/seed subprocess launch. Before GPU training, the first validation
+scans every hidden-state payload for finite values in slices of at most 256
+tokens, verifying token IDs, full shape, and dtype too. Heartbeats show completed
+files, the current row, bytes scanned this invocation, and client RSS. Filesystem
+page cache can still affect Colab's total RAM; bounded slices do not bound the
+machine's overall filesystem cache.
+
+`hidden_states_validation.json` also stores a validated prefix during the scan.
+It is updated every 100 completed files and on normal exit or a clean exception.
+A compatible restart resumes that prefix; a hard kill can repeat up to 99 files.
+Changes to prepared data, experiment identity, or cache file size/mtime invalidate
+the receipt. A completed receipt skips payload scanning on subsequent runs.

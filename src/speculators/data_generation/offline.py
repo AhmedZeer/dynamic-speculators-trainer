@@ -72,6 +72,32 @@ def check_hidden_state_file_header(path: Path, tokens: list[int]):
             )
 
 
+def check_hidden_state_file(
+    path: Path, tokens: list[int], expected_shape, expected_dtype
+):
+    """Scan payloads in bounded slices; never materialize the full hidden tensor."""
+    with safe_open(path, framework="pt", device="cpu") as data:
+        if not {"token_ids", "hidden_states"}.issubset(data.keys()):
+            raise ValueError("Hidden-state file is missing required tensors")
+        if data.get_tensor("token_ids").tolist() != tokens:
+            raise ValueError("Token ids don't match expected token ids")
+        hidden = data.get_slice("hidden_states")
+        if tuple(hidden.get_shape()) != tuple(expected_shape):
+            raise ValueError(f"Invalid target-state shape: {hidden.get_shape()}")
+        expected_code = {"bfloat16": "BF16", "float32": "F32"}[expected_dtype]
+        if hidden.get_dtype() != expected_code:
+            raise ValueError(f"Invalid target-state dtype: {hidden.get_dtype()}")
+        for start in range(0, len(tokens), 256):
+            chunk_tokens = tokens[start : start + 256]
+            check_hidden_states(
+                {
+                    "token_ids": torch.tensor(chunk_tokens),
+                    "hidden_states": hidden[start : start + 256],
+                },
+                chunk_tokens,
+            )
+
+
 def publish_hidden_states(
     source: Path, target: Path, tokens: list[int], validate: bool
 ):

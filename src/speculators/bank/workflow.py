@@ -13,7 +13,6 @@ from speculators.bank.config import BankConfig
 from speculators.bank.progress import report, stage_progress
 
 TARGET_HIDDEN_SIZE = 4096
-HIDDEN_STATE_NDIM = 3
 MISSING_CACHE_PREVIEW = 10
 
 
@@ -318,65 +317,99 @@ def _cache_file_metadata(path: Path, expected_count: int):
 
 def validate_cache(manifest: dict, cfg: BankConfig | None = None):  # noqa: C901
     from datasets import load_from_disk  # noqa: PLC0415
-    from safetensors.torch import load_file  # noqa: PLC0415
 
-    from speculators.data_generation.offline import check_hidden_states  # noqa: PLC0415
-
-    if not manifest.get("prepared"):
-        raise ValueError("Run prepare --stage data before extracting/training")
-    root = Path(manifest["root"])
-    if file_digest(root / "prompts.jsonl") != manifest["prompts_sha256"]:
-        raise ValueError("Prompt identities changed after partitioning")
-    data = load_from_disk(manifest["data_path"]).with_format(None)
-    files = _cache_file_metadata(Path(manifest["hidden_states_path"]), len(data))
-    if digest(data.to_list()) != manifest["prepared_fingerprint"]:
-        raise ValueError("Prepared token content differs from the cache fingerprint")
-    for subset in manifest["subsets"]:
-        for split, identity_key in (
-            ("train_indices", "train_ids"),
-            ("validation_indices", "validation_ids"),
-        ):
-            selected = [data[index]["primary_id"] for index in subset[split]]
-            if selected != subset[identity_key]:
-                raise ValueError("Subset membership does not match prepared identities")
-        load_subset(root / "manifest.json", subset["id"])
-    if (
-        cfg
-        and digest(cache_spec(cfg, manifest["revisions"]))
-        != manifest["cache_fingerprint"]
-    ):
-        raise ValueError("Experiment configuration does not match cached data")
-    validation_identity = digest(
-        {
-            "prepared": manifest["prepared_fingerprint"],
-            "cache": manifest["cache_fingerprint"],
-            "files": files,
-        }
+    from speculators.data_generation.offline import (  # noqa: PLC0415
+        check_hidden_state_file,
     )
-    receipt = root / "hidden_states_validation.json"
-    if (
-        receipt.exists()
-        and json.loads(receipt.read_text()).get("identity") == validation_identity
-    ):
-        return
+
+    interval = cfg.execution.hidden_state_log_interval if cfg else 10.0
+    with stage_progress("Checking prepared data and cache metadata", interval):
+        if not manifest.get("prepared"):
+            raise ValueError("Run prepare --stage data before extracting/training")
+        root = Path(manifest["root"])
+        if file_digest(root / "prompts.jsonl") != manifest["prompts_sha256"]:
+            raise ValueError("Prompt identities changed after partitioning")
+        data = load_from_disk(manifest["data_path"]).with_format(None)
+        files = _cache_file_metadata(Path(manifest["hidden_states_path"]), len(data))
+        if digest(data.to_list()) != manifest["prepared_fingerprint"]:
+            raise ValueError(
+                "Prepared token content differs from the cache fingerprint"
+            )
+        for subset in manifest["subsets"]:
+            for split, identity_key in (
+                ("train_indices", "train_ids"),
+                ("validation_indices", "validation_ids"),
+            ):
+                selected = [data[index]["primary_id"] for index in subset[split]]
+                if selected != subset[identity_key]:
+                    raise ValueError(
+                        "Subset membership does not match prepared identities"
+                    )
+            load_subset(root / "manifest.json", subset["id"])
+        if (
+            cfg
+            and digest(cache_spec(cfg, manifest["revisions"]))
+            != manifest["cache_fingerprint"]
+        ):
+            raise ValueError("Experiment configuration does not match cached data")
+        validation_identity = digest(
+            {
+                "prepared": manifest["prepared_fingerprint"],
+                "cache": manifest["cache_fingerprint"],
+                "files": files,
+            }
+        )
     layers = manifest["cache_spec"]["hidden_states"]["layer_ids"]
     expected_dtype = manifest["cache_spec"]["hidden_states"]["dtype"]
-    for index, row in enumerate(data):
-        path = Path(manifest["hidden_states_path"]) / f"hs_{index}.safetensors"
-        states = load_file(str(path))
-        check_hidden_states(states, row["input_ids"])
-        hidden = states["hidden_states"]
-        if (
-            hidden.ndim != HIDDEN_STATE_NDIM
-            or hidden.shape[1] != len(layers)
-            or hidden.shape[2] != TARGET_HIDDEN_SIZE
-        ):
-            raise ValueError(f"Invalid target-state shape at row {index}")
-        if str(hidden.dtype).split(".")[-1] != expected_dtype:
-            raise ValueError(f"Invalid target-state dtype at row {index}")
-    write_json(
-        receipt, {"identity": validation_identity, "validated_files": len(files)}
+    receipt = root / "hidden_states_validation.json"
+    previous = json.loads(receipt.read_text()) if receipt.exists() else {}
+    completed = (
+        previous.get("validated_files", 0)
+        if previous.get("identity") == validation_identity
+        else 0
     )
+    if not isinstance(completed, int) or not 0 <= completed <= len(files):
+        completed = 0
+    if completed == len(files):
+        report(f"Hidden-state cache already validated: {completed}/{len(files)} files")
+        return
+    progress = {"completed": completed, "row": completed, "bytes": 0}
+
+    def details():
+        return (
+            f"{progress['completed']}/{len(files)} files validated; "
+            f"current row={progress['row']}; "
+            f"scanned={progress['bytes'] / (1024**3):.2f} GiB"
+        )
+
+    def save_progress():
+        write_json(
+            receipt,
+            {"identity": validation_identity, "validated_files": progress["completed"]},
+        )
+
+    with stage_progress("Scanning hidden-state payloads", interval, details=details):
+        try:
+            for index in range(completed, len(data)):
+                progress["row"] = index
+                row = data[index]
+                path = Path(manifest["hidden_states_path"]) / f"hs_{index}.safetensors"
+                try:
+                    check_hidden_state_file(
+                        path,
+                        row["input_ids"],
+                        (len(row["input_ids"]), len(layers), TARGET_HIDDEN_SIZE),
+                        expected_dtype,
+                    )
+                except ValueError as exc:
+                    raise ValueError(f"Invalid cache at row {index}: {exc}") from exc
+                progress["completed"] = index + 1
+                progress["bytes"] += files[index][1]
+                if progress["completed"] % 100 == 0:
+                    save_progress()
+        finally:
+            if progress["completed"] > completed:
+                save_progress()
 
 
 def extract(cfg: BankConfig, manifest: dict):
@@ -505,14 +538,16 @@ def train_config(
 def train(cfg: BankConfig):
     from huggingface_hub import snapshot_download  # noqa: PLC0415
 
-    manifest = select_data(cfg)
+    interval = cfg.execution.hidden_state_log_interval
+    with stage_progress("Loading training manifest", interval):
+        manifest = select_data(cfg)
     validate_cache(manifest, cfg)
-    paths = {
-        role: snapshot_download(
-            getattr(cfg.models, role), revision=manifest["revisions"][f"{role}_sha"]
-        )
-        for role in ("target", "drafter")
-    }
+    paths = {}
+    for role in ("target", "drafter"):
+        with stage_progress(f"Resolving {role} model snapshot", interval):
+            paths[role] = snapshot_download(
+                getattr(cfg.models, role), revision=manifest["revisions"][f"{role}_sha"]
+            )
     for subset in manifest["subsets"]:
         for seed in cfg.training.seeds:
             settings = train_config(
@@ -541,6 +576,7 @@ def train(cfg: BankConfig):
                     f"--nproc-per-node={cfg.execution.processes}",
                     *command[2:],
                 ]
+            report(f"Starting training: subset={subset['id']}, seed={seed}, run={run}")
             subprocess.run(command, check=True)  # noqa: S603 -- argv, never a shell
     return inspect_bank(cfg)
 
