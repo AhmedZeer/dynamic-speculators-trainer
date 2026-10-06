@@ -12,6 +12,7 @@ import typer
 
 from speculators.cli.convert import convert
 from speculators.cli.generate_offline_data import generate_offline_data
+from speculators.cli.generator import app as generator_app
 from speculators.cli.lora_bank import app as lora_bank_app
 from speculators.cli.prepare_data import prepare_data
 from speculators.cli.regenerate_responses import regenerate_responses
@@ -61,3 +62,4 @@ app.command(
 app.command(rich_help_panel="Tools")(convert)
 
 app.add_typer(lora_bank_app, name="lora-bank", rich_help_panel="Pipeline")
+app.add_typer(generator_app, name="generator", rich_help_panel="Pipeline")

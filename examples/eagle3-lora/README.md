@@ -104,3 +104,9 @@ data-generation vLLM provenance under `DATA_ROOT` beside the shared artifacts.
 See [the bank design and workflow](../../docs/developer/lora_bank.md) and
 [`bank_math.yaml`](bank_math.yaml) for the rank-32 math bank: one warmup epoch,
 four collection epochs, snapshots every 10 updates, and epoch-end validation.
+
+## Generator experiments
+
+The three offline generator experiments use a separate configuration with
+1–8 conditioning examples. See [the experiment guide](../../docs/experiments/eagle3_generator.md)
+and [generator_math.yaml](generator_math.yaml) for commands and controls.

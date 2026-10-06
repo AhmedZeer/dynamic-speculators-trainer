@@ -28,6 +28,7 @@ nav:
           - Add New Spec Decode Algorithm: developer/add_algorithm.md
           - Design Documents: developer/design_docs.md
           - EAGLE3 LoRA Banks: developer/lora_bank.md
+          - EAGLE3 Generator Experiments: experiments/eagle3_generator.md
           - Branding Guidelines: developer/branding.md
     - API Reference:
           - api/index.md
