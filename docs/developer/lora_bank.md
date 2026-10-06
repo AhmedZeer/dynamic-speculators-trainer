@@ -111,7 +111,7 @@ Values below are initial experimental defaults, not established optimal values.
 | `execution` | Hidden-state request/write concurrency | Separates GPU requests from bounded CPU validation and Drive copies |
 | `execution` | Prompt RAM chunk size | Controls bounded input prefetch without changing request concurrency |
 | `execution` | Response staging directory, sync interval | Controls local durability and destination-write frequency; `null` disables staging |
-| `execution` | Processes, attention implementation | Controls distributed execution and numerical behavior |
+| `execution` | Parallel workers, processes per run, attention implementation | Controls concurrent independent runs, distributed execution, and numerical behavior |
 | `conditioning` | Maximum examples, prompt-state policy | Records the future generator contract; does not affect bank training |
 
 The preset uses warmup LR `1e-4`, collection LR `1e-6`, three seeds `[42,43,44]`,
@@ -253,9 +253,32 @@ speculators lora-bank train --config examples/eagle3-lora/bank_math.yaml
 speculators lora-bank inspect --config examples/eagle3-lora/bank_math.yaml
 ```
 
-Training resolves pinned model snapshots and runs subset/seed combinations
-sequentially. `execution.processes` enables local `torchrun` DDP. Rerunning
-resumes existing compatible runs and skips completed epochs. Change output roots
+Training resolves pinned model snapshots once and queues subset/seed combinations.
+`execution.n_workers` (default 1) controls the maximum number of independent runs
+training concurrently. For example:
+
+```yaml
+execution:
+  n_workers: 2
+  processes: 1
+```
+
+Two workers start the first two seeds together, then launch the next queued run
+as soon as a slot becomes free. Each run has its own model, optimizer, seed, and
+checkpoint directory; hidden-state files are shared read-only. Workers use the
+same visible GPU(s), so each adds its own VRAM and CPU/Drive load. More workers
+can fill spare GPU capacity, but throughput still depends on compute and I/O.
+The launcher does not automatically assign workers to separate GPUs.
+
+`execution.processes` is the number of local `torchrun` DDP ranks **per run**.
+The total training process count can reach `n_workers * processes`; independent
+DDP jobs use separate standalone rendezvous endpoints. Parallel console lines
+are prefixed with subset and seed. On failure or interruption the scheduler
+stops other active run groups and leaves queued runs unstarted. The final bank
+index is built only after all runs finish successfully. Changing `n_workers`
+preserves compatibility with existing runs and does not change their identity.
+
+Rerunning resumes existing compatible runs and skips completed epochs. Change output roots
 for changed optimization settings; expansion should use a separately identified
 cache/experiment rather than mutating existing memberships.
 

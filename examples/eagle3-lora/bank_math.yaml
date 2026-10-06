@@ -61,6 +61,7 @@ execution:
   response_sync_interval: 1000
   request_timeout: 600
   max_retries: 3
+  n_workers: 1  # Increase to run independent seeds/subsets concurrently.
   processes: 1
   draft_attn_impl: simple_flex_attention
 conditioning:

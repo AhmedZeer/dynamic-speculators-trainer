@@ -3,7 +3,6 @@
 import json
 import os
 import random
-import signal
 import subprocess
 import sys
 import time
@@ -14,6 +13,7 @@ import yaml
 from speculators.bank.artifacts import digest, file_digest, load_subset, write_json
 from speculators.bank.config import BankConfig
 from speculators.bank.progress import report, stage_progress
+from speculators.bank.runner import TrainingRun, run_parallel
 
 MISSING_CACHE_PREVIEW = 10
 
@@ -470,9 +470,12 @@ def train(cfg: BankConfig):
             )
     total_runs = len(manifest["subsets"]) * len(cfg.training.seeds)
     run_number = 0
+    runs = []
     report(
         f"Bank schedule: {len(manifest['subsets'])} subsets, "
         f"{len(cfg.training.seeds)} seeds, {total_runs} runs; "
+        f"parallel workers={cfg.execution.n_workers}, "
+        f"processes per run={cfg.execution.processes}; "
         f"warmup={cfg.training.warmup_epochs} epochs, "
         f"collect={cfg.training.collect_epochs} epochs, "
         f"snapshot interval={cfg.training.save_interval} collection steps"
@@ -506,30 +509,31 @@ def train(cfg: BankConfig):
                     f"--nproc-per-node={cfg.execution.processes}",
                     *command[2:],
                 ]
-            report(
-                f"Starting training run {run_number}/{total_runs}: "
-                f"subset={subset['id']}, seed={seed}, "
-                f"train examples={len(subset['train_indices'])}, "
-                f"validation examples={len(subset['validation_indices'])}, output={run}"
+            runs.append(
+                TrainingRun(
+                    run_number,
+                    total_runs,
+                    subset["id"],
+                    seed,
+                    len(subset["train_indices"]),
+                    len(subset["validation_indices"]),
+                    run,
+                    command,
+                )
             )
+    if cfg.execution.n_workers > 1:
+        run_parallel(runs, cfg.execution.n_workers)
+    else:
+        for run in runs:
+            run.starting()
             started = time.monotonic()
             env = {**os.environ, "PYTHONFAULTHANDLER": "1"}
             try:
-                subprocess.run(command, check=True, env=env)  # noqa: S603
+                subprocess.run(run.command, check=True, env=env)  # noqa: S603
             except subprocess.CalledProcessError as exc:
-                if exc.returncode < 0:
-                    name = signal.Signals(-exc.returncode).name
-                    report(
-                        f"Training subprocess terminated by {name}: "
-                        f"subset={subset['id']}, seed={seed}, output={run}. "
-                        "Check the fatal Python stack above for the failing operation. "
-                        "Rerunning resumes from the last committed recovery checkpoint."
-                    )
+                run.failed(exc.returncode)
                 raise
-            report(
-                f"Training run {run_number}/{total_runs} completed in "
-                f"{time.monotonic() - started:.1f}s: subset={subset['id']}, seed={seed}"
-            )
+            run.completed(started)
     with stage_progress("Building final LoRA bank index", interval):
         return inspect_bank(cfg)
 

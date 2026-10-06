@@ -96,6 +96,9 @@ class Execution(Settings):
     response_sync_interval: int = Field(default=1000, ge=1)
     request_timeout: float = Field(default=600, gt=0)
     max_retries: int = Field(default=3, ge=0)
+    n_workers: int = Field(
+        default=1, ge=1, description="Maximum independent subset/seed runs in parallel."
+    )
     processes: int = Field(default=1, ge=1)
     draft_attn_impl: Literal["simple_flex_attention", "sdpa", "eager"] = (
         "simple_flex_attention"
