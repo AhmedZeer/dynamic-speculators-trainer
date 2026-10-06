@@ -24,6 +24,7 @@ class Architecture(Settings):
 class Optimization(Settings):
     lr: float = Field(default=1e-4, gt=0)
     weight_decay: float = Field(default=0.01, ge=0)
+    max_grad_norm: float = Field(default=0.85, gt=0)
     conditioning_epochs: int = Field(default=5, ge=1)
     pretraining_updates: int = Field(default=1000, ge=1)
     episodes_per_update: int = Field(default=4, ge=1)

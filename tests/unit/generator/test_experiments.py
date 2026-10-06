@@ -22,6 +22,7 @@ from speculators.generator.config import (
     Architecture,
     Context,
     ExperimentConfig,
+    Optimization,
     WandbSettings,
 )
 from speculators.generator.data import (
@@ -32,7 +33,13 @@ from speculators.generator.data import (
     groups,
     prompt_summary,
 )
-from speculators.generator.engine import Runtime, begin_run, run_identity, run_job
+from speculators.generator.engine import (
+    Runtime,
+    begin_run,
+    clip_gradients,
+    run_identity,
+    run_job,
+)
 from speculators.generator.model import (
     AdapterLinear,
     LoRAGenerator,
@@ -93,6 +100,27 @@ def test_context_range_and_config_reference(tmp_path):
     config = tmp_path / "experiment.yaml"
     config.write_text("bank_config: bank.yaml\n")
     assert ExperimentConfig.load(config).bank_config == tmp_path / "bank.yaml"
+    assert Optimization().max_grad_norm == 0.85
+    with pytest.raises(ValueError, match="greater than 0"):
+        Optimization(max_grad_norm=0)
+
+
+def test_gradient_clipping_uses_global_norm_and_reports_before_clipping():
+    first, second = nn.Parameter(torch.zeros(1)), nn.Parameter(torch.zeros(1))
+    optimizer = torch.optim.AdamW([{"params": [first]}, {"params": [second]}])
+    first.grad, second.grad = torch.tensor([3.0]), torch.tensor([4.0])
+    metrics = clip_gradients(optimizer, 0.85)
+    assert metrics == {"train/grad_norm": 5.0, "train/gradient_clipped": 1.0}
+    assert torch.cat([first.grad, second.grad]).norm().item() == pytest.approx(0.85)
+    first.grad, second.grad = torch.tensor([0.03]), torch.tensor([0.04])
+    metrics = clip_gradients(optimizer, 0.85)
+    assert metrics["train/grad_norm"] == pytest.approx(0.05)
+    assert metrics["train/gradient_clipped"] == 0
+    torch.testing.assert_close(first.grad, torch.tensor([0.03]))
+    torch.testing.assert_close(second.grad, torch.tensor([0.04]))
+    first.grad.fill_(float("nan"))
+    with pytest.raises(RuntimeError, match="non-finite"):
+        clip_gradients(optimizer, 0.85)
 
 
 def test_set_encoder_is_permutation_invariant_and_singleton_finite():
@@ -426,6 +454,22 @@ def test_all_three_workflows_and_completed_resume(
 ):
     cfg, _ = synthetic_experiment
     cfg.wandb = WandbSettings(enabled=tracking, upload_artifacts=True)
+    original_step = torch.optim.AdamW.step
+    applied_norms = []
+
+    def checked_step(optimizer, *args, **kwargs):
+        gradients = [
+            p.grad.norm()
+            for group in optimizer.param_groups
+            for p in group["params"]
+            if p.grad is not None
+        ]
+        norm = torch.stack(gradients).norm().item()
+        assert norm <= cfg.optimization.max_grad_norm + 1e-6
+        applied_norms.append(norm)
+        return original_step(optimizer, *args, **kwargs)
+
+    monkeypatch.setattr(torch.optim.AdamW, "step", checked_step)
     experiment_path = cfg.output_root.parent / "experiment.yaml"
     experiment_path.write_text(yaml.safe_dump(cfg.model_dump(mode="json")))
     runner = CliRunner()
@@ -452,6 +496,7 @@ def test_all_three_workflows_and_completed_resume(
         "transferred_lora",
     }
     assert all(len(result["history"]) == 2 for result in arms)
+    assert applied_norms
     if tracking:
         assert (
             len(fake_wandb.runs) == 26
@@ -477,6 +522,12 @@ def test_all_three_workflows_and_completed_resume(
             losses = [row for row in run.logs if loss_key in row]
             assert losses
             assert all(torch.isfinite(torch.tensor(row[loss_key])) for row in losses)
+            assert all(row["train/grad_norm"] >= 0 for row in losses)
+            assert all(
+                row["train/gradient_clipped"]
+                == float(row["train/grad_norm"] > cfg.optimization.max_grad_norm)
+                for row in losses
+            )
             steps = [row["optimizer_step"] for row in losses]
             assert steps == list(range(1, len(steps) + 1))
             validation = [

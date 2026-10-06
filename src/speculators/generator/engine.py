@@ -29,6 +29,15 @@ from speculators.model import SpeculatorModel
 from speculators.train.utils import normalize_counted_metrics, save_train_command
 
 
+def clip_gradients(optimizer, max_norm):
+    """Clip accumulated optimizer gradients and report their original L2 norm."""
+    parameters = [p for group in optimizer.param_groups for p in group["params"]]
+    norm = torch.nn.utils.clip_grad_norm_(
+        parameters, max_norm, error_if_nonfinite=True
+    ).item()
+    return {"train/grad_norm": norm, "train/gradient_clipped": float(norm > max_norm)}
+
+
 class Runtime:
     def __init__(self, cfg, bank):
         self.cfg, self.bank = cfg, bank
@@ -241,6 +250,9 @@ class Runtime:
                 total_loss += loss.detach().item() * weight
             if factors is not None:
                 backward_factors(factors, leaves)
+            gradient_metrics = clip_gradients(
+                optimizer, self.cfg.optimization.max_grad_norm
+            )
             optimizer.step()
             if tracker is not None:
                 tracker.training(
@@ -251,6 +263,7 @@ class Runtime:
                         "train/epoch": epoch + 1,
                         "train/context_examples": len(cohort),
                         "train/response_tokens": token_total,
+                        **gradient_metrics,
                     },
                     final=update == len(cohorts),
                 )
@@ -427,6 +440,7 @@ def _run_job(runtime, job, output, tracker):  # noqa: C901 -- recovery and two t
                     raise ValueError("Non-finite bank reconstruction loss")
                 (loss / cfg.optimization.episodes_per_update).backward()
                 losses.append(loss.detach().item())
+            gradient_metrics = clip_gradients(optimizer, cfg.optimization.max_grad_norm)
             optimizer.step()
             progress = update + 1
             optimizer_step = progress
@@ -437,6 +451,7 @@ def _run_job(runtime, job, output, tracker):  # noqa: C901 -- recovery and two t
                     "train/lr": optimizer.param_groups[0]["lr"],
                     "train/context_examples_mean": sum(context_sizes)
                     / len(context_sizes),
+                    **gradient_metrics,
                 },
                 final=progress == cfg.optimization.pretraining_updates,
             )

@@ -144,6 +144,7 @@ the final comparison exploratory, rather than an independent held-out result.
 | `context.*` | Number of examples sharing one generated adapter and evaluation sizes |
 | `architecture.*` | Encoder/decoder capacity and full output-head size |
 | `optimization.lr`, `weight_decay` | Shared AdamW optimization |
+| `optimization.max_grad_norm` | Global L2 gradient clipping threshold; defaults to 0.85 |
 | `conditioning_epochs`, `pretraining_updates`, `episodes_per_update` | Comparison and reconstruction budgets |
 | `adaptation_epochs` | Fixed to one |
 | `token_budget` | Activation microbatch size, independent of context size |
@@ -190,7 +191,14 @@ conditioning range. Adaptation names also identify the arm.
 
 `wandb.log_interval` controls optimizer-update logging independently of console
 logging. Plot `train/drafter_loss` or `train/reconstruction_l1` against
-`optimizer_step`. Validation logs include `validation/score_mean_full_acc_0`
+`optimizer_step`. Every experiment clips the accumulated optimizer gradients
+to a global L2 norm of `optimization.max_grad_norm` (default 0.85), immediately
+before its optimizer step. W&B logs `train/grad_norm` **before clipping** and
+`train/gradient_clipped` (1 when clipped, otherwise 0). Non-finite gradient
+norms stop the run before applying an update.
+Clipping is part of the training identity; runs created before clipping was
+introduced require a new `output_root` to keep the experiment comparisons valid.
+Validation logs include `validation/score_mean_full_acc_0`
 and every reported metric under `validation/context_1/*`, `context_4/*`, and
 `context_8/*`. Run summaries include final/best scores and parameter counts;
 heatmap cells also record the number of supervising checkpoints.
