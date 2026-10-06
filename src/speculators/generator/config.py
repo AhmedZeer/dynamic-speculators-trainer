@@ -70,6 +70,33 @@ class Heatmap(Settings):
         return self
 
 
+class WandbSettings(Settings):
+    enabled: bool = False
+    mode: Literal["online", "offline"] = "offline"
+    entity: str | None = None
+    group: str | None = None
+    name_prefix: str = ""
+    log_interval: int = Field(default=1, ge=1)
+    upload_artifacts: bool = False
+    projects: dict[Literal["conditioning", "heatmap", "adaptation"], str] = Field(
+        default_factory=lambda: {
+            "conditioning": "eagle3-generator-conditioning",
+            "heatmap": "eagle3-generator-heatmap",
+            "adaptation": "eagle3-generator-adaptation",
+        }
+    )
+
+    @model_validator(mode="after")
+    def distinct_projects(self):
+        if set(self.projects) != {"conditioning", "heatmap", "adaptation"}:
+            raise ValueError("Provide a W&B project for each of the three experiments")
+        names = [name.strip() for name in self.projects.values()]
+        if not all(names) or len(set(names)) != len(names):
+            raise ValueError("W&B project names must be nonempty and different")
+        self.projects = dict(zip(self.projects, names, strict=True))
+        return self
+
+
 class ExperimentConfig(Settings):
     bank_config: Path
     output_root: Path = Path("output/generator-math")
@@ -86,6 +113,7 @@ class ExperimentConfig(Settings):
     optimization: Optimization = Field(default_factory=Optimization)
     context: Context = Field(default_factory=Context)
     heatmap: Heatmap = Field(default_factory=Heatmap)
+    wandb: WandbSettings = Field(default_factory=WandbSettings)
 
     @model_validator(mode="after")
     def separate_subsets(self):

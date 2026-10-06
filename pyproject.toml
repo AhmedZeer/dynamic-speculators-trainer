@@ -80,6 +80,7 @@ base = [
 [project.optional-dependencies]
 generator = [
     "matplotlib>=3.8,<4",
+    "wandb>=0.19,<1",
 ]
 lora = [
     "peft>=0.18.0,<1.0.0",
@@ -117,6 +118,7 @@ dev = [
 
     # testing
     "matplotlib>=3.8,<4",
+    "wandb>=0.19,<1",
     "pytest~=9.1.1",
     "pytest-asyncio~=1.4.0",
     "pytest-cov~=7.1.0",

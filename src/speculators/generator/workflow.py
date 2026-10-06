@@ -12,6 +12,11 @@ from speculators.bank.runner import TrainingRun, run_parallel
 from speculators.generator.config import CONDITIONS
 from speculators.generator.data import Corpus, discover_snapshots, filter_snapshots
 from speculators.generator.engine import Runtime, begin_run, run_identity, run_job
+from speculators.generator.tracking import (
+    log_completed,
+    log_heatmap_summary,
+    wandb_module,
+)
 
 MIDPOINT = 0.5
 
@@ -29,9 +34,21 @@ def execute(cfg, jobs):
     bank = BankConfig.load(cfg.bank_config)
     corpus = Corpus(cfg, bank)
     pending = []
+    if cfg.wandb.enabled:
+        wandb_module()
     for job, path in jobs:
-        if begin_run(path, run_identity(cfg, bank, corpus, job)):
+        identity = run_identity(cfg, bank, corpus, job)
+        if begin_run(path, identity):
             pending.append((job, path))
+        else:
+            log_completed(
+                cfg,
+                corpus,
+                job,
+                path,
+                identity,
+                json.loads((path / "result.json").read_text()),
+            )
     if pending and cfg.n_workers == 1:
         runtime = Runtime(cfg, bank)
         for job, path in pending:
@@ -160,6 +177,7 @@ def heatmap(cfg):
     results = execute(cfg, jobs)
     export_heatmaps(root, cfg, results)
     write_json(root / "selection.json", {"winner": choose(results), "results": results})
+    log_heatmap_summary(cfg, results, root)
     return results
 
 

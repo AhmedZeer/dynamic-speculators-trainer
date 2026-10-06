@@ -10,6 +10,18 @@ n_workers: 1  # Each worker owns a full generator, drafter, and optimizer.
 device: cuda
 dtype: bfloat16
 factor_cache_mib: 256
+wandb:
+  enabled: true
+  mode: offline  # Set online to send metrics to your W&B account.
+  entity: null
+  group: null  # Uses the output directory name.
+  name_prefix: ""
+  log_interval: 1  # Optimizer updates; independent of console log_interval.
+  upload_artifacts: false  # Opt in to uploading results, plots, and provenance.
+  projects:
+    conditioning: eagle3-generator-conditioning
+    heatmap: eagle3-generator-heatmap
+    adaptation: eagle3-generator-adaptation
 context:
   min_examples: 1
   max_examples: 8

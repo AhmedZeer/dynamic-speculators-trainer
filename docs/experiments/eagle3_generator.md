@@ -8,7 +8,7 @@ bank and require neither a vLLM server nor new response/activation generation.
 
 ## Run order
 
-Install plotting support from the checkout, then run from the repository root:
+Install plotting and W&B support from the checkout, then run from the repository root:
 
 ```bash
 pip install -e '.[generator]'
@@ -169,7 +169,47 @@ in the run directory, rather than accumulating full generator snapshots.
 Reconstruction resumes at checkpointed update boundaries; drafter-loss training
 resumes at epoch boundaries. Repeated commands skip completed matching runs.
 Changed experiment settings require a new output root. Changing worker count,
-staging location, or factor-cache capacity does not invalidate completed runs.
+staging location, factor-cache capacity, or W&B settings does not invalidate completed runs.
+
+### W&B monitoring
+
+Install the optional integration with `pip install -e '.[generator]'`. The example
+configuration enables **offline** logging, with separate projects:
+
+- `eagle3-generator-conditioning`: drafter loss and per-epoch acceptance for each conditioning representation.
+- `eagle3-generator-heatmap`: reconstruction L1 loss for each seed/stride cell, final acceptance, and a summary run with the 18-cell table and heatmap images.
+- `eagle3-generator-adaptation`: drafter loss, initial/final acceptance, and score change for each of the four arms.
+
+To monitor live cloud dashboards, run `wandb login` and set `wandb.mode: online`.
+Set `wandb.entity` to select an account/team; each project name is configurable,
+but the three names must differ. `wandb.group` defaults to the output directory
+name, and `wandb.name_prefix` can distinguish experiment campaigns.
+For example, `heatmap-math-00000-last-stride20-bankseeds42+44-gseed42-ctx1-8`
+identifies its data subset, representation, bank selection, generator seed, and
+conditioning range. Adaptation names also identify the arm.
+
+`wandb.log_interval` controls optimizer-update logging independently of console
+logging. Plot `train/drafter_loss` or `train/reconstruction_l1` against
+`optimizer_step`. Validation logs include `validation/score_mean_full_acc_0`
+and every reported metric under `validation/context_1/*`, `context_4/*`, and
+`context_8/*`. Run summaries include final/best scores and parameter counts;
+heatmap cells also record the number of supervising checkpoints.
+
+Online restarts reuse a deterministic W&B run ID with `resume: allow`; the
+optimizer counter is saved in recovery checkpoints. Drafter training still
+recovers at epoch boundaries, so updates after the last checkpoint can repeat.
+Previously completed runs backfill their saved validation history without
+loading models or retraining; historical step losses cannot be recovered.
+Repeated commands skip results already logged to the same destination.
+Offline attempts produce local W&B bundles under `staging_dir/wandb`; they
+do not automatically merge into one cloud history. Use `wandb sync` to upload
+offline bundles when desired. Set `wandb.enabled: false` to disable tracking.
+
+`wandb.upload_artifacts` defaults to false. Enabling it attaches result/config
+files, command/git/package provenance, source patches, and archived resume
+attempts; heatmap exports include PNG/PDF/CSV/JSON. Full model checkpoints and
+hidden-state payloads are excluded. W&B working files use local staging storage
+to avoid additional Drive traffic during optimizer updates.
 
 Use one worker initially: every worker owns the large generator, optimizer,
 and frozen drafter. Publish provenance and resolved configuration with results.

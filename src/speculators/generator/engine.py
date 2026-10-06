@@ -23,6 +23,7 @@ from speculators.generator.model import (
     factor_parameters,
     install_adapters,
 )
+from speculators.generator.tracking import ExperimentTracker, epoch_updates
 from speculators.losses import resolve_loss_config
 from speculators.model import SpeculatorModel
 from speculators.train.utils import normalize_counted_metrics, save_train_command
@@ -190,7 +191,16 @@ class Runtime:
             "tail_policy": "include all examples; short final group uses actual size",
         }
 
-    def train_epoch(self, subset, condition, generator, optimizer, epoch):
+    def train_epoch(
+        self,
+        subset,
+        condition,
+        generator,
+        optimizer,
+        epoch,
+        tracker=None,
+        optimizer_step=0,
+    ):
         self.drafter.train()
         if generator is not None:
             self.drafter.requires_grad_(False)
@@ -232,6 +242,18 @@ class Runtime:
             if factors is not None:
                 backward_factors(factors, leaves)
             optimizer.step()
+            if tracker is not None:
+                tracker.training(
+                    optimizer_step + update,
+                    {
+                        "train/drafter_loss": total_loss,
+                        "train/lr": optimizer.param_groups[0]["lr"],
+                        "train/epoch": epoch + 1,
+                        "train/context_examples": len(cohort),
+                        "train/response_tokens": token_total,
+                    },
+                    final=update == len(cohorts),
+                )
             if (
                 update == 1
                 or update % self.cfg.optimization.log_interval == 0
@@ -242,11 +264,12 @@ class Runtime:
                     f"loss={total_loss:.6f}, examples={len(cohort)}, "
                     f"elapsed={time.monotonic() - started:.1f}s"
                 )
+        return len(cohorts)
 
 
 def run_identity(cfg, bank, corpus, job):
     settings = cfg.model_dump(mode="json")
-    for key in ("n_workers", "staging_dir", "factor_cache_mib"):
+    for key in ("n_workers", "staging_dir", "factor_cache_mib", "wandb"):
         settings.pop(key)
     return {
         "version": 1,
@@ -285,7 +308,13 @@ def begin_run(path, identity):
     return True
 
 
-def run_job(runtime, job, output):  # noqa: C901 -- recovery and two training schedules
+def run_job(runtime, job, output):
+    identity = run_identity(runtime.cfg, runtime.bank, runtime.corpus, job)
+    with ExperimentTracker(runtime.cfg, job, output, identity) as tracker:
+        return _run_job(runtime, job, output, tracker)
+
+
+def _run_job(runtime, job, output, tracker):  # noqa: C901 -- recovery and two training schedules
     cfg, bank = runtime.cfg, runtime.bank
     condition = job["condition"]
     generator = (
@@ -315,6 +344,7 @@ def run_job(runtime, job, output):  # noqa: C901 -- recovery and two training sc
         runtime.corpus.local / "runs" / digest(identity) / "checkpoint.pt"
     )
     history, progress = [], 0
+    optimizer_step = 0
     rng = random.Random(cfg.seed)
 
     def model_state():
@@ -333,6 +363,7 @@ def run_job(runtime, job, output):  # noqa: C901 -- recovery and two training sc
                 "model": model_state(),
                 "optimizer": optimizer.state_dict(),
                 "progress": progress_value,
+                "optimizer_step": optimizer_step,
                 "history": history,
                 "rng": rng.getstate(),
                 "torch_rng": torch.get_rng_state(),
@@ -356,10 +387,20 @@ def run_job(runtime, job, output):  # noqa: C901 -- recovery and two training sc
                 runtime.drafter.load_state_dict(state["model"], strict=False)
             optimizer.load_state_dict(state["optimizer"])
             progress, history = state["progress"], state["history"]
+            optimizer_step = state.get("optimizer_step")
+            if optimizer_step is None:
+                optimizer_step = (
+                    progress
+                    if job["kind"] == "heatmap"
+                    else epoch_updates(
+                        cfg, runtime.corpus, cfg.conditioning_subset, progress
+                    )
+                )
             rng.setstate(state["rng"])
             torch.set_rng_state(state["torch_rng"])
             if state["cuda_rng"] and torch.cuda.is_available():
                 torch.cuda.set_rng_state_all(state["cuda_rng"])
+            del state
     started = time.monotonic()
     subset = cfg.bank_subset if job["kind"] == "heatmap" else cfg.conditioning_subset
     if job["kind"] == "heatmap":
@@ -372,8 +413,10 @@ def run_job(runtime, job, output):  # noqa: C901 -- recovery and two training sc
         for update in range(progress, cfg.optimization.pretraining_updates):
             optimizer.zero_grad(set_to_none=True)
             losses = []
+            context_sizes = []
             for _ in range(cfg.optimization.episodes_per_update):
                 size = rng.randint(cfg.context.min_examples, cfg.context.max_examples)
+                context_sizes.append(size)
                 cohort = rng.sample(indices, size)
                 target = rng.choice(by_seed[rng.choice(job["seeds"])])
                 generated = generator(
@@ -386,6 +429,17 @@ def run_job(runtime, job, output):  # noqa: C901 -- recovery and two training sc
                 losses.append(loss.detach().item())
             optimizer.step()
             progress = update + 1
+            optimizer_step = progress
+            tracker.training(
+                optimizer_step,
+                {
+                    "train/reconstruction_l1": sum(losses) / len(losses),
+                    "train/lr": optimizer.param_groups[0]["lr"],
+                    "train/context_examples_mean": sum(context_sizes)
+                    / len(context_sizes),
+                },
+                final=progress == cfg.optimization.pretraining_updates,
+            )
             if progress == 1 or progress % cfg.optimization.log_interval == 0:
                 report(
                     f"Bank reconstruction {output.name}: "
@@ -398,6 +452,7 @@ def run_job(runtime, job, output):  # noqa: C901 -- recovery and two training sc
             save(progress)
         metrics = runtime.evaluate(subset, condition, generator)
         history.append({"update": progress, **metrics})
+        tracker.validation(metrics, optimizer_step)
     else:
         epochs = (
             cfg.optimization.conditioning_epochs
@@ -408,15 +463,29 @@ def run_job(runtime, job, output):  # noqa: C901 -- recovery and two training sc
             history.append(
                 {"epoch": 0, **runtime.evaluate(subset, condition, generator)}
             )
+            tracker.validation(history[-1], optimizer_step, epoch=0)
             save(0)
         for epoch in range(progress, epochs):
             with stage_progress(
                 f"Training {job['kind']} {output.name}, epoch={epoch + 1}/{epochs}"
             ):
-                runtime.train_epoch(subset, condition, generator, optimizer, epoch)
+                optimizer_step += runtime.train_epoch(
+                    subset,
+                    condition,
+                    generator,
+                    optimizer,
+                    epoch,
+                    tracker=tracker,
+                    optimizer_step=optimizer_step,
+                )
             history.append(
-                {"epoch": epoch + 1, **runtime.evaluate(subset, condition, generator)}
+                {
+                    "epoch": epoch + 1,
+                    "optimizer_step": optimizer_step,
+                    **runtime.evaluate(subset, condition, generator),
+                }
             )
+            tracker.validation(history[-1], optimizer_step, epoch=epoch + 1)
             save(epoch + 1)
     result = {
         "job": job,
@@ -430,6 +499,7 @@ def run_job(runtime, job, output):  # noqa: C901 -- recovery and two training sc
         result["score_change"] = result["score"] - history[0]["score"]
     write_json(output / "metrics.json", history)
     write_json(output / "result.json", result)
+    tracker.result(result)
     report(f"Experiment complete: {output}; score={result['score']:.6f}")
     return result
 

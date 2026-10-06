@@ -1,5 +1,6 @@
 import copy
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,7 +18,12 @@ from speculators.bank.artifacts import write_json
 from speculators.bank.config import BankConfig
 from speculators.cli import app
 from speculators.generator import workflow
-from speculators.generator.config import Architecture, Context, ExperimentConfig
+from speculators.generator.config import (
+    Architecture,
+    Context,
+    ExperimentConfig,
+    WandbSettings,
+)
 from speculators.generator.data import (
     Corpus,
     FactorCache,
@@ -26,7 +32,7 @@ from speculators.generator.data import (
     groups,
     prompt_summary,
 )
-from speculators.generator.engine import Runtime, begin_run, run_job
+from speculators.generator.engine import Runtime, begin_run, run_identity, run_job
 from speculators.generator.model import (
     AdapterLinear,
     LoRAGenerator,
@@ -36,6 +42,7 @@ from speculators.generator.model import (
     factor_parameters,
     install_adapters,
 )
+from speculators.generator.tracking import ExperimentTracker, run_name
 from speculators.losses import resolve_loss_config
 from speculators.models.eagle3 import Eagle3DraftModel, Eagle3SpeculatorConfig
 from speculators.models.eagle3.attention import extend_mask_for_draft_tokens
@@ -410,8 +417,15 @@ def synthetic_experiment(tmp_path, monkeypatch):
     return cfg, runtime_factory
 
 
-def test_all_three_workflows_and_completed_resume(synthetic_experiment, monkeypatch):
+@pytest.mark.parametrize("tracking", [False, True])
+def test_all_three_workflows_and_completed_resume(
+    synthetic_experiment,
+    monkeypatch,
+    fake_wandb,
+    tracking,
+):
     cfg, _ = synthetic_experiment
+    cfg.wandb = WandbSettings(enabled=tracking, upload_artifacts=True)
     experiment_path = cfg.output_root.parent / "experiment.yaml"
     experiment_path.write_text(yaml.safe_dump(cfg.model_dump(mode="json")))
     runner = CliRunner()
@@ -438,6 +452,45 @@ def test_all_three_workflows_and_completed_resume(synthetic_experiment, monkeypa
         "transferred_lora",
     }
     assert all(len(result["history"]) == 2 for result in arms)
+    if tracking:
+        assert (
+            len(fake_wandb.runs) == 26
+        )  # Three conditions, 18 cells, summary, four arms.
+        assert len({run.kwargs["id"] for run in fake_wandb.runs}) == 26
+        assert {run.kwargs["project"] for run in fake_wandb.runs} == set(
+            cfg.wandb.projects.values()
+        )
+        for run in fake_wandb.runs:
+            assert run.exit_code == 0
+            assert run.artifacts
+            assert run.kwargs["dir"] == str(cfg.staging_dir / "wandb")
+            if run.kwargs["job_type"] == "heatmap-summary":
+                table = run.logs[0]["heatmap/cells"]
+                assert len(table.data) == 18
+                assert len(run.logs[0]) == 5  # Table and four heatmap images.
+                continue
+            loss_key = (
+                "train/reconstruction_l1"
+                if run.kwargs["job_type"] == "heatmap"
+                else "train/drafter_loss"
+            )
+            losses = [row for row in run.logs if loss_key in row]
+            assert losses
+            assert all(torch.isfinite(torch.tensor(row[loss_key])) for row in losses)
+            steps = [row["optimizer_step"] for row in losses]
+            assert steps == list(range(1, len(steps) + 1))
+            validation = [
+                row for row in run.logs if "validation/score_mean_full_acc_0" in row
+            ]
+            assert validation
+            assert all(
+                f"validation/context_{size}/full_acc_0" in validation[-1]
+                for size in [1, 4, 8]
+            )
+            assert (
+                run.summary["final_score"]
+                == validation[-1]["validation/score_mean_full_acc_0"]
+            )
     # Completed runs must skip before any model is initialized.
     monkeypatch.setattr(
         workflow, "Runtime", lambda *args: pytest.fail("Completed runs loaded a model")
@@ -445,12 +498,16 @@ def test_all_three_workflows_and_completed_resume(synthetic_experiment, monkeypa
     assert workflow.conditioning(cfg) == conditioning
     assert workflow.heatmap(cfg) == heatmap
     assert workflow.adaptation(cfg) == arms
+    assert len(fake_wandb.runs) == (26 if tracking else 0)
 
 
 def test_reconstruction_resumes_exactly_after_interrupted_update(
-    synthetic_experiment, monkeypatch
+    synthetic_experiment,
+    monkeypatch,
+    fake_wandb,
 ):
     cfg, factory = synthetic_experiment
+    cfg.wandb.enabled = True
     bank = BankConfig.load(cfg.bank_config)
     job = {
         "kind": "heatmap",
@@ -484,6 +541,10 @@ def test_reconstruction_resumes_exactly_after_interrupted_update(
     assert torch.load(interrupted / "checkpoint.pt", weights_only=True)["progress"] == 1
     run_job(factory(cfg, bank), job, interrupted)
     resumed = torch.load(interrupted / "checkpoint.pt", weights_only=True)["model"]
+    assert fake_wandb.runs[1].exit_code == 1
+    assert fake_wandb.runs[2].exit_code == 0
+    assert fake_wandb.runs[1].kwargs["id"] == fake_wandb.runs[2].kwargs["id"]
+    assert fake_wandb.runs[2].logs[0]["optimizer_step"] == 2
     for name, tensor in expected.items():
         torch.testing.assert_close(resumed[name], tensor, rtol=0, atol=0)
 
@@ -730,3 +791,140 @@ def test_compiled_microbatch_training_never_retains_backward_graph(
     runtime.train_epoch(cfg.conditioning_subset, "last", generator, optimizer, 0)
     assert len(calls) == len(runtime.corpus.indices(cfg.conditioning_subset))
     assert generator.encoder[0].weight.grad.abs().sum() > 0
+
+
+@pytest.fixture
+def fake_wandb(monkeypatch):
+    module = SimpleNamespace(runs=[])
+
+    def init(**kwargs):
+        run = SimpleNamespace(
+            kwargs=kwargs,
+            summary={},
+            logs=[],
+            artifacts=[],
+            url=None,
+            exit_code=None,
+            metrics=[],
+        )
+        run.log = run.logs.append
+        run.define_metric = lambda *args, **kwargs: run.metrics.append((args, kwargs))
+        run.log_artifact = run.artifacts.append
+
+        def finish(exit_code=0):
+            run.exit_code = exit_code
+
+        run.finish = finish
+        module.runs.append(run)
+        return run
+
+    def artifact(name, type):  # noqa: A002 -- SDK signature
+        value = SimpleNamespace(name=name, type=type, files=[])
+        value.add_file = lambda path, name: value.files.append((path, name))
+        return value
+
+    module.init = init
+    module.Artifact = artifact
+    module.Table = SimpleNamespace
+    module.Image = lambda path: SimpleNamespace(path=path)
+    monkeypatch.setitem(sys.modules, "wandb", module)
+    return module
+
+
+def test_tracking_names_and_distinct_projects(tmp_path):
+    cfg = ExperimentConfig(bank_config=tmp_path / "bank.yaml")
+    job = {"kind": "heatmap", "condition": "last_mean", "stride": 20, "seeds": [42, 44]}
+    assert run_name(cfg, job) == (
+        "heatmap-math-00000-last_mean-stride20-bankseeds42+44-gseed42-ctx1-8"
+    )
+    assert "fresh_lora" in run_name(
+        cfg,
+        {
+            "kind": "adaptation",
+            "condition": "last",
+            "arm": "fresh_lora",
+        },
+    )
+    with pytest.raises(ValueError, match="different"):
+        WandbSettings(projects=dict.fromkeys(cfg.wandb.projects, "same"))
+    with pytest.raises(ValueError, match="each"):
+        WandbSettings(projects={"conditioning": "one"})
+
+
+def test_tracking_preserves_training_identity_and_failed_run_id(
+    synthetic_experiment,
+    fake_wandb,
+):
+    cfg, factory = synthetic_experiment
+    runtime = factory(cfg, BankConfig.load(cfg.bank_config))
+    job = {"kind": "conditioning", "condition": "last"}
+    identity = run_identity(cfg, runtime.bank, runtime.corpus, job)
+    assert "wandb" not in identity["configuration"]
+    cfg.wandb = WandbSettings(enabled=True, mode="online", name_prefix="trial-")
+    assert run_identity(cfg, runtime.bank, runtime.corpus, job) == identity
+    output = cfg.output_root / "tracking"
+    with (
+        pytest.raises(RuntimeError, match="training failure"),
+        ExperimentTracker(
+            cfg,
+            job,
+            output,
+            identity,
+        ),
+    ):
+        raise RuntimeError("training failure")
+    assert fake_wandb.runs[0].exit_code == 1
+    assert json.loads((output / "wandb.json").read_text())["status"] == "failed"
+    with ExperimentTracker(cfg, job, output, identity) as tracker:
+        tracker.training(5, {"train/drafter_loss": 0.5})
+    assert fake_wandb.runs[1].exit_code == 0
+    assert fake_wandb.runs[0].kwargs["id"] == fake_wandb.runs[1].kwargs["id"]
+    assert fake_wandb.runs[1].kwargs["resume"] == "allow"
+    assert fake_wandb.runs[1].logs[0]["optimizer_step"] == 5
+
+
+def test_completed_runs_backfill_without_retraining(
+    synthetic_experiment,
+    fake_wandb,
+    monkeypatch,
+):
+    cfg, _ = synthetic_experiment
+    original = workflow.conditioning(cfg)
+    cfg.wandb.enabled = True
+    monkeypatch.setattr(
+        workflow, "Runtime", lambda *args: pytest.fail("Reloaded model")
+    )
+    assert workflow.conditioning(cfg) == original
+    assert len(fake_wandb.runs) == 3
+    assert all(len(run.logs) == 2 for run in fake_wandb.runs)
+    assert all(not run.artifacts for run in fake_wandb.runs)
+    assert workflow.conditioning(cfg) == original
+    assert len(fake_wandb.runs) == 3
+
+
+def test_real_wandb_offline_smoke(tmp_path):
+    pytest.importorskip("wandb")
+    cfg = ExperimentConfig(
+        bank_config=tmp_path / "bank.yaml",
+        staging_dir=tmp_path / "local",
+        wandb={"enabled": True, "mode": "offline", "upload_artifacts": True},
+    )
+    output = tmp_path / "run"
+    with ExperimentTracker(
+        cfg, {"kind": "conditioning", "condition": "last"}, output, {"smoke": True}
+    ) as tracker:
+        tracker.training(1, {"train/drafter_loss": 0.25})
+        tracker.validation(
+            {
+                "score": 0.5,
+                "validation_examples": 100,
+                "contexts": {"1": {"full_acc_0": 0.5}},
+            },
+            1,
+            1,
+        )
+        write_json(output / "result.json", {"smoke": True})
+        tracker.artifact("offline-smoke", [output / "result.json"])
+        assert tracker.run.offline
+    assert json.loads((output / "wandb.json").read_text())["status"] == "finished"
+    assert list((cfg.staging_dir / "wandb").rglob("*.wandb"))
