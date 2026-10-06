@@ -120,3 +120,16 @@ def test_training_startup_stack_watchdog_stops_on_readiness_or_failure(
     else:
         assert cli.main(cfg) == "completed"
     assert calls == [60, "cancel"]
+
+
+@pytest.mark.parametrize("blocked", [False, True])
+def test_quiet_file_read_progress_only_logs_slow_reads(capsys, blocked):
+    with progress.stage_progress("Reading row=3", interval=0.01, quiet=True):
+        if blocked:
+            time.sleep(0.045)
+    output = capsys.readouterr().err
+    if blocked:
+        assert "Reading row=3: still running" in output
+        assert "Reading row=3: completed" in output
+    else:
+        assert not output

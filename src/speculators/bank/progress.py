@@ -28,16 +28,19 @@ def report(message: str):
 
 
 @contextmanager
-def stage_progress(label: str, interval: float = 10.0):
+def stage_progress(label: str, interval: float = 10.0, *, quiet: bool = False):
     """Report stages immediately and during blocking I/O, without root filters."""
     started = time.monotonic()
     stopped = threading.Event()
+    reported = threading.Event()
 
     def heartbeat():
         while not stopped.wait(interval):
+            reported.set()
             report(f"{label}: still running ({time.monotonic() - started:.1f}s)")
 
-    report(f"{label}: starting")
+    if not quiet:
+        report(f"{label}: starting")
     thread = threading.Thread(target=heartbeat, daemon=True)
     thread.start()
     outcome = "completed"
@@ -49,7 +52,8 @@ def stage_progress(label: str, interval: float = 10.0):
     finally:
         stopped.set()
         thread.join()
-        report(f"{label}: {outcome} ({time.monotonic() - started:.1f}s)")
+        if not quiet or reported.is_set() or outcome == "stopped":
+            report(f"{label}: {outcome} ({time.monotonic() - started:.1f}s)")
 
 
 class StartupWatchdog:

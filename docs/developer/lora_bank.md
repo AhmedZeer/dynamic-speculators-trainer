@@ -371,3 +371,16 @@ rotary alignment, run-identity checks, and provenance writes before vocabulary
 and model loading. If initialization has not reached the training loop within
 60 seconds, a one-time thread stack dump appears on stderr. It is cancelled
 when training becomes ready or initialization exits.
+
+Bank training reads individual hidden-state files into owned CPU memory through
+ordinary file reads, avoiding safetensors memory mappings of the Drive mount.
+This uses temporary memory for the current file rather than retaining a dataset
+cache. Reads taking more than 10 seconds identify their row and full path in
+periodic console messages. Read/deserialization failures include the file path.
+This applies to the standard file backend in bank training.
+
+Training subprocesses enable Python's fatal-error handler from process startup.
+A native crash such as `SIGBUS` prints the active thread stacks; the parent also
+identifies the failed subset and seed. A Drive mapping fault is one possible
+cause of `SIGBUS`; the signal alone does not identify the failing component.
+Rerun the same command to resume from the last committed recovery checkpoint.

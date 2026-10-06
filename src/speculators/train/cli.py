@@ -801,6 +801,16 @@ def _run_training(cfg: TrainConfig, startup_ready=None):  # noqa: C901
     # the mirror complete so nothing read here was dropped during resolution.
     transfer = backend_cls.from_train_args(args, args.data_path)
 
+    if bank_subset:
+        from hs_connectors import FileTransfer  # noqa: PLC0415
+        from speculators.bank.transfer import BankFileTransfer  # noqa: PLC0415
+
+        if type(transfer) is FileTransfer:
+            transfer = BankFileTransfer(transfer.hidden_states_path)
+            report(
+                "Bank hidden-state reads: buffered file I/O with slow-read diagnostics"
+            )
+
     with _bank_stage(
         cfg, "Loading saved training/validation data and building packed batches"
     ):

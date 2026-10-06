@@ -1,7 +1,9 @@
 """Prepare target data once and train independent subset/seed banks."""
 
 import json
+import os
 import random
+import signal
 import subprocess
 import sys
 import time
@@ -511,7 +513,19 @@ def train(cfg: BankConfig):
                 f"validation examples={len(subset['validation_indices'])}, output={run}"
             )
             started = time.monotonic()
-            subprocess.run(command, check=True)  # noqa: S603 -- argv, never a shell
+            env = {**os.environ, "PYTHONFAULTHANDLER": "1"}
+            try:
+                subprocess.run(command, check=True, env=env)  # noqa: S603
+            except subprocess.CalledProcessError as exc:
+                if exc.returncode < 0:
+                    name = signal.Signals(-exc.returncode).name
+                    report(
+                        f"Training subprocess terminated by {name}: "
+                        f"subset={subset['id']}, seed={seed}, output={run}. "
+                        "Check the fatal Python stack above for the failing operation. "
+                        "Rerunning resumes from the last committed recovery checkpoint."
+                    )
+                raise
             report(
                 f"Training run {run_number}/{total_runs} completed in "
                 f"{time.monotonic() - started:.1f}s: subset={subset['id']}, seed={seed}"
