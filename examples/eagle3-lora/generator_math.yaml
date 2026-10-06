@@ -12,7 +12,7 @@ dtype: bfloat16
 factor_cache_mib: 256
 wandb:
   enabled: true
-  mode: offline  # Set online to send metrics to your W&B account.
+  mode: online  # Set online to send metrics to your W&B account.
   entity: null
   group: null  # Uses the output directory name.
   name_prefix: ""
