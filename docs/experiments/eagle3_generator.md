@@ -115,6 +115,13 @@ are padded to multiples of 128 tokens; padding has document ID -1 and a false
 loss mask. This aligns cached draft KV segments with their sparse attention
 blocks. With this backend, `token_budget` must also be a multiple of 128.
 
+During training, generated factors are exposed to the drafter as differentiable
+leaf tensors. Each microbatch backpropagates independently and releases its
+attention graph. The accumulated factor gradients then backpropagate through
+the generator once per group. This preserves the shared adapter and weighted
+gradient while supporting compiled backward kernels that donate saved buffers;
+it requires neither `retain_graph=True` nor disabling donated buffers.
+
 ## Evaluation definition
 
 Evaluate on the existing 100 validation examples at context sizes **1, 4, 8**,
@@ -155,6 +162,8 @@ There is no full-activation prefetch cache or exhaustive payload/hash scan.
 
 Every run saves resolved configuration, selected source metadata, package/git
 provenance (`train_command.txt`, `speculators.patch`), recovery state, and results.
+Resuming refreshes the command/code provenance and archives previous attempts
+under `provenance/`; include that history when publishing a resumed run.
 Checkpoints are serialized locally and streamed to one replaceable recovery file
 in the run directory, rather than accumulating full generator snapshots.
 Reconstruction resumes at checkpointed update boundaries; drafter-loss training

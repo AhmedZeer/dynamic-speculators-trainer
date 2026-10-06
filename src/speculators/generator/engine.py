@@ -2,6 +2,7 @@
 
 import json
 import random
+import shutil
 import time
 from pathlib import Path
 
@@ -16,6 +17,8 @@ from speculators.generator.config import ExperimentConfig
 from speculators.generator.data import Corpus, FactorCache, atomic_torch_save, groups
 from speculators.generator.model import (
     LoRAGenerator,
+    backward_factors,
+    detached_factors,
     factor_loss,
     factor_parameters,
     install_adapters,
@@ -209,21 +212,25 @@ class Runtime:
                 if generator is not None
                 else None
             )
+            # Compiled attention backward may donate its saved buffers. Give
+            # each drafter microbatch an independent graph ending at adapter
+            # leaves, then backpropagate their total derivative through G once.
+            leaves = detached_factors(factors) if factors is not None else None
             token_total = sum(sum(self.corpus.rows[i]["loss_mask"][1:]) for i in cohort)
             if not token_total:
                 raise ValueError("Training cohort has no response tokens")
             total_loss = 0.0
-            for batch, last in self.corpus.microbatches(
+            for batch, _ in self.corpus.microbatches(
                 cohort, self.device, self.dtype, training=True
             ):
-                _, loss, _ = self.forward(batch, factors)
+                _, loss, _ = self.forward(batch, leaves)
                 if not torch.isfinite(loss):
                     raise ValueError("Non-finite drafter training loss")
                 weight = batch["loss_mask"].sum().item() / token_total
-                (loss * weight).backward(
-                    retain_graph=generator is not None and not last
-                )
+                (loss * weight).backward()
                 total_loss += loss.detach().item() * weight
+            if factors is not None:
+                backward_factors(factors, leaves)
             optimizer.step()
             if (
                 update == 1
@@ -266,8 +273,15 @@ def begin_run(path, identity):
     if (path / "result.json").exists():
         report(f"Skipping completed matching experiment: {path}")
         return False
-    if not (path / "train_command.txt").exists():
-        save_train_command(str(path))
+    if (path / "train_command.txt").exists():
+        archive = path / "provenance" / f"attempt-{time.time_ns()}"
+        archive.mkdir(parents=True)
+        for name in ("train_command.txt", "speculators.patch"):
+            if (path / name).exists():
+                shutil.copy2(path / name, archive / name)
+    # A restart may use a bug fix: record the code/command actually resumed,
+    # retaining earlier attempts so the full run can still be reproduced.
+    save_train_command(str(path))
     return True
 
 
@@ -329,8 +343,6 @@ def run_job(runtime, job, output):  # noqa: C901 -- recovery and two training sc
             atomic_torch_save(local_checkpoint, payload)
             pending = checkpoint.with_suffix(".pt.pending")
             # Streaming copy avoids an extra multi-GB serialization buffer.
-            import shutil  # noqa: PLC0415
-
             shutil.copyfile(local_checkpoint, pending)
             pending.replace(checkpoint)
             local_checkpoint.unlink()

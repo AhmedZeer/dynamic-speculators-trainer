@@ -159,6 +159,27 @@ def factor_parameters(paths, factors):
     }
 
 
+def detached_factors(factors):
+    """Leaf adapters collect per-microbatch gradients without retaining graphs."""
+    return {
+        name: tuple(value.detach().requires_grad_(True) for value in pair)
+        for name, pair in factors.items()
+    }
+
+
+def backward_factors(generated, leaves):
+    """Apply accumulated adapter derivatives to the generator exactly once."""
+    values, gradients = [], []
+    for name, pair in generated.items():
+        for value, leaf in zip(pair, leaves[name], strict=True):
+            if leaf.grad is not None:
+                values.append(value)
+                gradients.append(leaf.grad)
+    if not values:
+        raise ValueError("Drafter produced no gradients for generated LoRA factors")
+    torch.autograd.backward(values, gradients)
+
+
 def factor_loss(generated, target):
     """Equal weight for each saved A/B factor; no gauge alignment or conversion."""
     return torch.stack(

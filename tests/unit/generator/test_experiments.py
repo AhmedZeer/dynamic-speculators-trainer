@@ -30,6 +30,8 @@ from speculators.generator.engine import Runtime, begin_run, run_job
 from speculators.generator.model import (
     AdapterLinear,
     LoRAGenerator,
+    backward_factors,
+    detached_factors,
     factor_loss,
     factor_parameters,
     install_adapters,
@@ -138,6 +140,49 @@ def test_functional_adapters_preserve_base_and_backpropagate():
     assert all(not p.requires_grad for p in model.parameters())
 
 
+@pytest.mark.parametrize("compiled", [False, True])
+def test_factor_gradient_accumulation_matches_combined_loss(compiled):
+    torch.manual_seed(42)
+    reference = LoRAGenerator(
+        5, {"o_proj": (4, 4), "v_proj": (4, 4)}, 2, small_architecture()
+    )
+    for heads in reference.heads.values():
+        nn.init.normal_(heads["B"].weight, std=0.01)
+    accumulated = copy.deepcopy(reference)
+    summaries, lengths = torch.randn(3, 5), torch.tensor([3, 4, 5])
+    chunks = [(torch.randn(count, 4), torch.randn(count, 4)) for count in [2, 3]]
+    frozen_v, frozen_o = torch.randn(4, 4), torch.randn(4, 4)
+
+    def loss_fn(x, target, a_v, b_v, a_o, b_o):
+        hidden = x @ frozen_v.T + 2 * (x @ a_v.T) @ b_v.T
+        output = hidden @ frozen_o.T + 2 * (hidden @ a_o.T) @ b_o.T
+        return (output - target).square().mean()
+
+    expected_factors = reference(summaries, lengths)
+    combined = sum(
+        loss_fn(x, target, *expected_factors["v_proj"], *expected_factors["o_proj"])
+        * len(x)
+        / 5
+        for x, target in chunks
+    )
+    combined.backward()
+    generated = accumulated(summaries, lengths)
+    leaves = detached_factors(generated)
+    kernel = (
+        torch.compile(loss_fn, backend="aot_eager", fullgraph=True)
+        if compiled
+        else loss_fn
+    )
+    for x, target in chunks:
+        loss = kernel(x, target, *leaves["v_proj"], *leaves["o_proj"])
+        (loss * len(x) / 5).backward()
+    backward_factors(generated, leaves)
+    for expected, actual in zip(
+        reference.parameters(), accumulated.parameters(), strict=True
+    ):
+        torch.testing.assert_close(actual.grad, expected.grad, rtol=1e-5, atol=1e-6)
+
+
 def test_prompt_only_summaries_use_actual_frozen_normalization():
     model = SimpleNamespace(
         fc=nn.Linear(6, 2, bias=False),
@@ -223,6 +268,27 @@ def test_resume_rejects_changes_and_skips_completed(tmp_path):
     assert not begin_run(run, {"value": 1})
     with pytest.raises(ValueError, match="configuration changed"):
         begin_run(run, {"value": 2})
+
+
+def test_resume_records_new_provenance_and_preserves_previous_attempt(
+    tmp_path, monkeypatch
+):
+    attempts = iter(["old code", "new code"])
+
+    def save(path):
+        value = next(attempts)
+        (Path(path) / "train_command.txt").write_text(value)
+        (Path(path) / "speculators.patch").write_text(value)
+
+    monkeypatch.setattr("speculators.generator.engine.save_train_command", save)
+    run = tmp_path / "run"
+    assert begin_run(run, {"value": 1})
+    assert begin_run(run, {"value": 1})
+    assert (run / "train_command.txt").read_text() == "new code"
+    archive = list((run / "provenance").glob("attempt-*"))
+    assert len(archive) == 1
+    assert (archive[0] / "train_command.txt").read_text() == "old code"
+    assert (archive[0] / "speculators.patch").read_text() == "old code"
 
 
 @pytest.fixture
@@ -609,7 +675,7 @@ def test_fused_flex_generated_lora_matches_dense_forward_and_backward():
         )
     torch.testing.assert_close(flex_loss, dense_loss, rtol=0.02, atol=0.002)
     values = tuple(value for pair in factors.values() for value in pair)
-    flex_grads = torch.autograd.grad(flex_loss, values, retain_graph=True)
+    flex_grads = torch.autograd.grad(flex_loss, values)
     dense_grads = torch.autograd.grad(dense_loss, values)
     for actual, expected in zip(flex_grads, dense_grads, strict=True):
         assert torch.isfinite(actual).all()
@@ -633,3 +699,34 @@ def test_drafter_loss_updates_generator_and_preserves_frozen_weights(
     assert generator.heads["o_proj"]["B"].weight.abs().sum() > 0
     for key, value in runtime.drafter.state_dict().items():
         torch.testing.assert_close(value, before[key])
+
+
+def test_compiled_microbatch_training_never_retains_backward_graph(
+    synthetic_experiment, monkeypatch
+):
+    cfg, factory = synthetic_experiment
+    runtime = factory(cfg, BankConfig.load(cfg.bank_config))
+    cfg.context.min_examples = cfg.context.max_examples
+    generator = runtime.new_generator("last")
+    optimizer = torch.optim.AdamW(generator.parameters(), lr=0.01)
+    compiled_loss = torch.compile(
+        lambda value: value.sin().cos().square(), backend="aot_eager", fullgraph=True
+    )
+    original_forward, original_backward = runtime.forward, torch.Tensor.backward
+    calls = []
+
+    def forward(batch, factors):
+        assert all(value.is_leaf for pair in factors.values() for value in pair)
+        tokens, loss, metrics = original_forward(batch, factors)
+        return tokens, compiled_loss(loss), metrics
+
+    def backward(tensor, *args, **kwargs):
+        assert not kwargs.get("retain_graph", False)
+        calls.append(tensor)
+        return original_backward(tensor, *args, **kwargs)
+
+    monkeypatch.setattr(runtime, "forward", forward)
+    monkeypatch.setattr(torch.Tensor, "backward", backward)
+    runtime.train_epoch(cfg.conditioning_subset, "last", generator, optimizer, 0)
+    assert len(calls) == len(runtime.corpus.indices(cfg.conditioning_subset))
+    assert generator.encoder[0].weight.grad.abs().sum() > 0
