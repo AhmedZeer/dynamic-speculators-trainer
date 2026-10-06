@@ -35,7 +35,9 @@ lora:
   dropout: 0.05
   target_modules: [o_proj, v_proj]
 training:
-  seeds: [42, 43, 44]
+  # Already did the 42st seed.
+  # seeds: [42, 43, 44]
+  seeds: [43, 44]
   warmup_epochs: 1
   collect_epochs: 4
   warmup_lr: 0.0001
