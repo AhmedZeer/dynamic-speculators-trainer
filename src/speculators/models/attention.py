@@ -5,6 +5,7 @@ speculator architectures (EAGLE3, DFlash, etc.) to avoid code duplication.
 """
 
 from collections.abc import Callable
+from functools import lru_cache
 
 import torch
 from torch.nn.attention.flex_attention import (
@@ -15,6 +16,14 @@ from torch.nn.attention.flex_attention import (
     create_mask as _create_mask,
 )
 from transformers.modeling_utils import AttentionInterface
+
+FLEX_ATTENTION_BLOCK_SIZE = 128
+
+
+@lru_cache(maxsize=1)
+def _standalone_flex_attention():
+    """Fuse the kernel when its caller intentionally runs outside a compiled graph."""
+    return torch.compile(flex_attention, fullgraph=True, dynamic=True)
 
 
 def flex_attention_forward(
@@ -52,7 +61,14 @@ def flex_attention_forward(
     key = key.contiguous()
     value = value.contiguous()
 
-    flex_attention_output = flex_attention(
+    # A compiled model already captures flex_attention. An uncompiled CUDA
+    # caller (e.g. functional LoRA substitution) still needs a fused kernel.
+    attention = (
+        _standalone_flex_attention()
+        if query.is_cuda and not torch.compiler.is_compiling()
+        else flex_attention
+    )
+    flex_attention_output = attention(
         query,
         key,
         value,

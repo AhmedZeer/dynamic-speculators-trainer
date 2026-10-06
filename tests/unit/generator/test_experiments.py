@@ -36,6 +36,7 @@ from speculators.generator.model import (
 )
 from speculators.losses import resolve_loss_config
 from speculators.models.eagle3 import Eagle3DraftModel, Eagle3SpeculatorConfig
+from speculators.models.eagle3.attention import extend_mask_for_draft_tokens
 from speculators.train.utils import normalize_counted_metrics
 
 
@@ -50,15 +51,15 @@ def small_architecture():
     )
 
 
-def tiny_drafter():
+def tiny_drafter(hidden_size=8, backend="eager"):
     config = Eagle3SpeculatorConfig(
         transformer_layer_config=Qwen3Config(
-            hidden_size=8,
+            hidden_size=hidden_size,
             num_hidden_layers=1,
             num_attention_heads=2,
             num_key_value_heads=1,
-            head_dim=4,
-            intermediate_size=16,
+            head_dim=hidden_size // 2,
+            intermediate_size=2 * hidden_size,
             vocab_size=16,
             max_position_embeddings=64,
             attn_implementation="eager",
@@ -66,7 +67,7 @@ def tiny_drafter():
         draft_vocab_size=16,
         eagle_aux_hidden_state_layer_ids=[2, 18, 33],
     )
-    config.transformer_layer_config._attn_implementation = "eager"
+    config.transformer_layer_config._attn_implementation = backend
     model = Eagle3DraftModel(config)
     with torch.no_grad():
         model.embed_tokens.weight.normal_(std=0.2)
@@ -299,7 +300,11 @@ def synthetic_experiment(tmp_path, monkeypatch):
                 path / "entry.json",
                 {"collection_step": step, "global_step": 100 + step},
             )
-    bank = BankConfig(output_root=root, lora={"rank": 2, "alpha": 4, "dropout": 0})
+    bank = BankConfig(
+        output_root=root,
+        lora={"rank": 2, "alpha": 4, "dropout": 0},
+        execution={"draft_attn_impl": "eager"},
+    )
     bank_path = tmp_path / "bank.yaml"
     bank_path.write_text(yaml.safe_dump(bank.model_dump(mode="json")))
     cfg = ExperimentConfig(
@@ -497,6 +502,123 @@ def test_token_microbatching_keeps_every_example(synthetic_experiment):
         sum(runtime.corpus.rows[i]["loss_mask"]) for i in indices
     )
     assert [last for _, last in batches] == [False] * (len(indices) - 1) + [True]
+
+
+def test_flex_microbatch_padding_matches_all_draft_mask_lengths(
+    synthetic_experiment, monkeypatch
+):
+    cfg, factory = synthetic_experiment
+    runtime = factory(cfg, BankConfig.load(cfg.bank_config))
+    runtime.bank.execution.draft_attn_impl = "simple_flex_attention"
+    cfg.optimization.token_budget = 8192
+    # Reproduce the reported q_len=1782 after EAGLE3's one-token shift.
+    rows = runtime.corpus.rows.to_list()
+    index = runtime.corpus.indices(cfg.conditioning_subset)[0]
+    rows[index] = {
+        "seq_len": 1783,
+        "prompt_length": 2,
+        "input_ids": [1] * 1783,
+        "loss_mask": [0, 0] + [1] * 1781,
+    }
+    runtime.corpus.rows = Dataset.from_list(rows)
+    monkeypatch.setattr(
+        runtime.corpus.transfer,
+        "get_cached",
+        lambda _: {
+            "token_ids": torch.ones(1783, dtype=torch.long),
+            "hidden_states": torch.randn(1783, 4, 8),
+        },
+    )
+    batch, last = next(runtime.corpus.microbatches([index], "cpu", torch.float32))
+    assert last
+    assert batch["input_ids"].shape == (1, 1792)
+    assert batch["loss_mask"].sum() == 1781
+    assert not batch["loss_mask"][0, 1782:].any()
+    assert (batch["document_ids"][0, 1782:] == -1).all()
+    assert (batch["hidden_states"][0, 1782:] == 0).all()
+    flex = tiny_drafter(backend="simple_flex_attention")
+    mask = flex._build_attn_mask(batch["document_ids"][0], 1792, "cpu")
+    for step in range(3):
+        assert mask.shape[-2:] == (1792, 1792 * (step + 1))
+        mask = extend_mask_for_draft_tokens(mask)
+    cfg.optimization.token_budget = 1782
+    with pytest.raises(ValueError, match="multiple of 128"):
+        next(runtime.corpus.microbatches([index], "cpu", torch.float32))
+
+
+def test_nonrecursive_disable_allows_nested_kernel_compilation():
+    compiled_graphs = []
+
+    def backend(graph, inputs):
+        compiled_graphs.append(graph)
+        return graph.forward
+
+    kernel = torch.compile(lambda x: x.sin(), backend=backend, fullgraph=True)
+
+    @torch.compiler.disable(recursive=False)
+    def model(x):
+        return kernel(x)
+
+    x = torch.randn(4, requires_grad=True)
+    model(x).sum().backward()
+    assert compiled_graphs
+    torch.testing.assert_close(x.grad, x.detach().cos())
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+def test_fused_flex_generated_lora_matches_dense_forward_and_backward():
+    torch.manual_seed(42)
+    flex = tiny_drafter(32, "simple_flex_attention").cuda().to(torch.bfloat16)
+    dense = tiny_drafter(32).cuda().to(torch.bfloat16)
+    dense.load_state_dict(flex.state_dict())
+    paths = install_adapters(flex, 2, 4, 0)
+    install_adapters(dense, 2, 4, 0)
+    flex.requires_grad_(False)
+    dense.requires_grad_(False)
+    for model in (flex, dense):
+        forward = type(model).forward
+        forward = getattr(forward, "_torchdynamo_orig_callable", forward)
+        model.forward = torch.compiler.disable(forward.__get__(model), recursive=False)
+    generator = LoRAGenerator(
+        5, {"o_proj": (32, 32), "v_proj": (64, 16)}, 2, small_architecture()
+    ).cuda()
+    for heads in generator.heads.values():
+        nn.init.normal_(heads["B"].weight, std=0.01)
+    factors = generator(
+        torch.randn(2, 5, device="cuda"), torch.tensor([4, 5], device="cuda")
+    )
+    batch = {
+        "hidden_states": torch.randn(1, 256, 96, device="cuda", dtype=torch.bfloat16),
+        "verifier_last_hidden_states": torch.randn(
+            1, 256, 32, device="cuda", dtype=torch.bfloat16
+        ),
+        "input_ids": torch.randint(0, 16, (1, 256), device="cuda"),
+        "document_ids": torch.zeros(1, 256, dtype=torch.long, device="cuda"),
+        "loss_mask": torch.zeros(1, 256, dtype=torch.bool, device="cuda"),
+        "ttt_steps": 3,
+        "loss_config": resolve_loss_config("kl_div", "eager"),
+    }
+    batch["document_ids"][:, 131:] = -1
+    batch["loss_mask"][:, 4:131] = True
+    with torch.autocast("cuda", dtype=torch.bfloat16):
+        _, flex_loss, flex_metrics = functional_call(
+            flex, factor_parameters(paths, factors), (), batch
+        )
+        _, dense_loss, dense_metrics = functional_call(
+            dense, factor_parameters(paths, factors), (), batch
+        )
+    torch.testing.assert_close(flex_loss, dense_loss, rtol=0.02, atol=0.002)
+    values = tuple(value for pair in factors.values() for value in pair)
+    flex_grads = torch.autograd.grad(flex_loss, values, retain_graph=True)
+    dense_grads = torch.autograd.grad(dense_loss, values)
+    for actual, expected in zip(flex_grads, dense_grads, strict=True):
+        assert torch.isfinite(actual).all()
+        torch.testing.assert_close(actual, expected, rtol=0.05, atol=0.002)
+    for step in range(3):
+        torch.testing.assert_close(
+            flex_metrics[f"full_acc_{step}_total"],
+            dense_metrics[f"full_acc_{step}_total"],
+        )
 
 
 def test_drafter_loss_updates_generator_and_preserves_frozen_weights(

@@ -12,6 +12,7 @@ from speculators.bank.artifacts import digest, load_subset, write_json
 from speculators.bank.progress import report, stage_progress
 from speculators.bank.transfer import BankFileTransfer
 from speculators.generator.config import CONDITIONS
+from speculators.models.attention import FLEX_ATTENTION_BLOCK_SIZE
 from speculators.models.eagle3.data import shift_batch
 from speculators.train.data import CollateFn
 
@@ -163,9 +164,20 @@ class Corpus:
             self.summaries["lengths"][locations].to(device),
         )
 
+    def attention_block_size(self):
+        if self.bank.execution.draft_attn_impl != "simple_flex_attention":
+            return 1
+        if self.cfg.optimization.token_budget % FLEX_ATTENTION_BLOCK_SIZE:
+            raise ValueError(
+                "FlexAttention token_budget must be a multiple of "
+                f"{FLEX_ATTENTION_BLOCK_SIZE}"
+            )
+        return FLEX_ATTENTION_BLOCK_SIZE
+
     def microbatches(self, indices, device, dtype, training=False):
         chunks, current, length = [], [], 0
         budget = self.cfg.optimization.token_budget
+        block_size = self.attention_block_size()
         for index in indices:
             size = self.rows[index]["seq_len"] - 1
             if size < 1 or size > budget:
@@ -196,6 +208,9 @@ class Corpus:
                 }
                 samples.append(shift_batch(sample))
             total = sum(len(s["input_ids"]) for s in samples)
+            # Draft KV segments are concatenated at each TTT step. Their
+            # starts must align to blocks for extend_mask_for_draft_tokens.
+            total = (total + block_size - 1) // block_size * block_size
             width = samples[0]["verifier_last_hidden_states"].shape[-1]
             batch = CollateFn(total, width, dtype=dtype)(samples)
             batch = {

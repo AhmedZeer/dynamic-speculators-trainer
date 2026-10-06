@@ -102,14 +102,18 @@ Output heads start with zero weights, random ordinary LoRA A biases, and zero B
 biases, so a fresh generator initially preserves the base drafter. Functional
 parameter substitution preserves gradients into the generator. Alpha/rank
 scaling is applied inside the drafter, and only the generator or ordinary LoRA
-parameters are optimized. EAGLE3 uses the configured attention backend;
-whole-model torch compilation is disabled for functional factor substitution.
+parameters are optimized. EAGLE3 uses the configured attention backend.
+The model forward runs outside compilation for functional factor substitution;
+the CUDA FlexAttention kernel is compiled separately to preserve fusion.
 
 Only prompt states before `prompt_length` condition the generator. Cached final
 target states and the frozen target norm/head supply response training signals.
 The full target decoder is not instantiated. A conditioning group shares one
 adapter across token-budget microbatches, with loss weighted by supervised
-response-token counts before one optimizer update.
+response-token counts before one optimizer update. FlexAttention microbatches
+are padded to multiples of 128 tokens; padding has document ID -1 and a false
+loss mask. This aligns cached draft KV segments with their sparse attention
+blocks. With this backend, `token_budget` must also be a multiple of 128.
 
 ## Evaluation definition
 

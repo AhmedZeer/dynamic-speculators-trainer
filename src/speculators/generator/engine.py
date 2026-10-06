@@ -79,11 +79,17 @@ class Runtime:
             "ttt_step_loss_decay": bank.training.ttt_step_loss_decay,
             "loss_config": resolve_loss_config(bank.training.loss_fn),
         }
-        # The base forward is decorated with torch.compile on CUDA. Disable its
-        # graph capture for functional parameter substitution in this first version.
+        # Keep functional parameter substitution outside the model graph while
+        # allowing standalone attention kernels to compile and retain fusion.
         forward = type(self.drafter).forward
         forward = getattr(forward, "_torchdynamo_orig_callable", forward)
-        self.drafter.forward = torch.compiler.disable(forward.__get__(self.drafter))
+        self.drafter.forward = torch.compiler.disable(
+            forward.__get__(self.drafter), recursive=False
+        )
+        report(
+            f"Generator drafter backend={bank.execution.draft_attn_impl}; "
+            "model forward uncompiled, CUDA FlexAttention kernel compiled separately"
+        )
 
     def new_generator(self, condition):
         torch.manual_seed(self.cfg.seed)
