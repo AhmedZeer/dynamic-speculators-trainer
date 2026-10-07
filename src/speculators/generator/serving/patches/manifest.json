@@ -24,12 +24,15 @@
     },
     "vllm/v1/worker/gpu_model_runner.py": {
       "before_sha256": "bb903dffcb5a6e5b8a477daf0854b3812e135349d61fc20c6133f91cd3c9752a",
-      "after_sha256": "c73a68cc6c470f6cac9c694e054d37e1dc03551dedbb7a6b713ea5413e418d86",
+      "after_sha256": "6fcf11ceeb0d96d0ef17b563af87529aa3641c7db1c702868da53003dfd2f522",
       "replacements": [
         [
           "        # Remove finished requests from the cached states.\n",
-          "        if self.drafter is not None and hasattr(self.drafter, \"on_requests_finished\"):\n            self.drafter.on_requests_finished(scheduler_output.finished_req_ids)\n\n        # Remove finished requests from the cached states.\n"
+          "        drafter = getattr(self, \"drafter\", None)\n        if drafter is not None and hasattr(drafter, \"on_requests_finished\"):\n            drafter.on_requests_finished(scheduler_output.finished_req_ids)\n\n        # Remove finished requests from the cached states.\n"
         ]
+      ],
+      "previous_sha256": [
+        "c73a68cc6c470f6cac9c694e054d37e1dc03551dedbb7a6b713ea5413e418d86"
       ]
     }
   }

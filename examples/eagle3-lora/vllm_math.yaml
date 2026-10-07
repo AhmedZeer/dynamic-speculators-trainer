@@ -1,7 +1,7 @@
 # Paths are relative to this YAML unless absolute. Export the four completed
 # adaptation arms first; see docs/experiments/eagle3_generator_vllm.md.
 bank_config: bank_math.yaml
-output_root: /content/drive/MyDrive/dynamic-speculators-v3/output/generator-vllm-math-v1-runner
+output_root: /content/drive/MyDrive/dynamic-speculators-v3/output/generator-vllm-math-v1-runner-fixed
 staging_dir: /tmp/speculators-serving
 subset: math-00001
 bundles:

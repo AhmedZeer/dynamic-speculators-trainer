@@ -74,6 +74,10 @@ python scripts/apply_vllm_generator_patch.py --check
 
 The utility checks the complete original source-file hashes before any writes,
 backs up the three modified files, and recognizes an already applied patch.
+If `--check` reports `outdated`, stop existing vLLM processes and run `--apply`
+again. The installer recognizes the earlier patch by its exact checksums,
+upgrades it using the verified original backups, and keeps those backups for
+reversion. A failed upgrade restores the previously installed patch.
 Unknown sources or a partially modified installation are rejected. A custom
 build reporting `0.31.0` but containing different sources is not supported.
 `--vllm-root` can explicitly select the directory containing `vllm/`.
@@ -171,7 +175,7 @@ token sequence establishes equality for these measured requests; a permissive
 result does not establish lossless decoding. Investigate mismatches before
 claiming equivalent-output speedups. Checks also run on reused completed arms.
 
-The permissive example uses `generator-vllm-math-v1-runner` as its output
+The permissive example uses `generator-vllm-math-v1-runner-fixed` as its output
 directory to preserve earlier strict runs. After updating benchmark code or
 measurement settings, use a fresh output directory as required by the resume
 identity check; do not delete prior results to bypass that check.

@@ -377,6 +377,82 @@ def test_patch_check_apply_revert_and_refusal(tmp_path, monkeypatch):
         patch.patch_sources("check", tmp_path, version="0.32.0")
 
 
+def test_patch_upgrade_preserves_original_backup_and_rolls_back_failure(
+    tmp_path, monkeypatch
+):
+    patch_dir = tmp_path / "patch"
+    patch_dir.mkdir()
+    source = tmp_path / "vllm/a.py"
+    source.parent.mkdir()
+    source.write_text("value = 1\n")
+    record = {
+        "before_sha256": file_digest(source),
+        "after_sha256": hashlib.sha256(b"value = 2\n").hexdigest(),
+        "replacements": [["value = 1", "value = 2"]],
+    }
+    manifest = {"files": {"vllm/a.py": record}}
+    write_json(patch_dir / "manifest.json", manifest)
+    monkeypatch.setattr(patch, "PATCH_DIR", patch_dir)
+    patch.patch_sources("apply", tmp_path, version="0.31.0")
+    record["previous_sha256"] = [record["after_sha256"]]
+    record["after_sha256"] = hashlib.sha256(b"value = 3\n").hexdigest()
+    record["replacements"] = [["value = 1", "value = 3"]]
+    write_json(patch_dir / "manifest.json", manifest)
+    assert (
+        patch.patch_sources("check", tmp_path, version="0.31.0")["state"] == "outdated"
+    )
+    original_write = patch.atomic_write
+    calls = []
+
+    def interrupted(path, text):
+        original_write(path, text)
+        calls.append(path)
+        if len(calls) == 1:
+            raise OSError("interrupted upgrade")
+
+    monkeypatch.setattr(patch, "atomic_write", interrupted)
+    with pytest.raises(OSError, match="interrupted"):
+        patch.patch_sources("apply", tmp_path, version="0.31.0")
+    assert source.read_text() == "value = 2\n"
+    assert (tmp_path / patch.BACKUP_NAME / "vllm/a.py").read_text() == "value = 1\n"
+    monkeypatch.setattr(patch, "atomic_write", original_write)
+    patch.patch_sources("apply", tmp_path, version="0.31.0")
+    assert source.read_text() == "value = 3\n"
+    assert (
+        patch.patch_sources("check", tmp_path, version="0.31.0")["state"] == "patched"
+    )
+    patch.patch_sources("revert", tmp_path, version="0.31.0")
+    assert source.read_text() == "value = 1\n"
+
+
+def test_lifecycle_hook_handles_target_only_and_delivers_finished_ids():
+    manifest = json.loads((patch.PATCH_DIR / "manifest.json").read_text())
+    hook = manifest["files"]["vllm/v1/worker/gpu_model_runner.py"]["replacements"][0][1]
+    namespace = {}
+    source = (
+        "def update(self, scheduler_output):\n"
+        + hook.split("        # Remove finished")[0]
+    )
+    exec(compile(source, "patched_runner.py", "exec"), namespace)  # noqa: S102
+    output = SimpleNamespace(finished_req_ids={"finished", "cancelled"})
+    for runner in (
+        SimpleNamespace(),
+        SimpleNamespace(drafter=None),
+        SimpleNamespace(drafter=object()),
+    ):
+        namespace["update"](runner, output)
+    received = []
+    namespace["update"](
+        SimpleNamespace(
+            drafter=SimpleNamespace(
+                on_requests_finished=received.append
+            )
+        ),
+        output,
+    )
+    assert received == [output.finished_req_ids]
+
+
 def test_prompt_boundaries_without_hidden_state_loading(tmp_path):
     Dataset.from_list([{"input_ids": [1, 2, 3, 4], "prompt_length": 2}]).save_to_disk(
         tmp_path / "rows"

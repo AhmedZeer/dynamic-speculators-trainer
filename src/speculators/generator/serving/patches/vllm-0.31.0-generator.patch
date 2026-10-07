@@ -51,12 +51,13 @@
 +                self.draft_adapter.finish(request_id)
 --- a/vllm/v1/worker/gpu_model_runner.py
 +++ b/vllm/v1/worker/gpu_model_runner.py
-@@ -1199,6 +1199,9 @@
+@@ -1199,6 +1199,10 @@
          The SamplingMetadata is updated and copied to the GPU if there is a
          new/resumed/paused/finished request in the batch.
          """
-+        if self.drafter is not None and hasattr(self.drafter, "on_requests_finished"):
-+            self.drafter.on_requests_finished(scheduler_output.finished_req_ids)
++        drafter = getattr(self, "drafter", None)
++        if drafter is not None and hasattr(drafter, "on_requests_finished"):
++            drafter.on_requests_finished(scheduler_output.finished_req_ids)
 +
          # Remove finished requests from the cached states.
          for req_id in scheduler_output.finished_req_ids:
