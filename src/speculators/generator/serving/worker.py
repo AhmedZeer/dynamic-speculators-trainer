@@ -1,6 +1,7 @@
 """One vLLM instance per benchmark arm, with explicit request-end RPC cleanup."""
 
 import json
+import os
 import shlex
 import sys
 import time
@@ -26,6 +27,20 @@ def reset_memory(worker):
     if torch.cuda.is_available():
         torch.cuda.synchronize()
         torch.cuda.reset_peak_memory_stats()
+
+
+def runtime_info(worker):
+    runner = worker.model_runner
+    drafter = getattr(runner, "drafter", None)
+    return {
+        "runner_class": f"{type(runner).__module__}.{type(runner).__qualname__}",
+        "use_v2_model_runner": getattr(worker, "use_v2_model_runner", False),
+        "drafter_class": f"{type(drafter).__module__}.{type(drafter).__qualname__}"
+        if drafter is not None
+        else None,
+        "adapter_controller_present": getattr(drafter, "draft_adapter", None)
+        is not None,
+    }
 
 
 def adapter_stats(worker, request_id):
@@ -57,6 +72,8 @@ def adapter_stats(worker, request_id):
 
 
 def run_worker(job, *, llm_type=None, sampling_type=None):
+    # Must precede importing vLLM: the V2 default bypasses the patched proposer.
+    os.environ["VLLM_USE_V2_MODEL_RUNNER"] = "0"
     if llm_type is None:
         import vllm  # noqa: PLC0415
 
@@ -71,6 +88,7 @@ def run_worker(job, *, llm_type=None, sampling_type=None):
         "\n".join(
             [
                 f"# vLLM {VLLM_VERSION}; source commit {VLLM_COMMIT}",
+                "# VLLM_USE_V2_MODEL_RUNNER=0 (required for all matched arms)",
                 *package_versions(),
                 shlex.join(sys.argv),
                 "# LLM constructor arguments:",
@@ -83,6 +101,21 @@ def run_worker(job, *, llm_type=None, sampling_type=None):
         output / "vllm.patch", (PATCH_DIR / "vllm-0.31.0-generator.patch").read_text()
     )
     llm = llm_type(**job["llm_args"])
+    runtime = llm.collective_rpc(runtime_info)
+    write_json(output / "runtime.json", runtime)
+    adapter_arm = job["arm"] not in ("target_only", "eagle3_base")
+    if (
+        len(runtime) != 1
+        or runtime[0]["use_v2_model_runner"]
+        or (adapter_arm and not runtime[0]["adapter_controller_present"])
+    ):
+        failure = {"arm": job["arm"], "stage": "startup", "runtime": runtime}
+        write_json(output / "adapter_failure.json", failure)
+        raise RuntimeError(
+            f"Benchmark requires V1 model runner and an installed adapter controller "
+            f"for adapter arms; got {runtime}; see {output / 'adapter_failure.json'}"
+        )
+    report(f"arm={job['arm']} runtime ready: {runtime[0]}")
     prompts = job["prompts"]
 
     def generate(prompt):
@@ -109,7 +142,6 @@ def run_worker(job, *, llm_type=None, sampling_type=None):
                 raise ValueError("Benchmark requires one GPU worker")
             stats = statistics[0]
             expected = int(job["arm"].endswith("generator"))
-            adapter_arm = job["arm"] not in ("target_only", "eagle3_base")
             if stats["generator_invocations"] != expected or (
                 adapter_arm and not stats.get("adapter_record_found", False)
             ):

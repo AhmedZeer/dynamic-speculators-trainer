@@ -119,6 +119,14 @@ projection shapes, normalization flags, and pinned model revisions. Larger
 context groups, concurrent serving, CUDA graphs, and quantized merging remain
 future work.
 
+The patch hooks the **V1 model runner**, not vLLM 0.31.0's default V2 runner.
+Every benchmark subprocess sets `VLLM_USE_V2_MODEL_RUNNER=0` before importing
+vLLM, including target-only and base EAGLE3 arms. This makes the runner consistent
+across the comparison. For a custom launcher, set this environment variable
+before starting Python. Each arm saves `runtime.json` with the actual runner,
+proposer class, and controller presence. Startup rejects V2 or a missing adapter
+controller before sending any warmup or measured requests.
+
 The generator stays resident on the GPU. Its generation and merge workspace are
 exercised during memory profiling before KV-cache sizing. A worker RPC restores
 the adapter after each request and returns timings; cancellation cleanup also
@@ -163,7 +171,7 @@ token sequence establishes equality for these measured requests; a permissive
 result does not establish lossless decoding. Investigate mismatches before
 claiming equivalent-output speedups. Checks also run on reused completed arms.
 
-The permissive example uses `generator-vllm-math-exploratory-v2` as its output
+The permissive example uses `generator-vllm-math-v1-runner` as its output
 directory to preserve earlier strict runs. After updating benchmark code or
 measurement settings, use a fresh output directory as required by the resume
 identity check; do not delete prior results to bypass that check.

@@ -2,6 +2,7 @@
 
 import csv
 import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -470,6 +471,7 @@ def benchmark(cfg, *, smoke=False):  # noqa: C901 -- serial arm orchestration an
             arm: value["weights_sha256"] for arm, value in bundles.items()
         },
         "vllm_commit": VLLM_COMMIT,
+        "runtime_environment": {"VLLM_USE_V2_MODEL_RUNNER": "0"},
         "source_git_sha": git_sha(source_root),
         "source_patch_digest": digest(git_diff(source_root)),
     }
@@ -552,7 +554,11 @@ def benchmark(cfg, *, smoke=False):  # noqa: C901 -- serial arm orchestration an
             with stage_progress(
                 f"Benchmark arm={arm}; requests={len(prompts) * cfg.repetitions}"
             ):
-                subprocess.run(command, check=True)  # noqa: S603 -- argv only
+                subprocess.run(  # noqa: S603 -- argv only
+                    command,
+                    check=True,
+                    env={**os.environ, "VLLM_USE_V2_MODEL_RUNNER": "0"},
+                )
             result = json.loads(result_path.read_text())
         record_output_comparison(
             cfg, arm, results.get("target_only"), result, destination

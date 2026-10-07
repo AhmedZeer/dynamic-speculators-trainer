@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -32,7 +33,7 @@ from speculators.generator.serving.controller import (
     DraftAdapterController,
     validate_runtime,
 )
-from speculators.generator.serving.worker import adapter_stats, run_worker
+from speculators.generator.serving.worker import adapter_stats, run_worker, runtime_info
 
 SHAPES = {"o_proj": [4, 4], "v_proj": [8, 2]}
 
@@ -312,6 +313,10 @@ def test_runtime_rejects_unsupported_settings_and_revision(tmp_path):
     metadata, _ = write_bundle(tmp_path / "bundle")
     config = valid_config(metadata)
     validate_runtime(config, metadata)
+    config.use_v2_model_runner = True
+    with pytest.raises(ValueError, match="V1 model runner"):
+        validate_runtime(config, metadata)
+    config.use_v2_model_runner = False
     assert (
         config.speculative_config.draft_model_config.hf_config.eagle_aux_hidden_state_layer_ids
         == [2, 18, 33]
@@ -447,6 +452,10 @@ def test_worker_warmup_cleanup_and_output_comparison(tmp_path):
             return []
 
         def collective_rpc(self, method, args=()):
+            if method.__name__ == "runtime_info":
+                return [
+                    {"use_v2_model_runner": False, "adapter_controller_present": False}
+                ]
             if method.__name__ == "adapter_stats":
                 return [{"peak_gpu_allocated_bytes": 1, "generator_invocations": 0}]
             return [None]
@@ -525,6 +534,46 @@ def test_generator_worker_uses_internal_id_stats_and_preserves_execution_guard(
         assert result["requests"][0]["request_id"] == "2-abcd1234"
         assert result["requests"][0]["external_request_id"] == "2"
         assert controller.active is None
+
+
+@pytest.mark.parametrize("v2", [False, True])
+def test_worker_pins_v1_and_rejects_missing_controller_before_requests(
+    tmp_path, monkeypatch, v2
+):
+    monkeypatch.setenv("VLLM_USE_V2_MODEL_RUNNER", "1")
+    worker = SimpleNamespace(
+        use_v2_model_runner=v2,
+        model_runner=SimpleNamespace(drafter=None),
+    )
+
+    class LLM:
+        def __init__(self, **kwargs):
+            assert os.environ["VLLM_USE_V2_MODEL_RUNNER"] == "0"
+
+        def collective_rpc(self, method, args=()):
+            return [method(worker, *args)]
+
+        def generate(self, *args, **kwargs):
+            pytest.fail("Unsupported runtime must fail before inference")
+
+    job = {
+        "arm": "fresh_lora",
+        "llm_args": {},
+        "output": str(tmp_path),
+        "prompts": [],
+        "warmups": 0,
+        "repetitions": 1,
+        "seed": 42,
+    }
+    with pytest.raises(RuntimeError, match="requires V1 model runner"):
+        run_worker(job, llm_type=LLM, sampling_type=lambda **kw: kw)
+    failure = json.loads((tmp_path / "adapter_failure.json").read_text())
+    assert failure["stage"] == "startup"
+    assert failure["runtime"][0]["use_v2_model_runner"] == v2
+    assert failure["runtime"][0]["adapter_controller_present"] is False
+    assert (tmp_path / "runtime.json").exists()
+    assert "VLLM_USE_V2_MODEL_RUNNER=0" in (tmp_path / "vllm_command.txt").read_text()
+    assert runtime_info(worker)["drafter_class"] is None
 
 
 def test_generator_remains_fp32_under_vllm_default_dtype(tmp_path):
@@ -641,6 +690,7 @@ def test_serial_benchmark_smoke_resume_and_output_guard(tmp_path, monkeypatch, p
 
     def worker(command, **kwargs):
         assert kwargs["check"] is True
+        assert kwargs["env"]["VLLM_USE_V2_MODEL_RUNNER"] == "0"
         job = json.loads(Path(command[-1]).read_text())
         jobs.append(job)
         args = job["llm_args"]

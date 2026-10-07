@@ -41,6 +41,7 @@ def validate_runtime(config, metadata):
     scheduler = config.scheduler_config
     parallel = config.parallel_config
     checks = {
+        "V1 model runner": not getattr(config, "use_v2_model_runner", False),
         "method=eagle3": spec.method == "eagle3",
         "one active sequence": scheduler.max_num_seqs == 1,
         "unchunked prefill": not scheduler.enable_chunked_prefill,
