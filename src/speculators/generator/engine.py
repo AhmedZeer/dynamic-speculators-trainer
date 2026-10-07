@@ -35,7 +35,20 @@ def clip_gradients(optimizer, max_norm):
     norm = torch.nn.utils.clip_grad_norm_(
         parameters, max_norm, error_if_nonfinite=True
     ).item()
-    return {"train/grad_norm": norm, "train/gradient_clipped": float(norm > max_norm)}
+    count = sum(p.numel() for p in parameters if p.grad is not None)
+    return {
+        "train/grad_norm": norm,
+        "train/gradient_clipped": float(norm > max_norm),
+        "train/clip_scale": min(1.0, max_norm / (norm + 1e-6)),
+        "train/grad_rms": norm / max(count, 1) ** 0.5,
+    }
+
+
+def set_learning_rate(optimizer, cfg, step):
+    warmup = cfg.optimization.warmup_updates
+    scale = min(step / warmup, 1.0) if warmup else 1.0
+    for group in optimizer.param_groups:
+        group["lr"] = cfg.optimization.lr * scale
 
 
 class Runtime:
@@ -224,6 +237,8 @@ class Runtime:
         )
         started = time.monotonic()
         for update, cohort in enumerate(cohorts, 1):
+            update_started = time.monotonic()
+            set_learning_rate(optimizer, self.cfg, optimizer_step + update)
             torch.manual_seed(self.cfg.seed + 100000 * (epoch + 1) + update)
             optimizer.zero_grad(set_to_none=True)
             factors = (
@@ -239,9 +254,11 @@ class Runtime:
             if not token_total:
                 raise ValueError("Training cohort has no response tokens")
             total_loss = 0.0
+            data_seconds = 0.0
             for batch, _ in self.corpus.microbatches(
                 cohort, self.device, self.dtype, training=True
             ):
+                data_seconds += self.corpus.last_batch_data_seconds
                 _, loss, _ = self.forward(batch, leaves)
                 if not torch.isfinite(loss):
                     raise ValueError("Non-finite drafter training loss")
@@ -263,6 +280,13 @@ class Runtime:
                         "train/epoch": epoch + 1,
                         "train/context_examples": len(cohort),
                         "train/response_tokens": token_total,
+                        "train/data_wait_seconds": data_seconds,
+                        "train/update_seconds": time.monotonic() - update_started,
+                        "train/activation_cache_hits": self.corpus.activations.hits,
+                        "train/activation_cache_misses": self.corpus.activations.misses,
+                        "train/activation_cache_bypasses": (
+                            self.corpus.activations.bypasses
+                        ),
                         **gradient_metrics,
                     },
                     final=update == len(cohorts),
@@ -275,6 +299,9 @@ class Runtime:
                 report(
                     f"Epoch {epoch + 1}: update={update}/{len(cohorts)}, "
                     f"loss={total_loss:.6f}, examples={len(cohort)}, "
+                    f"data wait/preparation={data_seconds:.2f}s, "
+                    f"grad norm={gradient_metrics['train/grad_norm']:.3f}, "
+                    f"lr={optimizer.param_groups[0]['lr']:.3g}, "
                     f"elapsed={time.monotonic() - started:.1f}s"
                 )
         return len(cohorts)
@@ -288,8 +315,13 @@ def run_identity(cfg, bank, corpus, job):
         "factor_cache_mib",
         "wandb",
         "preprocessing_workers",
+        "activation_cache_gib",
+        "activation_cache_reserve_gib",
+        "activation_prefetch_workers",
     ):
         settings.pop(key)
+    if not cfg.optimization.warmup_updates:
+        settings["optimization"].pop("warmup_updates")
     return {
         "version": 1,
         "configuration": settings,
@@ -430,6 +462,7 @@ def _run_job(runtime, job, output, tracker):  # noqa: C901 -- recovery and two t
         indices = runtime.corpus.indices(subset)
         generator.train()
         for update in range(progress, cfg.optimization.pretraining_updates):
+            set_learning_rate(optimizer, cfg, update + 1)
             optimizer.zero_grad(set_to_none=True)
             losses = []
             context_sizes = []

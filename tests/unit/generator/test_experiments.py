@@ -113,7 +113,10 @@ def test_gradient_clipping_uses_global_norm_and_reports_before_clipping():
     optimizer = torch.optim.AdamW([{"params": [first]}, {"params": [second]}])
     first.grad, second.grad = torch.tensor([3.0]), torch.tensor([4.0])
     metrics = clip_gradients(optimizer, 0.85)
-    assert metrics == {"train/grad_norm": 5.0, "train/gradient_clipped": 1.0}
+    assert metrics["train/grad_norm"] == 5.0
+    assert metrics["train/gradient_clipped"] == 1.0
+    assert metrics["train/clip_scale"] == pytest.approx(0.17)
+    assert metrics["train/grad_rms"] == pytest.approx(5 / 2**0.5)
     assert torch.cat([first.grad, second.grad]).norm().item() == pytest.approx(0.85)
     first.grad, second.grad = torch.tensor([0.03]), torch.tensor([0.04])
     metrics = clip_gradients(optimizer, 0.85)
@@ -562,6 +565,7 @@ def test_reconstruction_resumes_exactly_after_interrupted_update(
 ):
     cfg, factory = synthetic_experiment
     cfg.wandb.enabled = True
+    cfg.optimization.warmup_updates = 50
     bank = BankConfig.load(cfg.bank_config)
     job = {
         "kind": "heatmap",
@@ -703,7 +707,7 @@ def test_flex_microbatch_padding_matches_all_draft_mask_lengths(
     }
     runtime.corpus.rows = Dataset.from_list(rows)
     monkeypatch.setattr(
-        runtime.corpus.transfer,
+        runtime.corpus.activations,
         "get_cached",
         lambda _: {
             "token_ids": torch.ones(1783, dtype=torch.long),
@@ -1061,4 +1065,6 @@ def test_parallel_prompt_summaries_match_serial_and_preserve_run_identity(
     job = {"kind": "conditioning", "condition": "last"}
     identity = run_identity(serial_cfg, bank, serial.corpus, job)
     serial_cfg.preprocessing_workers = 8
+    serial_cfg.activation_cache_gib = 128
+    serial_cfg.activation_prefetch_workers = 4
     assert run_identity(serial_cfg, bank, serial.corpus, job) == identity

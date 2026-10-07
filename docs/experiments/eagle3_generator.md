@@ -145,6 +145,7 @@ the final comparison exploratory, rather than an independent held-out result.
 | `architecture.*` | Encoder/decoder capacity and full output-head size |
 | `optimization.lr`, `weight_decay` | Shared AdamW optimization |
 | `optimization.max_grad_norm` | Global L2 gradient clipping threshold; defaults to 0.85 |
+| `optimization.warmup_updates` | Linear LR ramp in optimizer updates; example uses 50, 0 disables |
 | `conditioning_epochs`, `pretraining_updates`, `episodes_per_update` | Comparison and reconstruction budgets |
 | `adaptation_epochs` | Fixed to one |
 | `token_budget` | Activation microbatch size, independent of context size |
@@ -154,6 +155,8 @@ the final comparison exploratory, rather than an independent held-out result.
 | `dtype`, `device` | Frozen-model compute precision and device; generator and ordinary LoRA parameters remain float32 |
 | `staging_dir`, `factor_cache_mib` | Local summary storage and bounded bank-factor LRU cache |
 | `preprocessing_workers` | Concurrent prompt-prefix read workers (default 4); independent of experiment `n_workers` |
+| `activation_cache_gib`, `activation_cache_reserve_gib` | Shared local disk LRU capacity and free-space reserve; defaults 64/8 GiB |
+| `activation_prefetch_workers` | CPU activation-read workers and number of microbatches prefetched; defaults 2 |
 | `checkpoint_interval`, `log_interval` | Reconstruction recovery and progress frequency |
 
 Prepared summaries are small and loaded into RAM. Preparation reads only the
@@ -166,8 +169,22 @@ reads. Progress includes examples/s, ETA, and prompt tensor bytes. Changing
 this setting preserves training identity and does not invalidate existing caches.
 Payloads are released after summarizing; summaries are cached
 locally and copied to the experiment output once. Training reads response
-activations with the bank's buffered file reader, avoiding Drive-backed mmap.
-There is no full-activation prefetch cache or exhaustive payload/hash scan.
+activations through a bounded local disk cache under
+`staging_dir/<data-fingerprint>/activations`. Files are copied from Drive on their
+first use, with bounded concurrent reads; local files are reused across epochs,
+validation and experiment runs. This warms the cache during useful work rather
+than copying or scanning the full dataset before training. Copies use temporary
+files and atomic renames; shared file locks coordinate experiment processes.
+Interrupted copies are cleaned up on restart. Cached payloads use buffered
+reads, avoiding Drive-backed mmap. No exhaustive payload/hash scan is performed.
+
+The first pass still pays Drive transfer costs. If the working set exceeds the
+cache capacity, least recently used files are evicted and may need another
+copy. Increase `activation_cache_gib` if local disk permits (for example 128),
+and try `activation_prefetch_workers: 4` for higher Drive concurrency. Disk
+space below the reserve, or individual files larger than the capacity, causes
+a reported fallback to direct reads. Set cache capacity to 0 to disable it.
+Changing cache/prefetch settings preserves existing training identity.
 
 Every run saves resolved configuration, selected source metadata, package/git
 provenance (`train_command.txt`, `speculators.patch`), recovery state, and results.
@@ -204,6 +221,21 @@ to a global L2 norm of `optimization.max_grad_norm` (default 0.85), immediately
 before its optimizer step. W&B logs `train/grad_norm` **before clipping** and
 `train/gradient_clipped` (1 when clipped, otherwise 0). Non-finite gradient
 norms stop the run before applying an update.
+Large pre-clipping norms alone do not establish divergence: they combine all
+parameter gradients. `train/clip_scale` reports the multiplier applied by
+clipping, and `train/grad_rms` reports the norm divided by the square root of the
+number of parameters with gradients. Diagnose these alongside loss and validation
+scores. `train/data_wait_seconds` includes waiting for activation reads and batch
+preparation; `train/update_seconds` includes the complete optimizer update.
+`train/activation_cache_hits`, `misses`, and `bypasses` are cumulative process
+counters (including validation reads).
+
+The example enables `warmup_updates: 50`; update 1 uses `lr/50`, reaching the
+configured LR at update 50. This applies to all experiment arms and resumes
+from the checkpointed global update counter. It changes the training identity,
+so start a new output root when enabling it. To speed up an existing run while
+preserving its original schedule, set `warmup_updates: 0`; disabled warmup
+retains compatibility with pre-warmup run identities.
 Clipping is part of the training identity; runs created before clipping was
 introduced require a new `output_root` to keep the experiment comparisons valid.
 Validation logs include `validation/score_mean_full_acc_0`

@@ -11,6 +11,9 @@ device: cuda
 dtype: bfloat16
 factor_cache_mib: 256
 preprocessing_workers: 4  # Bounded concurrent prompt-only reads; independent of n_workers.
+activation_cache_gib: 64  # Shared local disk LRU; set 0 to disable.
+activation_cache_reserve_gib: 8  # Keep this much disk free.
+activation_prefetch_workers: 2  # Upcoming activation microbatches (CPU only).
 wandb:
   enabled: true
   mode: online  # Set online to send metrics to your W&B account.
@@ -38,6 +41,7 @@ optimization:
   lr: 0.0001
   weight_decay: 0.01
   max_grad_norm: 0.85
+  warmup_updates: 50  # Linear learning-rate ramp; 0 disables warmup.
   conditioning_epochs: 5
   pretraining_updates: 1000
   episodes_per_update: 4

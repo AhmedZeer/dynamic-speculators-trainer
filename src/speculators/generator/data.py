@@ -13,6 +13,7 @@ from safetensors.torch import load
 from speculators.bank.artifacts import digest, load_subset, write_json
 from speculators.bank.progress import report, stage_progress
 from speculators.bank.transfer import BankFileTransfer
+from speculators.generator.activation_cache import ActivationCache
 from speculators.generator.config import CONDITIONS
 from speculators.models.attention import FLEX_ATTENTION_BLOCK_SIZE
 from speculators.models.eagle3.data import shift_batch
@@ -95,6 +96,18 @@ class Corpus:
         }
         self.cache_key = digest(self.identity)
         self.local = cfg.staging_dir / self.cache_key
+        self.activations = ActivationCache(
+            self.transfer,
+            self.local / "activations",
+            cfg.activation_cache_gib,
+            cfg.activation_cache_reserve_gib,
+        )
+        report(
+            f"Activation cache: {cfg.activation_cache_gib:g} GiB at "
+            f"{self.activations.root}; reserve={cfg.activation_cache_reserve_gib:g} "
+            f"GiB; prefetch workers={cfg.activation_prefetch_workers}"
+        )
+        self.last_batch_data_seconds = 0.0
         self.summaries = None
 
     def indices(self, subset, validation=False):
@@ -230,11 +243,11 @@ class Corpus:
             length += size
         if current:
             chunks.append(current)
-        for chunk in chunks:
+        for chunk, payloads in self.activation_chunks(chunks):
+            batch_started = time.monotonic()
             samples = []
-            for index in chunk:
+            for index, payload in zip(chunk, payloads, strict=True):
                 row = self.rows[index]
-                payload = self.transfer.get_cached(index)
                 if payload is None:
                     raise FileNotFoundError(f"Missing hidden-state row {index}")
                 ids = payload["token_ids"]
@@ -264,7 +277,41 @@ class Corpus:
                 batch["hidden_states"] = (
                     x + 2 * (torch.rand_like(x) - 0.5) * self.bank.training.noise_std
                 )
+            self.last_batch_data_seconds += time.monotonic() - batch_started
             yield batch, chunk == chunks[-1]
+
+    def activation_chunks(self, chunks):
+        """Prefetch CPU payloads only; collation, noise and GPU copies stay ordered."""
+        remaining = iter(chunks)
+        pending = deque()
+
+        def submit(pool, chunk):
+            pending.append(
+                (
+                    chunk,
+                    [
+                        pool.submit(self.activations.get_cached, index)
+                        for index in chunk
+                    ],
+                )
+            )
+
+        with ThreadPoolExecutor(
+            max_workers=self.cfg.activation_prefetch_workers
+        ) as pool:
+            for _ in range(min(len(chunks), self.cfg.activation_prefetch_workers)):
+                chunk = next(remaining)
+                submit(pool, chunk)
+            while pending:
+                chunk, futures = pending.popleft()
+                started = time.monotonic()
+                payloads = [future.result() for future in futures]
+                self.last_batch_data_seconds = time.monotonic() - started
+                yield chunk, payloads
+                del payloads, futures
+                chunk = next(remaining, None)
+                if chunk is not None:
+                    submit(pool, chunk)
 
 
 def groups(indices, seed, minimum, maximum):
