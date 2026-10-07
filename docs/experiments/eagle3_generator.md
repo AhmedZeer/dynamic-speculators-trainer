@@ -24,6 +24,38 @@ Existing bank configuration, manifests, checkpoints, and LoRAs remain intact.
 Both preparation and training announce their stage, report stalled reads and
 periodic progress, and write separate experiment artifacts.
 
+### Run experiments independently
+
+The default order automatically selects conditioning and heatmap winners.
+To run a heatmap directly, specify its conditioning instead:
+
+```bash
+speculators generator heatmap --config examples/eagle3-lora/generator_math.yaml --condition last
+```
+
+Choices are `last`, `last_mean`, and `projected`. Set `condition: last` in
+the YAML for the same behavior; a CLI option takes precedence. No conditioning
+selection file is required when this override is supplied.
+
+Adaptation's pretrained arm needs an actual bank-pretrained generator. Supply
+a heatmap checkpoint from any compatible output directory:
+
+```bash
+speculators generator adaptation --config examples/eagle3-lora/generator_math.yaml \
+  --condition last --pretrained-checkpoint /path/to/heatmap/stride-10/seeds-42/checkpoint.pt
+```
+
+The checkpoint's adjacent `resolved_experiment.json` must accompany it.
+Conditioning representation, generator architecture, LoRA configuration, and
+model revisions are checked before training. The source identity and checkpoint
+file metadata are recorded in the adaptation job. Different source pretraining
+budgets or experiment output roots are allowed for this explicit transfer.
+You may instead set `pretrained_checkpoint` in YAML (paths relative to the
+working directory). Existing LoRA-bank checkpoints are still required for the
+transferred-LoRA arm. With no overrides, upstream selection files remain required
+and their original configuration checks apply. The routing options alone do
+not invalidate completed runs; each resolved job records its actual inputs.
+
 ## 1. Choose conditioning on math-00001
 
 Train three fresh generators through the **frozen drafter's prediction loss**,

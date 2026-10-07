@@ -320,6 +320,8 @@ def run_identity(cfg, bank, corpus, job):
         "activation_cache_gib",
         "activation_cache_reserve_gib",
         "activation_prefetch_workers",
+        "condition",
+        "pretrained_checkpoint",
     ):
         settings.pop(key)
     if not cfg.optimization.warmup_updates:

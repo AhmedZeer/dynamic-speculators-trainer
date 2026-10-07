@@ -5,6 +5,8 @@ staging_dir: /tmp/speculators-generator
 conditioning_subset: math-00001
 bank_subset: math-00000
 transfer_seed: 42
+condition: null  # Heatmap/adaptation: null selects the conditioning winner.
+pretrained_checkpoint: null  # Adaptation: null selects the heatmap winner.
 seed: 42
 n_workers: 1  # Each worker owns a full generator, drafter, and optimizer.
 device: cuda

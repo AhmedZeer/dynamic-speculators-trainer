@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from speculators.bank.artifacts import write_json
+from speculators.bank.artifacts import digest, write_json
 from speculators.bank.config import BankConfig
 from speculators.bank.progress import report
 from speculators.bank.runner import TrainingRun, run_parallel
@@ -121,9 +121,16 @@ def conditioning(cfg):
 
 
 def selected_condition(cfg):
+    if cfg.condition is not None:
+        report(f"Using explicit conditioning representation: {cfg.condition}")
+        return cfg.condition
     path = cfg.output_root / "conditioning" / "selection.json"
     if not path.exists():
-        raise FileNotFoundError("Run generator conditioning before heatmap/adaptation")
+        raise FileNotFoundError(
+            f"No conditioning selection at {path}. Pass --condition "
+            "last|last_mean|projected, set condition in the YAML, "
+            "or run generator conditioning for automatic selection."
+        )
     # Check all upstream identities before allowing a changed config to reuse a winner.
     bank = BankConfig.load(cfg.bank_config)
     corpus = Corpus(cfg, bank)
@@ -258,20 +265,62 @@ def export_heatmaps(root, cfg, results):
         plt.close(fig)
 
 
-def adaptation(cfg):
-    condition = selected_condition(cfg)
+def pretrained_source(cfg, bank, corpus, condition):
+    if cfg.pretrained_checkpoint is not None:
+        return explicit_pretrained_source(cfg, bank, corpus, condition)
     selection = cfg.output_root / "heatmap" / "selection.json"
     if not selection.exists():
-        raise FileNotFoundError("Run generator heatmap before adaptation")
+        raise FileNotFoundError(
+            f"No heatmap selection at {selection}. Pass --pretrained-checkpoint "
+            "CHECKPOINT for the pretrained arm, or run generator heatmap."
+        )
     winner = json.loads(selection.read_text())["winner"]
-    bank = BankConfig.load(cfg.bank_config)
-    corpus = Corpus(cfg, bank)
     source = Path(winner["checkpoint_path"])
     identity = json.loads((source.parent / "resolved_experiment.json").read_text())
     if identity != run_identity(cfg, bank, corpus, winner["job"]):
+        raise ValueError("Heatmap winner belongs to a different configuration")
+    source_job = winner["job"]
+    if source_job["condition"] != condition:
+        raise ValueError("Heatmap winner conditioning differs from --condition")
+    return source, source_job, None
+
+
+def explicit_pretrained_source(cfg, bank, corpus, condition):
+    source = cfg.pretrained_checkpoint.resolve()
+    if not source.is_file():
+        raise FileNotFoundError(f"Pretrained checkpoint not found: {source}")
+    identity = json.loads((source.parent / "resolved_experiment.json").read_text())
+    if identity["job"]["kind"] != "heatmap":
+        raise ValueError("Pretrained arm requires a bank-pretrained heatmap checkpoint")
+    if identity["job"]["condition"] != condition:
+        raise ValueError("Pretrained checkpoint conditioning differs from --condition")
+    if (
+        identity["configuration"]["architecture"]
+        != cfg.architecture.model_dump(mode="json")
+        or identity["lora"] != bank.lora.model_dump(mode="json")
+        or identity["bank_data"]["revisions"] != corpus.identity["revisions"]
+    ):
         raise ValueError(
-            "Heatmap winner belongs to a different experiment configuration"
+            "Pretrained checkpoint architecture, LoRA, or model revisions "
+            "are incompatible"
         )
+    stat = source.stat()
+    metadata = {
+        "identity": digest(identity),
+        "size_bytes": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+    }
+    report(f"Using explicit pretrained generator checkpoint: {source}")
+    return source, identity["job"], metadata
+
+
+def adaptation(cfg):
+    condition = selected_condition(cfg)
+    bank = BankConfig.load(cfg.bank_config)
+    corpus = Corpus(cfg, bank)
+    source, source_job, source_metadata = pretrained_source(
+        cfg, bank, corpus, condition
+    )
     entries = [
         e
         for e in discover_snapshots(bank.output_root, cfg.bank_subset)
@@ -289,7 +338,9 @@ def adaptation(cfg):
     ):
         job = {"kind": "adaptation", "condition": condition, "arm": arm}
         if arm == "pretrained_generator":
-            job.update(pretrained_path=str(source), pretrained_job=winner["job"])
+            job.update(pretrained_path=str(source), pretrained_job=source_job)
+            if source_metadata is not None:
+                job["pretrained_source"] = source_metadata
         if arm == "transferred_lora":
             job.update(transfer_path=transfer["path"], transfer_entry=transfer["entry"])
         jobs.append((job, cfg.output_root / "adaptation" / arm))

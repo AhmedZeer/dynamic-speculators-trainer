@@ -107,6 +107,8 @@ class ExperimentConfig(Settings):
     conditioning_subset: str = "math-00001"
     bank_subset: str = "math-00000"
     transfer_seed: int = 42
+    condition: Condition | None = None
+    pretrained_checkpoint: Path | None = None
     seed: int = 42
     n_workers: int = Field(default=1, ge=1)
     device: str = "cuda"

@@ -1084,3 +1084,78 @@ def test_parallel_prompt_summaries_match_serial_and_preserve_run_identity(
     serial_cfg.activation_cache_gib = 128
     serial_cfg.activation_prefetch_workers = 4
     assert run_identity(serial_cfg, bank, serial.corpus, job) == identity
+
+
+def test_direct_heatmap_and_adaptation_cli_without_upstream_selections(
+    synthetic_experiment,
+):
+    cfg, _ = synthetic_experiment
+    cfg.heatmap.strides = [10]
+    cfg.heatmap.seed_groups = [[42]]
+    config_path = cfg.output_root.parent / "direct.yaml"
+    config_path.write_text(yaml.safe_dump(cfg.model_dump(mode="json")))
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["generator", "heatmap", "--config", str(config_path), "--condition", "last"],
+    )
+    assert result.exit_code == 0, (result.exception, result.output)
+    assert not (cfg.output_root / "conditioning" / "selection.json").exists()
+    source = cfg.output_root / "heatmap" / "stride-10" / "seeds-42" / "checkpoint.pt"
+    cfg.output_root = cfg.output_root.parent / "independent-adaptation"
+    cfg.condition = "projected"  # CLI override wins over YAML.
+    config_path.write_text(yaml.safe_dump(cfg.model_dump(mode="json")))
+    result = runner.invoke(
+        app,
+        [
+            "generator",
+            "adaptation",
+            "--config",
+            str(config_path),
+            "--condition",
+            "last",
+            "--pretrained-checkpoint",
+            str(source),
+        ],
+    )
+    assert result.exit_code == 0, (result.exception, result.output)
+    assert not (cfg.output_root / "conditioning" / "selection.json").exists()
+    assert not (cfg.output_root / "heatmap" / "selection.json").exists()
+    arms = json.loads((cfg.output_root / "adaptation" / "results.json").read_text())
+    assert len(arms) == 4
+    assert all(result["job"]["condition"] == "last" for result in arms)
+    pretrained = next(
+        result for result in arms if result["job"]["arm"] == "pretrained_generator"
+    )
+    assert pretrained["job"]["pretrained_path"] == str(source.resolve())
+    assert pretrained["job"]["pretrained_source"]["size_bytes"] == source.stat().st_size
+
+
+def test_direct_run_requires_inputs_and_checks_checkpoint_compatibility(
+    synthetic_experiment,
+):
+    cfg, factory = synthetic_experiment
+    with pytest.raises(FileNotFoundError, match="--condition"):
+        workflow.selected_condition(cfg)
+    cfg.condition = "last"
+    assert workflow.selected_condition(cfg) == "last"
+    with pytest.raises(FileNotFoundError, match="--pretrained-checkpoint"):
+        workflow.adaptation(cfg)
+    bank = BankConfig.load(cfg.bank_config)
+    runtime = factory(cfg, bank)
+    job = {"kind": "heatmap", "condition": "last", "seeds": [42], "stride": 10}
+    source = cfg.output_root / "external" / "checkpoint.pt"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"dummy")
+    identity = run_identity(cfg, bank, runtime.corpus, job)
+    write_json(source.parent / "resolved_experiment.json", identity)
+    cfg.pretrained_checkpoint = source
+    original = run_identity(cfg, bank, runtime.corpus, job)
+    cfg.condition = "projected"
+    assert run_identity(cfg, bank, runtime.corpus, job) == original
+    with pytest.raises(ValueError, match="conditioning differs"):
+        workflow.adaptation(cfg)
+    cfg.condition = "last"
+    cfg.architecture.decoder_width += 1
+    with pytest.raises(ValueError, match="incompatible"):
+        workflow.adaptation(cfg)
