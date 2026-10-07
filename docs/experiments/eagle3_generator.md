@@ -153,10 +153,18 @@ the final comparison exploratory, rather than an independent held-out result.
 | `n_workers` | Independent concurrent runs on the visible device; no GPU assignment |
 | `dtype`, `device` | Frozen-model compute precision and device; generator and ordinary LoRA parameters remain float32 |
 | `staging_dir`, `factor_cache_mib` | Local summary storage and bounded bank-factor LRU cache |
+| `preprocessing_workers` | Concurrent prompt-prefix read workers (default 4); independent of experiment `n_workers` |
 | `checkpoint_interval`, `log_interval` | Reconstruction recovery and progress frequency |
 
-Prepared summaries are small and loaded into RAM. Preparation reads each needed
-hidden-state payload once and releases it after summarizing; summaries are cached
+Prepared summaries are small and loaded into RAM. Preparation reads only the
+prompt prefix of each needed hidden-state tensor, skipping response tokens and
+other tensors. A bounded thread pool overlaps buffered reads with computation;
+projection and normalization stay in the main thread on the model device.
+At most `preprocessing_workers` prompt payloads are outstanding. Start with 4
+workers; try 8 if Drive latency dominates and RAM allows it, or 1 for serial
+reads. Progress includes examples/s, ETA, and prompt tensor bytes. Changing
+this setting preserves training identity and does not invalidate existing caches.
+Payloads are released after summarizing; summaries are cached
 locally and copied to the experiment output once. Training reads response
 activations with the bank's buffered file reader, avoiding Drive-backed mmap.
 There is no full-activation prefetch cache or exhaustive payload/hash scan.

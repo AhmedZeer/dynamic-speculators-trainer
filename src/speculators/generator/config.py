@@ -110,6 +110,7 @@ class ExperimentConfig(Settings):
     device: str = "cuda"
     dtype: Literal["bfloat16", "float32"] = "bfloat16"
     factor_cache_mib: int = Field(default=256, ge=0)
+    preprocessing_workers: int = Field(default=4, ge=1)
     architecture: Architecture = Field(default_factory=Architecture)
     optimization: Optimization = Field(default_factory=Optimization)
     context: Context = Field(default_factory=Context)

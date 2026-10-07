@@ -1,7 +1,9 @@
 import copy
 import json
 import sys
+from contextlib import contextmanager
 from pathlib import Path
+from threading import Barrier, Lock
 from types import SimpleNamespace
 
 import pytest
@@ -16,6 +18,7 @@ from typer.testing import CliRunner
 
 from speculators.bank.artifacts import write_json
 from speculators.bank.config import BankConfig
+from speculators.bank.transfer import BankFileTransfer
 from speculators.cli import app
 from speculators.generator import workflow
 from speculators.generator.config import (
@@ -979,3 +982,83 @@ def test_real_wandb_offline_smoke(tmp_path):
         assert tracker.run.offline
     assert json.loads((output / "wandb.json").read_text())["status"] == "finished"
     assert list((cfg.staging_dir / "wandb").rglob("*.wandb"))
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.bfloat16])
+def test_prompt_prefix_reader_skips_response_payload(tmp_path, monkeypatch, dtype):
+    states = torch.randn(100, 4, 8).to(dtype)
+    path = tmp_path / "hs_0.safetensors"
+    save_file({"hidden_states": states, "token_ids": torch.arange(100)}, str(path))
+    original_open = Path.open
+    read_bytes = []
+
+    @contextmanager
+    def tracked_open(file_path, *args, **kwargs):
+        with original_open(file_path, *args, **kwargs) as handle:
+
+            def read(size=-1):
+                data = handle.read(size)
+                read_bytes.append(len(data))
+                return data
+
+            yield SimpleNamespace(read=read, seek=handle.seek)
+
+    monkeypatch.setattr(Path, "open", tracked_open)
+    actual = BankFileTransfer(tmp_path).get_prompt_states(0, 5)
+    torch.testing.assert_close(actual, states[:5], rtol=0, atol=0)
+    assert sum(read_bytes) < path.stat().st_size / 4
+    assert BankFileTransfer(tmp_path).get_prompt_states(1, 5) is None
+    with pytest.raises(ValueError, match="prompt boundary"):
+        BankFileTransfer(tmp_path).get_prompt_states(0, 101)
+
+
+def test_prompt_read_workers_are_concurrent_bounded_and_ordered(
+    synthetic_experiment,
+    monkeypatch,
+):
+    cfg, factory = synthetic_experiment
+    runtime = factory(cfg, BankConfig.load(cfg.bank_config))
+    cfg.preprocessing_workers = 3
+    barrier, lock = Barrier(3), Lock()
+    active, maximum = 0, 0
+
+    def read(index, length):
+        nonlocal active, maximum
+        with lock:
+            active += 1
+            maximum = max(maximum, active)
+        if index < 3:
+            barrier.wait(timeout=5)
+        with lock:
+            active -= 1
+        return torch.full((length, 4, 8), index)
+
+    monkeypatch.setattr(runtime.corpus.transfer, "get_prompt_states", read)
+    results = list(runtime.corpus.prompt_states([0, 1, 2, 3, 4]))
+    assert [index for index, _, _ in results] == [0, 1, 2, 3, 4]
+    assert maximum == 3
+
+
+def test_parallel_prompt_summaries_match_serial_and_preserve_run_identity(
+    synthetic_experiment,
+):
+    cfg, factory = synthetic_experiment
+    bank = BankConfig.load(cfg.bank_config)
+    serial_cfg = cfg.model_copy(deep=True)
+    serial_cfg.staging_dir = cfg.staging_dir / "serial"
+    serial_cfg.output_root = cfg.output_root / "serial"
+    serial_cfg.preprocessing_workers = 1
+    serial = factory(serial_cfg, bank)
+    parallel_cfg = serial_cfg.model_copy(deep=True)
+    parallel_cfg.staging_dir = cfg.staging_dir / "parallel"
+    parallel_cfg.output_root = cfg.output_root / "parallel"
+    parallel_cfg.preprocessing_workers = 4
+    parallel = factory(parallel_cfg, bank)
+    for key, tensor in serial.corpus.summaries.items():
+        torch.testing.assert_close(
+            parallel.corpus.summaries[key], tensor, rtol=0, atol=0
+        )
+    job = {"kind": "conditioning", "condition": "last"}
+    identity = run_identity(serial_cfg, bank, serial.corpus, job)
+    serial_cfg.preprocessing_workers = 8
+    assert run_identity(serial_cfg, bank, serial.corpus, job) == identity

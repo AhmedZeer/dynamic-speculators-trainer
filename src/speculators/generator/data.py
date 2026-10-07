@@ -1,7 +1,9 @@
 """Compact prompt summaries and bounded, buffered bank reads."""
 
 import random
-from collections import OrderedDict
+import time
+from collections import OrderedDict, deque
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import torch
@@ -33,7 +35,7 @@ def prompt_summary(states, prompt_length, model):
     if not 1 <= prompt_length <= states.shape[0]:
         raise ValueError("Invalid prompt boundary")
     prompt = states[:prompt_length, :-1].flatten(1)
-    raw_last, raw_mean = prompt[-1].float(), prompt.float().mean(0)
+    raw_last, raw_mean = prompt[-1].float().clone(), prompt.float().mean(0)
     projected_sum = None
     projected_last = None
     # Keep projection activations bounded even for long prompts.
@@ -123,21 +125,31 @@ class Corpus:
         )
         values = {condition: [] for condition in CONDITIONS}
         lengths = []
+        started = time.monotonic()
+        read_bytes = 0
+        workers = min(self.cfg.preprocessing_workers, len(indices))
+        report(
+            f"Prompt preprocessing: {workers} read workers; prompt-only buffered reads"
+        )
         with stage_progress(f"Preparing prompt summaries for {len(indices)} examples"):
-            for position, index in enumerate(indices, 1):
-                row = self.rows[index]
-                payload = self.transfer.get_cached(index)
-                if payload is None:
-                    raise FileNotFoundError(f"Missing hidden-state row {index}")
-                summaries = prompt_summary(
-                    payload["hidden_states"], row["prompt_length"], model
-                )
+            for position, (index, length, states) in enumerate(
+                self.prompt_states(indices), 1
+            ):
+                read_bytes += states.numel() * states.element_size()
+                summaries = prompt_summary(states, length, model)
                 for condition in CONDITIONS:
                     values[condition].append(summaries[condition])
-                lengths.append(row["prompt_length"])
-                del payload
+                lengths.append(length)
+                del states
                 if position == 1 or position % 10 == 0 or position == len(indices):
-                    report(f"Prompt summaries: {position}/{len(indices)}; row={index}")
+                    elapsed = time.monotonic() - started
+                    rate = position / max(elapsed, 1e-6)
+                    eta = (len(indices) - position) / rate
+                    report(
+                        f"Prompt summaries: {position}/{len(indices)}; row={index}; "
+                        f"{rate:.2f} examples/s; ETA={eta:.0f}s; "
+                        f"prompt tensors={read_bytes / 2**30:.2f} GiB"
+                    )
         self.summaries = {
             "indices": torch.tensor(indices),
             "lengths": torch.tensor(lengths),
@@ -150,6 +162,35 @@ class Corpus:
         temporary.write_bytes(path.read_bytes())
         temporary.replace(remote / "summaries.pt")
         write_json(remote / "metadata.json", self.identity)
+
+    def prompt_states(self, indices):
+        """Bound outstanding reads; keep model/GPU work in the calling thread."""
+        remaining = iter(indices)
+        pending = deque()
+
+        def submit(pool, index):
+            length = self.rows[index]["prompt_length"]
+            pending.append(
+                (
+                    index,
+                    length,
+                    pool.submit(self.transfer.get_prompt_states, index, length),
+                )
+            )
+
+        with ThreadPoolExecutor(max_workers=self.cfg.preprocessing_workers) as pool:
+            for _ in range(min(len(indices), self.cfg.preprocessing_workers)):
+                submit(pool, next(remaining))
+            while pending:
+                index, length, future = pending.popleft()
+                states = future.result()
+                if states is None:
+                    raise FileNotFoundError(f"Missing hidden-state row {index}")
+                yield index, length, states
+                del states, future
+                index = next(remaining, None)
+                if index is not None:
+                    submit(pool, index)
 
     def context(self, indices, condition, device):
         if self.summaries is None:

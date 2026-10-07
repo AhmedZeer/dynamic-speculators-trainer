@@ -10,6 +10,7 @@ n_workers: 1  # Each worker owns a full generator, drafter, and optimizer.
 device: cuda
 dtype: bfloat16
 factor_cache_mib: 256
+preprocessing_workers: 4  # Bounded concurrent prompt-only reads; independent of n_workers.
 wandb:
   enabled: true
   mode: online  # Set online to send metrics to your W&B account.

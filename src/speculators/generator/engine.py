@@ -282,7 +282,13 @@ class Runtime:
 
 def run_identity(cfg, bank, corpus, job):
     settings = cfg.model_dump(mode="json")
-    for key in ("n_workers", "staging_dir", "factor_cache_mib", "wandb"):
+    for key in (
+        "n_workers",
+        "staging_dir",
+        "factor_cache_mib",
+        "wandb",
+        "preprocessing_workers",
+    ):
         settings.pop(key)
     return {
         "version": 1,
