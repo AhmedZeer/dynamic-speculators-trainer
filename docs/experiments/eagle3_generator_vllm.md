@@ -125,6 +125,13 @@ the adapter after each request and returns timings; cancellation cleanup also
 runs through the request lifecycle hook. Profiling does not create request
 state or count as a generator invocation.
 
+vLLM 0.31.0 adds an eight-character random suffix to internal request IDs.
+The request-end RPC resolves the external response ID against the current or
+last completed internal adapter record, retaining both IDs in per-request stats.
+An unknown ID never restores another request's adapter. Missing records or an
+incorrect generator invocation count stop the run and save `adapter_failure.json`
+with the worker's controller state and request IDs for diagnosis.
+
 ## Metrics and interpretation
 
 `result.json` for each arm contains per-request output IDs, repetitions, prompt
@@ -156,7 +163,7 @@ token sequence establishes equality for these measured requests; a permissive
 result does not establish lossless decoding. Investigate mismatches before
 claiming equivalent-output speedups. Checks also run on reused completed arms.
 
-The permissive example uses `generator-vllm-math-exploratory` as its output
+The permissive example uses `generator-vllm-math-exploratory-v2` as its output
 directory to preserve earlier strict runs. After updating benchmark code or
 measurement settings, use a fresh output directory as required by the resume
 identity check; do not delete prior results to bypass that check.

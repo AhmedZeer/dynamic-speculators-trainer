@@ -32,7 +32,7 @@ from speculators.generator.serving.controller import (
     DraftAdapterController,
     validate_runtime,
 )
-from speculators.generator.serving.worker import run_worker
+from speculators.generator.serving.worker import adapter_stats, run_worker
 
 SHAPES = {"o_proj": [4, 4], "v_proj": [8, 2]}
 
@@ -243,6 +243,40 @@ def test_request_lifetime_and_profiling(tmp_path, kind):
         controller.prepare("invalid", 3, torch.tensor([1, 2]), states[1:])
 
 
+@pytest.mark.parametrize("kind", ["generator", "static_lora"])
+@pytest.mark.parametrize("finished_by_hook", [False, True])
+@pytest.mark.parametrize("suffix", ["", "-a123bc45"])
+def test_external_request_stats_restore_and_match_internal_id(
+    tmp_path, kind, finished_by_hook, suffix
+):
+    write_bundle(tmp_path / "bundle", kind)
+    model = draft()
+    controller = DraftAdapterController(tmp_path / "bundle", model)
+    worker = SimpleNamespace(
+        model_runner=SimpleNamespace(drafter=SimpleNamespace(draft_adapter=controller))
+    )
+    internal = "client-id-with-dashes" + suffix
+    controller.prepare(internal, 3, torch.arange(3), torch.randn(3, 12))
+    # Unrelated IDs must neither consume the record nor restore an active adapter.
+    assert controller.finish_external("client") == {}
+    assert controller.active == internal
+    if finished_by_hook:
+        controller.finish(internal)
+    stats = adapter_stats(worker, "client-id-with-dashes")
+    assert stats["adapter_record_found"] is True
+    assert stats["request_id"] == internal
+    assert stats["external_request_id"] == "client-id-with-dashes"
+    assert stats["generator_invocations"] == int(kind == "generator")
+    assert controller.active is None
+    for name, weight in controller.merger.weights.items():
+        assert torch.equal(weight, controller.merger.base[name])
+    assert adapter_stats(worker, "other")["adapter_record_found"] is False
+    assert controller.last_record["request_id"] == internal
+    assert (
+        adapter_stats(worker, "client-id-with-dashes")["adapter_record_found"] is True
+    )
+
+
 def valid_config(metadata):
     return SimpleNamespace(
         speculative_config=SimpleNamespace(
@@ -434,6 +468,63 @@ def test_worker_warmup_cleanup_and_output_comparison(tmp_path):
     changed["requests"][0]["output_token_ids"] = [6]
     with pytest.raises(ValueError, match="disagreement"):
         check_outputs(value, changed)
+
+
+@pytest.mark.parametrize("missing_record", [False, True])
+def test_generator_worker_uses_internal_id_stats_and_preserves_execution_guard(
+    tmp_path, missing_record
+):
+    write_bundle(tmp_path / "bundle")
+    controller = DraftAdapterController(tmp_path / "bundle", draft())
+    worker = SimpleNamespace(
+        model_runner=SimpleNamespace(drafter=SimpleNamespace(draft_adapter=controller))
+    )
+
+    class LLM:
+        def __init__(self, **kwargs):
+            self.calls = 0
+
+        def generate(self, prompt, params, **kwargs):
+            self.calls += 1
+            external = str(self.calls)
+            internal = external + "-abcd1234"
+            if not missing_record:
+                controller.prepare(internal, 3, torch.arange(3), torch.randn(3, 12))
+                controller.finish(internal)
+            return [
+                SimpleNamespace(
+                    request_id=external, outputs=[SimpleNamespace(token_ids=[4, 5])]
+                )
+            ]
+
+        def get_metrics(self):
+            return []
+
+        def collective_rpc(self, method, args=()):
+            return [method(worker, *args)]
+
+    job = {
+        "arm": "fresh_generator",
+        "llm_args": {},
+        "output": str(tmp_path / "run"),
+        "prompts": [{"row": 7, "prompt_token_ids": [1, 2, 3], "max_tokens": 2}],
+        "warmups": 1,
+        "repetitions": 2,
+        "seed": 42,
+    }
+    if missing_record:
+        with pytest.raises(RuntimeError, match="Adapter execution check failed"):
+            run_worker(job, llm_type=LLM, sampling_type=lambda **kw: kw)
+        failure = json.loads((tmp_path / "run" / "adapter_failure.json").read_text())
+        assert failure["worker_statistics"]["adapter_record_found"] is False
+        assert failure["expected_generator_invocations"] == 1
+    else:
+        result = run_worker(job, llm_type=LLM, sampling_type=lambda **kw: kw)
+        assert len(result["requests"]) == 2
+        assert all(row["generator_invocations"] == 1 for row in result["requests"])
+        assert result["requests"][0]["request_id"] == "2-abcd1234"
+        assert result["requests"][0]["external_request_id"] == "2"
+        assert controller.active is None
 
 
 def test_generator_remains_fp32_under_vllm_default_dtype(tmp_path):

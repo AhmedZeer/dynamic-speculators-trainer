@@ -31,13 +31,22 @@ def reset_memory(worker):
 def adapter_stats(worker, request_id):
     drafter = getattr(worker.model_runner, "drafter", None)
     controller = getattr(drafter, "draft_adapter", None)
-    record = controller.finish(request_id) if controller is not None else {}
+    record = controller.finish_external(request_id) if controller is not None else {}
     if torch.cuda.is_available():
         torch.cuda.synchronize()
         peak = torch.cuda.max_memory_allocated()
     else:
         peak = 0
     return {
+        "external_request_id": request_id,
+        "adapter_controller_present": controller is not None,
+        "adapter_record_found": bool(record),
+        "adapter_active_request_id": controller.active
+        if controller is not None
+        else None,
+        "adapter_last_request_id": controller.last_record.get("request_id")
+        if controller is not None
+        else None,
         "generator_invocations": 0,
         "generator_seconds": 0.0,
         "merge_seconds": 0.0,
@@ -100,9 +109,23 @@ def run_worker(job, *, llm_type=None, sampling_type=None):
                 raise ValueError("Benchmark requires one GPU worker")
             stats = statistics[0]
             expected = int(job["arm"].endswith("generator"))
-            if stats["generator_invocations"] != expected:
+            adapter_arm = job["arm"] not in ("target_only", "eagle3_base")
+            if stats["generator_invocations"] != expected or (
+                adapter_arm and not stats.get("adapter_record_found", False)
+            ):
+                diagnostic = {
+                    "arm": job["arm"],
+                    "row": prompt["row"],
+                    "repetition": repetition,
+                    "request_id": reply.request_id,
+                    "expected_generator_invocations": expected,
+                    "worker_statistics": stats,
+                }
+                write_json(output / "adapter_failure.json", diagnostic)
                 raise RuntimeError(
-                    "Generator did not execute exactly once for this request"
+                    f"Adapter execution check failed: arm={job['arm']}, "
+                    f"request={reply.request_id}, expected invocations={expected}, "
+                    f"statistics={stats}; see {output / 'adapter_failure.json'}"
                 )
             after = scalar_metrics(llm.get_metrics())
             requests.append(

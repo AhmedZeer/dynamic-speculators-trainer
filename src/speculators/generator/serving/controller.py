@@ -15,6 +15,7 @@ from speculators.generator.serving.bundle import (
 
 logger = logging.getLogger(__name__)
 MATRIX_NDIM = 2
+REQUEST_ID_SUFFIX_LENGTH = 8
 
 
 def elapsed(device, operation):
@@ -222,6 +223,28 @@ class DraftAdapterController:
             if self.last_record.get("request_id") == request_id
             else {}
         )
+
+    def finish_external(self, request_id):
+        """Resolve vLLM 0.31's external ID against this serial request's record.
+
+        InputProcessor appends '-' plus eight UUID hex characters internally.
+        Lifecycle hooks use that internal ID; RequestOutput exposes the external
+        ID. Never fall back to an unrelated active or completed request.
+        """
+        internal = self.active or self.last_record.get("request_id")
+        if internal is None:
+            return {}
+        if internal == request_id:
+            return self.finish(internal)
+        external, separator, suffix = internal.rpartition("-")
+        if (
+            separator
+            and external == request_id
+            and len(suffix) == REQUEST_ID_SUFFIX_LENGTH
+            and all(character in "0123456789abcdef" for character in suffix)
+        ):
+            return self.finish(internal)
+        return {}
 
     @torch.inference_mode()
     def profile(self):
