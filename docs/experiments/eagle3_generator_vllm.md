@@ -142,8 +142,24 @@ request to exclude warmup traffic.
 
 Target-only acceptance is undefined and exported as null, rather than presented
 as a perfect acceptance score. The benchmark checks greedy output token IDs
-against target-only decoding and stops with an `output_disagreement.json` file
-if an arm differs. Investigate such a mismatch before reporting its speed.
+against target-only decoding. `output_mismatch: error` (the configuration default)
+stops if an arm differs. The example YAML explicitly sets `output_mismatch: warn`
+to continue exploratory measurements. Both policies save `output_disagreement.json`
+with every differing request, first differing position, token IDs, surrounding
+token IDs, and output lengths. No numerical cause is inferred from a mismatch.
+Request count or prompt membership/order differences always stop the benchmark.
+
+Each arm's result, comparison CSV, and W&B summary include `output_equivalence`
+(`reference`, `matched`, or `unverified`), `mismatched_requests`, and
+`exact_match_fraction`. Comparison figures flag unverified outputs. A matching
+token sequence establishes equality for these measured requests; a permissive
+result does not establish lossless decoding. Investigate mismatches before
+claiming equivalent-output speedups. Checks also run on reused completed arms.
+
+The permissive example uses `generator-vllm-math-exploratory` as its output
+directory to preserve earlier strict runs. After updating benchmark code or
+measurement settings, use a fresh output directory as required by the resume
+identity check; do not delete prior results to bypass that check.
 
 The root contains `comparison.csv`, `comparison.png`, `comparison.pdf`, and
 `results.json`. W&B uses the separate `eagle3-generator-vllm` project. Run names

@@ -8,6 +8,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from datasets import load_from_disk
@@ -60,6 +61,7 @@ class BenchmarkConfig(Settings):
     speculative_tokens: int = Field(default=3, ge=1)
     seed: int = 42
     gpu_memory_utilization: float = Field(default=0.85, gt=0, lt=1)
+    output_mismatch: Literal["error", "warn"] = "error"
     wandb: BenchmarkWandb = Field(default_factory=BenchmarkWandb)
 
     @model_validator(mode="after")
@@ -196,9 +198,11 @@ def summarize(requests):
     }
 
 
-def check_outputs(reference, result):
+def compare_outputs(reference, result):
+    """Compare every request; membership errors always invalidate the benchmark."""
     if len(reference["requests"]) != len(result["requests"]):
         raise ValueError("Benchmark arms have different request counts")
+    mismatches = []
     for expected, actual in zip(reference["requests"], result["requests"], strict=True):
         if (expected["row"], expected["repetition"]) != (
             actual["row"],
@@ -206,10 +210,82 @@ def check_outputs(reference, result):
         ):
             raise ValueError("Benchmark arms have different prompt membership/order")
         if expected["output_token_ids"] != actual["output_token_ids"]:
-            raise ValueError(
-                f"Greedy output disagreement: row={actual['row']}, "
-                f"repetition={actual['repetition']}; inspect before benchmarking"
+            target, draft = expected["output_token_ids"], actual["output_token_ids"]
+            position = next(
+                (
+                    i
+                    for i, (a, b) in enumerate(zip(target, draft, strict=False))
+                    if a != b
+                ),
+                min(len(target), len(draft)),
             )
+            mismatches.append(
+                {
+                    "row": actual["row"],
+                    "repetition": actual["repetition"],
+                    "first_differing_position": position,
+                    "target_length": len(target),
+                    "arm_length": len(draft),
+                    "target_token_id": target[position]
+                    if position < len(target)
+                    else None,
+                    "arm_token_id": draft[position] if position < len(draft) else None,
+                    "target_context_ids": target[max(0, position - 5) : position + 6],
+                    "arm_context_ids": draft[max(0, position - 5) : position + 6],
+                }
+            )
+    count = len(result["requests"])
+    return {
+        "status": "unverified" if mismatches else "matched",
+        "compared_requests": count,
+        "mismatched_requests": len(mismatches),
+        "exact_match_fraction": (count - len(mismatches)) / count if count else None,
+        "mismatches": mismatches,
+    }
+
+
+def check_outputs(reference, result):
+    comparison = compare_outputs(reference, result)
+    if comparison["mismatches"]:
+        first = comparison["mismatches"][0]
+        raise ValueError(
+            f"Greedy output disagreement: row={first['row']}, "
+            f"repetition={first['repetition']}; inspect before benchmarking"
+        )
+
+
+def record_output_comparison(cfg, arm, reference, result, destination):
+    if reference is None:
+        comparison = {
+            "status": "reference",
+            "compared_requests": 0,
+            "mismatched_requests": 0,
+            "exact_match_fraction": None,
+            "mismatches": [],
+        }
+    else:
+        comparison = compare_outputs(reference, result)
+    result["output_equivalence"] = comparison
+    result["summary"].update(
+        output_equivalence=comparison["status"],
+        compared_requests=comparison["compared_requests"],
+        mismatched_requests=comparison["mismatched_requests"],
+        exact_match_fraction=comparison["exact_match_fraction"],
+    )
+    write_json(destination / "result.json", result)
+    diagnostic = destination / "output_disagreement.json"
+    if comparison["mismatches"]:
+        write_json(diagnostic, {"policy": cfg.output_mismatch, **comparison})
+        message = (
+            f"Greedy output disagreement: arm={arm}, "
+            f"{comparison['mismatched_requests']}/{comparison['compared_requests']} "
+            f"requests differ; output equivalence unverified; see {diagnostic}"
+        )
+        if cfg.output_mismatch == "error":
+            raise ValueError(message)
+        report(f"WARNING: {message}; continuing exploratory measurements")
+    else:
+        diagnostic.unlink(missing_ok=True)
 
 
 def provenance(output, models):
@@ -311,6 +387,9 @@ def export_comparison(output, results):
         )
         axis.set_title(key.replace("_", " "))
     figure.tight_layout()
+    if any(row["output_equivalence"] == "unverified" for row in rows):
+        figure.suptitle("Exploratory results — output equivalence unverified")
+        figure.tight_layout(rect=(0, 0, 1, 0.95))
     figure.savefig(output / "comparison.png", dpi=160)
     figure.savefig(output / "comparison.pdf")
     plt.close(figure)
@@ -475,14 +554,9 @@ def benchmark(cfg, *, smoke=False):  # noqa: C901 -- serial arm orchestration an
             ):
                 subprocess.run(command, check=True)  # noqa: S603 -- argv only
             result = json.loads(result_path.read_text())
-        if arm != "target_only":
-            try:
-                check_outputs(results["target_only"], result)
-            except ValueError as exc:
-                write_json(
-                    destination / "output_disagreement.json", {"error": str(exc)}
-                )
-                raise
+        record_output_comparison(
+            cfg, arm, results.get("target_only"), result, destination
+        )
         results[arm] = result
         log_result(cfg, arm, result, identity)
         report(

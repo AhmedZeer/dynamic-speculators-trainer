@@ -22,6 +22,7 @@ from speculators.generator.serving.benchmark import (
     BenchmarkConfig,
     benchmark_prompts,
     check_outputs,
+    compare_outputs,
     metric_delta,
     scalar_metrics,
     summarize,
@@ -512,7 +513,8 @@ def test_patched_proposer_merges_before_draft_and_restores_on_finish(monkeypatch
     ]
 
 
-def test_serial_benchmark_smoke_resume_and_output_guard(tmp_path, monkeypatch):
+@pytest.mark.parametrize("policy", ["error", "warn"])
+def test_serial_benchmark_smoke_resume_and_output_guard(tmp_path, monkeypatch, policy):
     bank = BankConfig(output_root=tmp_path / "bank")
     bank_file = tmp_path / "bank.yaml"
     bank_file.write_text(yaml.safe_dump(bank.model_dump(mode="json")))
@@ -521,6 +523,7 @@ def test_serial_benchmark_smoke_resume_and_output_guard(tmp_path, monkeypatch):
         output_root=tmp_path / "results",
         staging_dir=tmp_path / "local",
         arms=["target_only", "eagle3_base"],
+        output_mismatch=policy,
     )
     manifest = {
         "cache_spec": {"models": {"target": "target", "drafter": "drafter"}},
@@ -575,6 +578,83 @@ def test_serial_benchmark_smoke_resume_and_output_guard(tmp_path, monkeypatch):
     result = json.loads(result_file.read_text())
     result["requests"][0]["output_token_ids"] = [9]
     write_json(result_file, result)
-    with pytest.raises(ValueError, match="disagreement"):
+    if policy == "error":
+        with pytest.raises(ValueError, match="disagreement"):
+            benchmark_module.benchmark(cfg, smoke=True)
+    else:
+        results = benchmark_module.benchmark(cfg, smoke=True)
+        assert results["eagle3_base"]["summary"]["output_equivalence"] == "unverified"
+        assert results["target_only"]["summary"]["output_equivalence"] == "reference"
+        assert (cfg.output_root / "smoke" / "results.json").exists()
+    diagnostic = json.loads(
+        (result_file.parent / "output_disagreement.json").read_text()
+    )
+    assert diagnostic["policy"] == policy
+    assert diagnostic["mismatched_requests"] == 1
+    assert diagnostic["exact_match_fraction"] == 0
+    assert diagnostic["mismatches"][0]["target_token_id"] == 3
+    saved = json.loads(result_file.read_text())
+    assert saved["summary"]["output_equivalence"] == "unverified"
+    assert len(jobs) == 2
+    # Even permissive mode must reject comparing different requests.
+    saved["requests"][0]["row"] = 99
+    write_json(result_file, saved)
+    with pytest.raises(ValueError, match="membership"):
         benchmark_module.benchmark(cfg, smoke=True)
-    assert (result_file.parent / "output_disagreement.json").exists()
+
+
+def test_output_diagnostics_cover_late_divergence_length_and_all_requests():
+    def result(outputs):
+        return {
+            "requests": [
+                {"row": i, "repetition": 0, "output_token_ids": ids}
+                for i, ids in enumerate(outputs)
+            ]
+        }
+
+    reference = result([list(range(32)), [1, 2, 3], [4]])
+    actual = result([list(range(27)) + [50] * 5, [1, 2], [4]])
+    comparison = compare_outputs(reference, actual)
+    assert comparison["mismatched_requests"] == 2
+    assert comparison["exact_match_fraction"] == pytest.approx(1 / 3)
+    first, second = comparison["mismatches"]
+    assert first["first_differing_position"] == 27
+    assert first["target_token_id"] == 27
+    assert first["arm_token_id"] == 50
+    assert first["target_length"] == first["arm_length"] == 32
+    assert second["first_differing_position"] == 2
+    assert second["arm_token_id"] is None
+    assert compare_outputs(reference, reference)["status"] == "matched"
+
+
+def test_equivalence_status_is_exported_to_csv_and_wandb(tmp_path, monkeypatch):
+    cfg = BenchmarkConfig(
+        bank_config=tmp_path / "bank.yaml",
+        arms=["target_only"],
+        staging_dir=tmp_path,
+        wandb={"enabled": True},
+    )
+    tracker = SimpleNamespace(summary={}, log=lambda *args: None, finish=lambda: None)
+    monkeypatch.setattr(
+        benchmark_module,
+        "wandb_module",
+        lambda: SimpleNamespace(init=lambda **kw: tracker),
+    )
+    summary = {
+        "acceptance_ratio": 0.7,
+        "accepted_length": 3,
+        "output_tokens_per_second": 10,
+        "mean_request_seconds": 2,
+        "output_equivalence": "unverified",
+        "mismatched_requests": 1,
+        "compared_requests": 3,
+        "exact_match_fraction": 2 / 3,
+    }
+    value = {"requests": [], "summary": summary}
+    benchmark_module.log_result(cfg, "eagle3_base", value, {})
+    assert tracker.summary["benchmark/output_equivalence"] == "unverified"
+    assert tracker.summary["benchmark/mismatched_requests"] == 1
+    benchmark_module.export_comparison(tmp_path, {"eagle3_base": value})
+    assert "unverified" in (tmp_path / "comparison.csv").read_text()
+    assert (tmp_path / "comparison.png").exists()
+    assert (tmp_path / "comparison.pdf").exists()
