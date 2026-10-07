@@ -1,6 +1,6 @@
 # Run from the repository root. The bank reference is relative to this YAML.
 bank_config: bank_math.yaml
-output_root: /content/drive/MyDrive/dynamic-speculators-v3/output/generator-math
+output_root: /content/drive/MyDrive/dynamic-speculators-v3/output/generator-math-stable
 staging_dir: /tmp/speculators-generator
 conditioning_subset: math-00001
 bank_subset: math-00000
