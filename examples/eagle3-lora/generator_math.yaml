@@ -9,6 +9,7 @@ condition: null  # Heatmap/adaptation: null selects the conditioning winner.
 pretrained_checkpoint: null  # Adaptation: null selects the heatmap winner.
 seed: 42
 n_workers: 1  # Each worker owns a full generator, drafter, and optimizer.
+heatmap_n_workers: 4  # Run four independent heatmap cells concurrently.
 device: cuda
 dtype: bfloat16
 factor_cache_mib: 256
@@ -47,6 +48,7 @@ optimization:
   warmup_updates: 100  # Linear learning-rate ramp; 0 disables warmup.
   conditioning_epochs: 5
   pretraining_updates: 1000
+  pretraining_validation_interval: 250  # Heatmap: evaluate after updates 250, 500, 750, 1000.
   episodes_per_update: 4
   adaptation_epochs: 1
   checkpoint_interval: 100

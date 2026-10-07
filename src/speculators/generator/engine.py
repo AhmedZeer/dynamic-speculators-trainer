@@ -4,9 +4,11 @@ import json
 import random
 import shutil
 import time
+from contextlib import nullcontext
 from pathlib import Path
 
 import torch
+from filelock import FileLock
 from huggingface_hub import snapshot_download
 from torch.func import functional_call
 
@@ -313,6 +315,7 @@ def run_identity(cfg, bank, corpus, job):
     settings = cfg.model_dump(mode="json")
     for key in (
         "n_workers",
+        "heatmap_n_workers",
         "staging_dir",
         "factor_cache_mib",
         "wandb",
@@ -328,6 +331,7 @@ def run_identity(cfg, bank, corpus, job):
         settings["optimization"].pop("warmup_updates")
     if cfg.optimization.loss_fn is None:
         settings["optimization"].pop("loss_fn")
+    settings["optimization"].pop("pretraining_validation_interval")
     return {
         "version": 1,
         "configuration": settings,
@@ -469,7 +473,27 @@ def _run_job(runtime, job, output, tracker):  # noqa: C901 -- recovery and two t
             seed: [s for s in selected if s["seed"] == seed] for seed in job["seeds"]
         }
         indices = runtime.corpus.indices(subset)
+
+        def validate_heatmap(step):
+            if cfg.heatmap_n_workers > 1:
+                cfg.staging_dir.mkdir(parents=True, exist_ok=True)
+                lock = FileLock(str(cfg.staging_dir / "heatmap-validation.lock"))
+            else:
+                lock = nullcontext()
+            with lock, stage_progress(f"Heatmap validation at update={step}"):
+                metrics = runtime.evaluate(subset, condition, generator)
+            history.append({"update": step, **metrics})
+            tracker.validation(metrics, step)
+            generator.train()
+
+        interval = cfg.optimization.pretraining_validation_interval
         generator.train()
+        if (
+            progress
+            and progress % interval == 0
+            and (not history or history[-1]["update"] != progress)
+        ):
+            validate_heatmap(progress)
         for update in range(progress, cfg.optimization.pretraining_updates):
             set_learning_rate(optimizer, cfg, update + 1)
             optimizer.zero_grad(set_to_none=True)
@@ -509,13 +533,14 @@ def _run_job(runtime, job, output, tracker):  # noqa: C901 -- recovery and two t
                     f"update={progress}/{cfg.optimization.pretraining_updates}, "
                     f"L1={sum(losses) / len(losses):.6f}"
                 )
+            if progress % interval == 0:
+                validate_heatmap(progress)
             if progress % cfg.optimization.checkpoint_interval == 0:
                 save(progress)
+        if not history or history[-1]["update"] != progress:
+            validate_heatmap(progress)
         if progress % cfg.optimization.checkpoint_interval or not checkpoint.exists():
             save(progress)
-        metrics = runtime.evaluate(subset, condition, generator)
-        history.append({"update": progress, **metrics})
-        tracker.validation(metrics, optimizer_step)
     else:
         epochs = (
             cfg.optimization.conditioning_epochs

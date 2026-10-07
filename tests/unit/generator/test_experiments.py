@@ -420,6 +420,7 @@ def synthetic_experiment(tmp_path, monkeypatch):
         staging_dir=tmp_path / "local",
         device="cpu",
         dtype="float32",
+        heatmap_n_workers=1,
         architecture=small_architecture(),
         optimization={
             "conditioning_epochs": 1,
@@ -611,6 +612,64 @@ def test_reconstruction_resumes_exactly_after_interrupted_update(
         torch.testing.assert_close(resumed[name], tensor, rtol=0, atol=0)
 
 
+def test_heatmap_validation_interval_and_checkpoint_resume(
+    synthetic_experiment,
+    fake_wandb,
+):
+    cfg, factory = synthetic_experiment
+    cfg.heatmap_n_workers = 4
+    cfg.wandb.enabled = True
+    cfg.context.evaluation_sizes = [1]
+    cfg.optimization.pretraining_updates = 5
+    cfg.optimization.pretraining_validation_interval = 2
+    cfg.optimization.checkpoint_interval = 3
+    bank = BankConfig.load(cfg.bank_config)
+    job = {
+        "kind": "heatmap",
+        "condition": "last",
+        "seeds": [42],
+        "stride": 10,
+        "snapshots": filter_snapshots(
+            discover_snapshots(bank.output_root, cfg.bank_subset), [42], 10
+        ),
+    }
+    runtime = factory(cfg, bank)
+    identity = run_identity(cfg, bank, runtime.corpus, job)
+    cfg.optimization.pretraining_validation_interval = 99
+    assert run_identity(cfg, bank, runtime.corpus, job) == identity
+    cfg.heatmap_n_workers = 2
+    assert run_identity(cfg, bank, runtime.corpus, job) == identity
+    cfg.heatmap_n_workers = 4
+    cfg.optimization.pretraining_validation_interval = 2
+    original_evaluate = runtime.evaluate
+    entered_training = []
+
+    def evaluate(subset, condition, generator):
+        entered_training.append(generator.training)
+        return original_evaluate(subset, condition, generator)
+
+    runtime.evaluate = evaluate
+    output = cfg.output_root / "interval-run"
+    result = run_job(runtime, job, output)
+    assert [row["update"] for row in result["history"]] == [2, 4, 5]
+    assert (cfg.staging_dir / "heatmap-validation.lock").exists()
+    assert entered_training == [True, True, True]
+    assert [
+        row["optimizer_step"]
+        for row in fake_wandb.runs[0].logs
+        if "validation/score_mean_full_acc_0" in row
+    ] == [2, 4, 5]
+    checkpoint = torch.load(output / "checkpoint.pt", weights_only=True)
+    assert checkpoint["progress"] == 5
+    assert [row["update"] for row in checkpoint["history"]] == [2, 4, 5]
+
+    resumed = factory(cfg, bank)
+    resumed.evaluate = lambda *_: pytest.fail("Repeated a persisted validation")
+    replay = run_job(resumed, job, output)
+    assert replay["history"] == result["history"]
+    assert replay["score"] == result["score"]
+
+
 @pytest.mark.parametrize("loss_fn", [None, "lk_hybrid"])
 def test_production_runtime_uses_pinned_models_and_frozen_verifier(
     synthetic_experiment,
@@ -691,6 +750,53 @@ def test_parallel_dispatch_writes_worker_requests(synthetic_experiment, monkeypa
     ]
     results = workflow.execute(cfg, jobs)
     assert len(results) == len(dispatched) == 2
+
+
+def test_heatmap_parallelism_is_independent_of_other_stages(
+    synthetic_experiment, monkeypatch
+):
+    cfg, _ = synthetic_experiment
+    cfg.heatmap_n_workers = 4
+    dispatched = []
+
+    def parallel(runs, workers):
+        dispatched.append((len(runs), workers))
+        for run in runs:
+            payload = json.loads(Path(run.command[-1]).read_text())
+            write_json(
+                run.output / "result.json", {"score": 0.1, "job": payload["job"]}
+            )
+
+    monkeypatch.setattr(workflow, "run_parallel", parallel)
+    jobs = [
+        ({"kind": "conditioning", "condition": "last"}, cfg.output_root / "last"),
+        (
+            {"kind": "conditioning", "condition": "projected"},
+            cfg.output_root / "projected",
+        ),
+    ]
+    workflow.execute(cfg, jobs, n_workers=cfg.heatmap_n_workers)
+    assert dispatched == [(2, 4)]
+    assert cfg.n_workers == 1
+
+
+def test_heatmap_uses_its_worker_count(synthetic_experiment, monkeypatch):
+    cfg, _ = synthetic_experiment
+    cfg.condition = "last"
+    cfg.heatmap_n_workers = 4
+    cfg.heatmap.strides = [10]
+    cfg.heatmap.seed_groups = [[42]]
+    selected = []
+
+    def execute(config, jobs, *, n_workers=None):
+        selected.append((len(jobs), n_workers))
+        return [{"score": 0.1, "job": jobs[0][0]}]
+
+    monkeypatch.setattr(workflow, "execute", execute)
+    monkeypatch.setattr(workflow, "export_heatmaps", lambda *_: None)
+    monkeypatch.setattr(workflow, "log_heatmap_summary", lambda *_: None)
+    workflow.heatmap(cfg)
+    assert selected == [(1, 4)]
 
 
 def test_token_microbatching_keeps_every_example(synthetic_experiment):

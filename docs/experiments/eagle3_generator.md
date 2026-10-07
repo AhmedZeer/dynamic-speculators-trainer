@@ -92,6 +92,22 @@ Fix the winning conditioning and initialize a new generator for every cell:
   four factors equally. There is no factor alignment, dense-update conversion,
   factor standardization, learned alpha, or latent sampling.
 
+Validate each heatmap generator at updates **250, 500, 750, and 1,000** on the
+100 held-out examples at context sizes 1, 4, and 8. The final validation also
+runs when the update budget is not divisible by the interval. W&B records each
+score at its optimizer update. Validation leaves the generator in training mode
+for the next reconstruction update. The final score still selects the winning
+cell. `optimization.pretraining_validation_interval` controls this schedule;
+changing it does not change model training or invalidate recovery checkpoints.
+Validation reads full target activations and can add substantial wall time.
+Recovery checkpoint writes remain controlled separately by `checkpoint_interval`.
+Conditioning and adaptation continue to validate once per epoch.
+The example runs four heatmap cells concurrently. Each worker loads its own
+generator, optimizer, factor cache, and frozen drafter onto the visible device.
+Validation passes take turns to limit simultaneous GPU peaks. Set
+`heatmap_n_workers: 2` if four workers exceed GPU memory; `n_workers` continues
+to control conditioning and adaptation independently.
+
 Each cell's evaluation applies **the generator's output** to the frozen drafter;
 it does not average the saved adapters' scores. Training budgets are identical
 even when checkpoint counts differ. The highest final score selects the
@@ -180,11 +196,13 @@ the final comparison exploratory, rather than an independent held-out result.
 | `optimization.max_grad_norm` | Global L2 gradient clipping threshold; defaults to 0.85 |
 | `optimization.warmup_updates` | Linear LR ramp in optimizer updates; example uses 50, 0 disables |
 | `conditioning_epochs`, `pretraining_updates`, `episodes_per_update` | Comparison and reconstruction budgets |
+| `pretraining_validation_interval` | Heatmap validation frequency in optimizer updates; defaults to 250 |
 | `adaptation_epochs` | Fixed to one |
 | `token_budget` | Activation microbatch size, independent of context size |
 | `heatmap.*` | Bank checkpoint selections and grid shape |
 | `seed` | Generator initialization, grouping, and bank sampling |
-| `n_workers` | Independent concurrent runs on the visible device; no GPU assignment |
+| `n_workers` | Conditioning/adaptation concurrent runs on the visible device; example uses 1 |
+| `heatmap_n_workers` | Independent heatmap cells in parallel; defaults to 4, sharing the visible GPU |
 | `dtype`, `device` | Frozen-model compute precision and device; generator and ordinary LoRA parameters remain float32 |
 | `staging_dir`, `factor_cache_mib` | Local summary storage and bounded bank-factor LRU cache |
 | `preprocessing_workers` | Concurrent prompt-prefix read workers (default 4); independent of experiment `n_workers` |
@@ -303,7 +321,8 @@ attempts; heatmap exports include PNG/PDF/CSV/JSON. Full model checkpoints and
 hidden-state payloads are excluded. W&B working files use local staging storage
 to avoid additional Drive traffic during optimizer updates.
 
-Use one worker initially: every worker owns the large generator, optimizer,
-and frozen drafter. Publish provenance and resolved configuration with results.
+Each worker owns the large generator, optimizer, and frozen drafter. Monitor
+GPU memory when running four heatmap cells; lower `heatmap_n_workers` if needed.
+Publish provenance and resolved configuration with results.
 A real-model GPU smoke run is required before spending the full experimental
 budget; CPU checks exercise synthetic data and gradient paths.

@@ -29,6 +29,7 @@ class Optimization(Settings):
     warmup_updates: int = Field(default=0, ge=0)
     conditioning_epochs: int = Field(default=5, ge=1)
     pretraining_updates: int = Field(default=1000, ge=1)
+    pretraining_validation_interval: int = Field(default=250, ge=1)
     episodes_per_update: int = Field(default=4, ge=1)
     adaptation_epochs: Literal[1] = 1
     checkpoint_interval: int = Field(default=100, ge=1)
@@ -111,6 +112,7 @@ class ExperimentConfig(Settings):
     pretrained_checkpoint: Path | None = None
     seed: int = 42
     n_workers: int = Field(default=1, ge=1)
+    heatmap_n_workers: int = Field(default=4, ge=1)
     device: str = "cuda"
     dtype: Literal["bfloat16", "float32"] = "bfloat16"
     factor_cache_mib: int = Field(default=256, ge=0)

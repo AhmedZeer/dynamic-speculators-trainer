@@ -1,9 +1,12 @@
 """Ordered conditioning, bank-size, and adaptation experiments."""
 
 import csv
+import gc
 import json
 import sys
 from pathlib import Path
+
+import torch
 
 from speculators.bank.artifacts import digest, write_json
 from speculators.bank.config import BankConfig
@@ -27,10 +30,16 @@ def prepare(cfg):
     write_json(
         cfg.output_root / "prepared" / "configuration.json", cfg.model_dump(mode="json")
     )
-    report(f"Prepared compact context cache: {runtime.corpus.local}")
+    local = runtime.corpus.local
+    del runtime
+    gc.collect()
+    if cfg.device == "cuda" and torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    report(f"Prepared compact context cache: {local}")
 
 
-def execute(cfg, jobs):
+def execute(cfg, jobs, *, n_workers=None):
+    workers = cfg.n_workers if n_workers is None else n_workers
     bank = BankConfig.load(cfg.bank_config)
     corpus = Corpus(cfg, bank)
     pending = []
@@ -49,7 +58,7 @@ def execute(cfg, jobs):
                 identity,
                 json.loads((path / "result.json").read_text()),
             )
-    if pending and cfg.n_workers == 1:
+    if pending and workers == 1:
         runtime = Runtime(cfg, bank)
         for job, path in pending:
             run_job(runtime, job, path)
@@ -87,7 +96,7 @@ def execute(cfg, jobs):
                     ],
                 )
             )
-        run_parallel(runs, cfg.n_workers)
+        run_parallel(runs, workers)
     return [json.loads((path / "result.json").read_text()) for _, path in jobs]
 
 
@@ -181,7 +190,7 @@ def heatmap(cfg):
                     root / f"stride-{stride}" / f"seeds-{label}",
                 )
             )
-    results = execute(cfg, jobs)
+    results = execute(cfg, jobs, n_workers=cfg.heatmap_n_workers)
     export_heatmaps(root, cfg, results)
     write_json(root / "selection.json", {"winner": choose(results), "results": results})
     log_heatmap_summary(cfg, results, root)
