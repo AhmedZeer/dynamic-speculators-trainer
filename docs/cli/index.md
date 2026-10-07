@@ -15,6 +15,8 @@ Speculators provides the following CLI commands for different stages of the spec
 | `speculators regenerate-responses`  | Regenerate dataset responses using a vLLM-served model       | [→ Details](response_regeneration.md)   |
 | `speculators stitch-mtp`            | Stitch finetuned MTP weights back into verifier checkpoint   | `speculators stitch-mtp --help`         |
 | `speculators convert`               | Convert speculator checkpoints between formats               | `speculators convert --help`            |
+| `speculators generator export`      | Export generator/LoRA weights for inference                   | [→ Details](../experiments/eagle3_generator_vllm.md) |
+| `speculators generator benchmark`   | Compare serial vLLM decoding arms                             | [→ Details](../experiments/eagle3_generator_vllm.md) |
 
 ## Common Workflows
 

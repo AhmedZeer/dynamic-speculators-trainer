@@ -1,0 +1,25 @@
+# Paths are relative to this YAML unless absolute. Export the four completed
+# adaptation arms first; see docs/experiments/eagle3_generator_vllm.md.
+bank_config: bank_math.yaml
+output_root: /content/drive/MyDrive/dynamic-speculators-v3/output/generator-vllm-math
+staging_dir: /tmp/speculators-serving
+subset: math-00001
+bundles:
+  fresh_lora: /content/drive/MyDrive/dynamic-speculators-v3/output/generator-inference/fresh_lora
+  transferred_lora: /content/drive/MyDrive/dynamic-speculators-v3/output/generator-inference/transferred_lora
+  fresh_generator: /content/drive/MyDrive/dynamic-speculators-v3/output/generator-inference/fresh_generator
+  pretrained_generator: /content/drive/MyDrive/dynamic-speculators-v3/output/generator-inference/pretrained_generator
+arms: [target_only, eagle3_base, fresh_lora, transferred_lora, fresh_generator, pretrained_generator]
+prompts: 100
+warmups: 3
+repetitions: 3
+max_tokens: null  # Inherit bank response cap; clipped to remaining context per prompt.
+max_model_len: null  # Inherit bank context length, currently 8192.
+speculative_tokens: 3
+seed: 42
+gpu_memory_utilization: 0.85
+wandb:
+  enabled: true
+  mode: online
+  project: eagle3-generator-vllm
+  entity: null

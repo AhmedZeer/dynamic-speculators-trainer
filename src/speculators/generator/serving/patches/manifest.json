@@ -1,0 +1,36 @@
+{
+  "version": "0.31.0",
+  "commit": "db9527a46873454610df6dbedf79a36d6bf1a7f6",
+  "files": {
+    "vllm/config/speculative.py": {
+      "before_sha256": "88cec427b52bb1cb56842f9034a4d49a915d05302b92b0249227feaf4d81f3e1",
+      "after_sha256": "85d2f81a14a642aeba8454f093945506d26fc0ed467f0a71214a2ecd53cee11d",
+      "replacements": [
+        [
+          "    enforce_eager: bool | None = None\n    \"\"\"Override the default enforce_eager from model_config\"\"\"\n",
+          "    enforce_eager: bool | None = None\n    \"\"\"Override the default enforce_eager from model_config\"\"\"\n    draft_adapter_path: str | None = None\n    \"\"\"Optional speculators inference bundle for the serial EAGLE3 adapter runtime.\"\"\"\n"
+        ]
+      ]
+    },
+    "vllm/v1/spec_decode/eagle.py": {
+      "before_sha256": "b2b1f7d15117b43108be368756d9c6e9334d9415a070e46178e18bb7c6476378",
+      "after_sha256": "8aa57a92b5782c62d0066c4037a90089e31b862625c52e3154a20a47ff293aa6",
+      "replacements": [
+        [
+          "            runner=runner,\n        )\n",
+          "            runner=runner,\n        )\n\n        self.draft_adapter = None\n        if self.speculative_config.draft_adapter_path is not None:\n            from speculators.generator.serving.controller import initialize_proposer\n\n            initialize_proposer(self, runner)\n\n    def load_model(self, target_model):\n        super().load_model(target_model)\n        if self.speculative_config.draft_adapter_path is not None:\n            from speculators.generator.serving.controller import DraftAdapterController\n\n            self.draft_adapter = DraftAdapterController(\n                self.speculative_config.draft_adapter_path, self.model\n            )\n\n    def propose(self, *args, **kwargs):\n        if self.draft_adapter is not None:\n            from speculators.generator.serving.controller import prepare_proposer\n\n            prepare_proposer(\n                self, kwargs[\"target_positions\"], kwargs[\"target_hidden_states\"]\n            )\n        return super().propose(*args, **kwargs)\n\n    def dummy_run(self, *args, **kwargs):\n        if self.draft_adapter is not None:\n            self.draft_adapter.profile()\n        return super().dummy_run(*args, **kwargs)\n\n    def on_requests_finished(self, request_ids):\n        if self.draft_adapter is not None:\n            for request_id in request_ids:\n                self.draft_adapter.finish(request_id)\n"
+        ]
+      ]
+    },
+    "vllm/v1/worker/gpu_model_runner.py": {
+      "before_sha256": "bb903dffcb5a6e5b8a477daf0854b3812e135349d61fc20c6133f91cd3c9752a",
+      "after_sha256": "c73a68cc6c470f6cac9c694e054d37e1dc03551dedbb7a6b713ea5413e418d86",
+      "replacements": [
+        [
+          "        # Remove finished requests from the cached states.\n",
+          "        if self.drafter is not None and hasattr(self.drafter, \"on_requests_finished\"):\n            self.drafter.on_requests_finished(scheduler_output.finished_req_ids)\n\n        # Remove finished requests from the cached states.\n"
+        ]
+      ]
+    }
+  }
+}

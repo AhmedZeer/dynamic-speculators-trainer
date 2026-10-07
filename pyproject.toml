@@ -16,6 +16,9 @@ hs-connectors = { workspace = true }
 where = ["src"]
 include = ["*"]
 
+[tool.setuptools.package-data]
+"speculators.generator.serving" = ["patches/*.json", "patches/*.patch"]
+
 # ************************************************
 # ********** Project Metadata **********
 # ************************************************

@@ -1,0 +1,63 @@
+--- a/vllm/config/speculative.py
++++ b/vllm/config/speculative.py
+@@ -390,6 +390,8 @@
+ 
+     enforce_eager: bool | None = None
+     """Override the default enforce_eager from model_config"""
++    draft_adapter_path: str | None = None
++    """Optional speculators inference bundle for the serial EAGLE3 adapter runtime."""
+     # General speculative decoding control
+     num_speculative_tokens: int = Field(default=None, gt=0)  # type: ignore[assignment]
+     """The number of speculative tokens, if provided. It will default to the
+--- a/vllm/v1/spec_decode/eagle.py
++++ b/vllm/v1/spec_decode/eagle.py
+@@ -20,3 +20,37 @@
+             pass_hidden_states_to_model=True,
+             runner=runner,
+         )
++
++        self.draft_adapter = None
++        if self.speculative_config.draft_adapter_path is not None:
++            from speculators.generator.serving.controller import initialize_proposer
++
++            initialize_proposer(self, runner)
++
++    def load_model(self, target_model):
++        super().load_model(target_model)
++        if self.speculative_config.draft_adapter_path is not None:
++            from speculators.generator.serving.controller import DraftAdapterController
++
++            self.draft_adapter = DraftAdapterController(
++                self.speculative_config.draft_adapter_path, self.model
++            )
++
++    def propose(self, *args, **kwargs):
++        if self.draft_adapter is not None:
++            from speculators.generator.serving.controller import prepare_proposer
++
++            prepare_proposer(
++                self, kwargs["target_positions"], kwargs["target_hidden_states"]
++            )
++        return super().propose(*args, **kwargs)
++
++    def dummy_run(self, *args, **kwargs):
++        if self.draft_adapter is not None:
++            self.draft_adapter.profile()
++        return super().dummy_run(*args, **kwargs)
++
++    def on_requests_finished(self, request_ids):
++        if self.draft_adapter is not None:
++            for request_id in request_ids:
++                self.draft_adapter.finish(request_id)
+--- a/vllm/v1/worker/gpu_model_runner.py
++++ b/vllm/v1/worker/gpu_model_runner.py
+@@ -1199,6 +1199,9 @@
+         The SamplingMetadata is updated and copied to the GPU if there is a
+         new/resumed/paused/finished request in the batch.
+         """
++        if self.drafter is not None and hasattr(self.drafter, "on_requests_finished"):
++            self.drafter.on_requests_finished(scheduler_output.finished_req_ids)
++
+         # Remove finished requests from the cached states.
+         for req_id in scheduler_output.finished_req_ids:
+             req_state = self.requests.pop(req_id, None)

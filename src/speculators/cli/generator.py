@@ -9,7 +9,7 @@ import typer
 from speculators.generator.config import ExperimentConfig
 
 app = typer.Typer(
-    help="Conditioning ablations, bank heatmaps, and one-epoch adaptation."
+    help="Generator experiments, inference export, and serial vLLM benchmarks."
 )
 ConfigOption = Annotated[Path, typer.Option("--config", exists=True, dir_okay=False)]
 
@@ -77,3 +77,33 @@ def adaptation(
         condition=condition,
         pretrained_checkpoint=pretrained_checkpoint,
     )
+
+
+@app.command(name="export")
+def export_command(
+    config: ConfigOption,
+    run_dir: Annotated[Path, typer.Option("--run-dir", exists=True, file_okay=False)],
+    output: Annotated[Path, typer.Option("--output")],
+):
+    """Export completed generator/ordinary LoRA weights and training provenance."""
+    from speculators.generator.serving.bundle import export_run  # noqa: PLC0415
+
+    value = export_run(ExperimentConfig.load(config), run_dir, output)
+    typer.echo(f"Exported {value['kind']} to {output}")
+
+
+@app.command(name="benchmark")
+def benchmark_command(
+    config: ConfigOption,
+    smoke: Annotated[
+        bool, typer.Option("--smoke", help="Three prompts, one pass, 32 output tokens.")
+    ] = False,
+):
+    """Compare matched decoding arms in separate, serial vLLM 0.31.0 workers."""
+    from speculators.generator.serving.benchmark import (  # noqa: PLC0415
+        BenchmarkConfig,
+        benchmark,
+    )
+
+    results = benchmark(BenchmarkConfig.load(config), smoke=smoke)
+    typer.echo(f"Completed {len(results)} decoding arms")
