@@ -22,6 +22,7 @@ class Architecture(Settings):
 
 
 class Optimization(Settings):
+    loss_fn: str | None = None  # None inherits the bank's drafter loss.
     lr: float = Field(default=1e-4, gt=0)
     weight_decay: float = Field(default=0.01, ge=0)
     max_grad_norm: float = Field(default=0.85, gt=0)

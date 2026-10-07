@@ -144,6 +144,7 @@ the final comparison exploratory, rather than an independent held-out result.
 | `context.*` | Number of examples sharing one generated adapter and evaluation sizes |
 | `architecture.*` | Encoder/decoder capacity and full output-head size |
 | `optimization.lr`, `weight_decay` | Shared AdamW optimization |
+| `optimization.loss_fn` | Drafter objective; example selects `lk_hybrid`, null inherits the bank's loss |
 | `optimization.max_grad_norm` | Global L2 gradient clipping threshold; defaults to 0.85 |
 | `optimization.warmup_updates` | Linear LR ramp in optimizer updates; example uses 50, 0 disables |
 | `conditioning_epochs`, `pretraining_updates`, `episodes_per_update` | Comparison and reconstruction budgets |
@@ -198,6 +199,17 @@ Changed experiment settings require a new output root. Changing worker count,
 staging location, factor-cache capacity, or W&B settings does not invalidate completed runs.
 
 ### W&B monitoring
+
+The generator example uses the existing `lk_hybrid` objective for drafter
+training and evaluation: an adaptive blend of KL divergence and total variation
+with eta=3 and detached target/drafter overlap controlling the blend. It is
+applied at all configured TTT prediction steps (currently three, equally
+weighted). The generator override does not change the source LoRA-bank training
+configuration. Heatmap bank reconstruction continues to use factor L1 loss;
+its drafter evaluation uses the selected drafter objective. Changing the loss
+requires a new experiment output root; existing activation and summary caches
+remain reusable. Omitting the override retains the bank objective and backwards
+compatibility with existing run identities.
 
 Install the optional integration with `pip install -e '.[generator]'`. The example
 configuration enables **offline** logging, with separate projects:

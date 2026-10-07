@@ -103,7 +103,9 @@ class Runtime:
         self.call_kwargs = {
             "ttt_steps": bank.training.ttt_steps,
             "ttt_step_loss_decay": bank.training.ttt_step_loss_decay,
-            "loss_config": resolve_loss_config(bank.training.loss_fn),
+            "loss_config": resolve_loss_config(
+                cfg.optimization.loss_fn or bank.training.loss_fn
+            ),
         }
         # Keep functional parameter substitution outside the model graph while
         # allowing standalone attention kernels to compile and retain fusion.
@@ -322,14 +324,19 @@ def run_identity(cfg, bank, corpus, job):
         settings.pop(key)
     if not cfg.optimization.warmup_updates:
         settings["optimization"].pop("warmup_updates")
+    if cfg.optimization.loss_fn is None:
+        settings["optimization"].pop("loss_fn")
     return {
         "version": 1,
         "configuration": settings,
         "bank_data": corpus.identity,
         "lora": bank.lora.model_dump(mode="json"),
         "drafter_training": {
-            key: getattr(bank.training, key)
-            for key in ("noise_std", "ttt_steps", "ttt_step_loss_decay", "loss_fn")
+            **{
+                key: getattr(bank.training, key)
+                for key in ("noise_std", "ttt_steps", "ttt_step_loss_decay")
+            },
+            "loss_fn": cfg.optimization.loss_fn or bank.training.loss_fn,
         },
         "attention": bank.execution.draft_attn_impl,
         "job": job,

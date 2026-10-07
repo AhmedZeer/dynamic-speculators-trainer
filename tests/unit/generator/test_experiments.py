@@ -443,7 +443,9 @@ def synthetic_experiment(tmp_path, monkeypatch):
         runtime.cache = FactorCache(1, shapes, 2)
         runtime.call_kwargs = {
             "ttt_steps": 3,
-            "loss_config": resolve_loss_config("kl_div", "eager"),
+            "loss_config": resolve_loss_config(
+                config.optimization.loss_fn or bank_config.training.loss_fn, "eager"
+            ),
         }
         return runtime
 
@@ -460,6 +462,8 @@ def test_all_three_workflows_and_completed_resume(
 ):
     cfg, _ = synthetic_experiment
     cfg.wandb = WandbSettings(enabled=tracking, upload_artifacts=True)
+    if tracking:
+        cfg.optimization.loss_fn = "lk_hybrid"
     original_step = torch.optim.AdamW.step
     applied_norms = []
 
@@ -607,10 +611,14 @@ def test_reconstruction_resumes_exactly_after_interrupted_update(
         torch.testing.assert_close(resumed[name], tensor, rtol=0, atol=0)
 
 
+@pytest.mark.parametrize("loss_fn", [None, "lk_hybrid"])
 def test_production_runtime_uses_pinned_models_and_frozen_verifier(
-    synthetic_experiment, monkeypatch
+    synthetic_experiment,
+    monkeypatch,
+    loss_fn,
 ):
     cfg, _ = synthetic_experiment
+    cfg.optimization.loss_fn = loss_fn
     bank = BankConfig.load(cfg.bank_config)
     manifest_path = bank.output_root / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
@@ -640,6 +648,14 @@ def test_production_runtime_uses_pinned_models_and_frozen_verifier(
         lambda *args, **kwargs: model,
     )
     runtime = Runtime(cfg, bank)
+    assert set(runtime.call_kwargs["loss_config"]) == {loss_fn or "kl_div"}
+    assert bank.training.loss_fn == "kl_div"
+    identity = run_identity(
+        cfg, bank, runtime.corpus, {"kind": "conditioning", "condition": "last"}
+    )
+    assert identity["drafter_training"]["loss_fn"] == (loss_fn or "kl_div")
+    if loss_fn is None:
+        assert "loss_fn" not in identity["configuration"]["optimization"]
     assert snapshots == [
         (bank.models.target, "target-sha"),
         (bank.models.drafter, "draft-sha"),

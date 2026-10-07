@@ -1,6 +1,6 @@
 # Run from the repository root. The bank reference is relative to this YAML.
 bank_config: bank_math.yaml
-output_root: /content/drive/MyDrive/dynamic-speculators-v3/output/generator-math-stable-v2
+output_root: /content/drive/MyDrive/dynamic-speculators-v3/output/generator-math-stable-v2-lk
 staging_dir: /tmp/speculators-generator
 conditioning_subset: math-00001
 bank_subset: math-00000
@@ -38,6 +38,7 @@ architecture:
   decoder_width: 512
   residual_blocks: 2
 optimization:
+  loss_fn: lk_hybrid  # Adaptive KL/TV blend, eta=3; overrides bank loss for experiments.
   lr: 0.00001
   weight_decay: 0.01
   max_grad_norm: 0.85
