@@ -1,6 +1,6 @@
 # Run from the repository root. The bank reference is relative to this YAML.
 bank_config: bank_math.yaml
-output_root: /content/drive/MyDrive/dynamic-speculators-v3/output/generator-math-stable
+output_root: /content/drive/MyDrive/dynamic-speculators-v3/output/generator-math-stable-v2
 staging_dir: /tmp/speculators-generator
 conditioning_subset: math-00001
 bank_subset: math-00000
@@ -11,9 +11,9 @@ device: cuda
 dtype: bfloat16
 factor_cache_mib: 256
 preprocessing_workers: 4  # Bounded concurrent prompt-only reads; independent of n_workers.
-activation_cache_gib: 64  # Shared local disk LRU; set 0 to disable.
-activation_cache_reserve_gib: 8  # Keep this much disk free.
-activation_prefetch_workers: 2  # Upcoming activation microbatches (CPU only).
+activation_cache_gib: 120  # Shared local disk LRU; set 0 to disable.
+activation_cache_reserve_gib: 12  # Keep this much disk free.
+activation_prefetch_workers: 4  # Upcoming activation microbatches (CPU only).
 wandb:
   enabled: true
   mode: online  # Set online to send metrics to your W&B account.
@@ -38,10 +38,10 @@ architecture:
   decoder_width: 512
   residual_blocks: 2
 optimization:
-  lr: 0.0001
+  lr: 0.00001
   weight_decay: 0.01
   max_grad_norm: 0.85
-  warmup_updates: 50  # Linear learning-rate ramp; 0 disables warmup.
+  warmup_updates: 100  # Linear learning-rate ramp; 0 disables warmup.
   conditioning_epochs: 5
   pretraining_updates: 1000
   episodes_per_update: 4
