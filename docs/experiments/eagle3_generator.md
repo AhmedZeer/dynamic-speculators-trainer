@@ -129,6 +129,50 @@ and optimizer-update boundaries. Ordinary LoRA arms maintain one adapter across
 groups; generator arms produce one adapter per group. Report epoch-zero scores,
 epoch-one scores, and their differences.
 
+### Preliminary adaptation observations (2026-10-07)
+
+The user-provided W&B screenshots show one-epoch adaptation on math-00001,
+with `last` conditioning, experiment seed 42, and training context sizes 1–8.
+The validation panel below is specifically for context size 8. Values are
+approximate readings from screenshots, pending the original per-arm result
+files, resolved configurations, and command/code provenance.
+
+| Arm | Initial context-8 validation loss | Final context-8 validation loss |
+| --- | --- | --- |
+| Bank-pretrained generator | ~1.85 | ~1.05 |
+| Fresh generator | ~3.1 | ~1.05 |
+| Transferred ordinary LoRA | ~1.85 | ~1.85 |
+| Fresh ordinary LoRA | ~3.1 | ~2.4 |
+
+- Both generator arms finish with lower context-8 validation drafter loss than
+  the ordinary LoRA arms after the shared one-epoch adaptation budget.
+- Bank pretraining provides a better starting loss and lower early training
+  loss than fresh generator initialization. This supports an initialization
+  advantage; epoch-boundary validation does not establish when a given
+  validation-loss threshold was reached.
+- The fresh generator reaches approximately the same final context-8 validation
+  loss as the pretrained generator. These observations do not establish a
+  final-loss advantage from pretraining at this budget.
+
+Both generator arms are also trained by backpropagation. The comparison is
+between a context-conditioned generator that emits an adapter for each group
+and directly optimizing a single ordinary adapter. It does not isolate
+conditioning from parameter capacity: the large generator has about 293 million
+parameters, substantially more than an ordinary rank-32 adapter. This is an
+exploratory single-seed comparison using the validation split also used for
+conditioning selection. Inspect context sizes 1 and 4 and the offline agreement
+metrics before claiming a general performance advantage; decoding acceptance
+and inference speed have not been measured here.
+
+![Adaptation training drafter loss for the four arms](assets/adaptation-2026-10-07-training.png)
+
+![Adaptation validation loss at context size 8](assets/adaptation-2026-10-07-validation-context8.png)
+
+This observation record is provisional. Before publishing it as a reproducible
+experiment result, attach each arm's original results, resolved experiment
+configuration, `train_command.txt`, `speculators.patch`, and any associated
+evaluation/extraction provenance required by AGENTS.md.
+
 ## Architecture and data flow
 
 This is a [Text-to-LoRA](https://arxiv.org/abs/2506.06105)-inspired large

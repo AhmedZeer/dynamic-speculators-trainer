@@ -4,6 +4,7 @@ import functools
 import logging
 import os
 import time
+from http import HTTPStatus
 from typing import TYPE_CHECKING, Any, TypedDict
 
 import openai
@@ -31,9 +32,22 @@ def _handle_retry_error(
     """Handle a retry-eligible error.
 
     Returns backoff seconds if the caller should retry, or ``None`` on the
-    final attempt.  Raises ``InvalidResponseError`` immediately.
+    final attempt. Permanent HTTP errors and ``InvalidResponseError`` fail
+    immediately.
     """
-    if isinstance(error, InvalidResponseError):
+    if isinstance(error, InvalidResponseError) or (
+        isinstance(error, openai.APIStatusError)
+        and HTTPStatus.BAD_REQUEST
+        <= error.status_code
+        < HTTPStatus.INTERNAL_SERVER_ERROR
+        and error.status_code
+        not in (
+            HTTPStatus.REQUEST_TIMEOUT,
+            HTTPStatus.CONFLICT,
+            HTTPStatus.TOO_EARLY,
+            HTTPStatus.TOO_MANY_REQUESTS,
+        )
+    ):
         raise error
     if attempt < total_attempts:
         backoff = RETRY_BACKOFF_BASE**attempt

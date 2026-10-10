@@ -10,7 +10,13 @@ from pathlib import Path
 
 import yaml
 
-from speculators.bank.artifacts import digest, file_digest, load_subset, write_json
+from speculators.bank.artifacts import (
+    digest,
+    file_digest,
+    load_subset,
+    read_jsonl,
+    write_json,
+)
 from speculators.bank.config import BankConfig
 from speculators.bank.progress import report, stage_progress
 from speculators.bank.runner import TrainingRun, run_parallel
@@ -164,7 +170,7 @@ def select_data(cfg: BankConfig) -> dict:
     return manifest
 
 
-def regenerate(cfg: BankConfig, manifest: dict):
+def regenerate(cfg: BankConfig, manifest: dict, *, prompts_path: Path | None = None):
     from speculators.cli.regenerate_responses import (  # noqa: PLC0415
         regenerate_responses,
     )
@@ -177,7 +183,7 @@ def regenerate(cfg: BankConfig, manifest: dict):
     regenerate_responses(
         endpoint=cfg.execution.generation_endpoint,
         model=cfg.models.target,
-        dataset=str(root / "prompts.jsonl"),
+        dataset=str(prompts_path or root / "prompts.jsonl"),
         split=None,
         subset=None,
         limit=None,
@@ -217,10 +223,7 @@ def prepare_rows(
         if primary in by_id:
             raise ValueError(f"Multiple responses for prompt {primary}")
         by_id[primary] = response
-    prompts = [
-        json.loads(line)
-        for line in (Path(manifest["root"]) / "prompts.jsonl").read_text().splitlines()
-    ]
+    prompts = read_jsonl(Path(manifest["root"]) / "prompts.jsonl")
     expected = {p["id"] for p in prompts}
     if set(by_id) != expected:
         raise ValueError("Response identities do not match the selected corpus")
@@ -263,7 +266,7 @@ def prepare_arrow(cfg: BankConfig, manifest: dict):
     root = Path(manifest["root"])
     responses_path = root / "responses.jsonl"
     rows = prepare_rows(
-        [json.loads(line) for line in responses_path.read_text().splitlines()],
+        read_jsonl(responses_path),
         manifest,
         cfg.hidden_states.sequence_length,
     )
@@ -389,7 +392,7 @@ def prepare(cfg: BankConfig, stage: str):
     return manifest
 
 
-def train_config(
+def train_config(  # noqa: PLR0917 -- established bank/trainer interface
     cfg: BankConfig,
     manifest: dict,
     subset_id: str,

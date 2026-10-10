@@ -1,0 +1,41 @@
+# Fresh data preparation only; no training is submitted.
+run_id: nemotron-v1
+domains: [chat, math, code, stem]
+subset_ids: [0, 1, 2, 3, 4, 5]
+batch_size: 100
+gpu_hours_limit: 8
+bank:
+  models:
+    target: Qwen/Qwen3-8B
+    target_revision: main
+    drafter: RedHatAI/Qwen3-8B-speculator.eagle3
+    drafter_revision: main
+  dataset:
+    source: openeurollm/Nemotron-Post-Training-Dataset-v2-decontaminated
+    revision: main
+    configuration: default
+  partition:
+    train_examples: 1000
+    validation_examples: 100
+    seed: 0
+  responses:
+    thinking: false
+    temperature: 0.7
+    top_p: 0.8
+    top_k: 20
+    seed: 0
+    max_tokens: 4096
+    context_length: 8192
+  hidden_states:
+    layer_ids: [2, 18, 33, 36]
+    dtype: bfloat16
+    sequence_length: 8192
+  execution:
+    concurrency: 16
+    hidden_state_concurrency: 4
+    hidden_state_write_concurrency: 2
+    hidden_state_log_interval: 10
+    request_timeout: 600
+    max_retries: 3
+    n_workers: 1
+    processes: 1

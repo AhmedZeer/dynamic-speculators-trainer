@@ -52,3 +52,9 @@ def load_subset(manifest_path: Path, subset_id: str):
     if len(set(train)) != len(train) or len(set(val)) != len(val):
         raise ValueError("Bank memberships contain duplicate prepared rows")
     return manifest, subset
+
+
+def read_jsonl(path: Path) -> list[dict]:
+    """Read newline-delimited records without splitting Unicode text separators."""
+    with path.open(encoding="utf-8") as stream:
+        return [json.loads(line) for line in stream if line.strip()]
