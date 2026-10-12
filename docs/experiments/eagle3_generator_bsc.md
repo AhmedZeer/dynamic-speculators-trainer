@@ -1,5 +1,9 @@
 # BSC EAGLE3 generator experiment plan
 
+The current deployment and data-publication plan is
+[EAGLE3 scale-up with Hugging Face artifacts](eagle3_generator_scaleup.md).
+This document retains the earlier experimental design and BSC-specific history.
+
 Status: experimental design, before implementation or submission. The user
 confirmed four domains, ten total bank epochs, and joint adaptation. Defaults
 marked proposed below are recommendations rather than confirmed measurements.
