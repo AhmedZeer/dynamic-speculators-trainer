@@ -3,8 +3,11 @@
 Status: data contract and implementation plan. Public repositories under
 `azeeer` are confirmed. This document replaces the BSC deployment assumptions
 in `eagle3_generator_bsc.md`; the experimental design remains the starting point.
-The Hub integration and proposed configuration fields below are not implemented
-by the current bank CLI. No repositories have been created or uploaded yet.
+Preparation publication and restore are now implemented; see the
+[machine runbook](eagle3_hub_preparation.md). The training expansion and append
+selection migration remain planned. Repository creation/upload happens when the
+user runs preparation with Hub authentication; no production data was uploaded
+by the implementation agent.
 
 ## Initial experiment
 

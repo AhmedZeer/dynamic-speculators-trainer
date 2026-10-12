@@ -1,0 +1,871 @@
+"""Immutable public preparation artifacts and relocatable, pinned consumers."""
+
+# Stage-specific dependencies are intentionally lazy.
+# ruff: noqa: PLC0415
+
+import json
+import random
+import shutil
+import sqlite3
+import tempfile
+from contextlib import nullcontext
+from pathlib import Path
+
+import yaml
+from filelock import FileLock
+from huggingface_hub import CommitOperationAdd, HfApi, hf_hub_download
+from huggingface_hub.errors import EntryNotFoundError
+
+from speculators.bank.artifacts import digest, file_digest, read_jsonl, write_json
+from speculators.bank.progress import report, stage_progress
+
+DOMAINS = ("chat", "math", "code", "stem")
+STATE_NDIM = 3
+
+
+def fetch(reference, destination):
+    """Restore one verified object without retaining a second Hub-cache copy."""
+    destination = Path(destination)
+    if destination.exists() and file_digest(destination) == reference["sha256"]:
+        return destination
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=destination.parent) as scratch:
+        source = hf_hub_download(
+            reference["repo"],
+            reference["path"],
+            repo_type="dataset",
+            revision=reference["revision"],
+            local_dir=scratch,
+        )
+        if file_digest(Path(source)) != reference["sha256"]:
+            raise ValueError(f"Downloaded object checksum differs: {reference['path']}")
+        Path(source).replace(destination)
+    return destination
+
+
+class Publisher:
+    """One coordinator, immutable paths, and a durable successful-upload journal."""
+
+    def __init__(self, cfg, api=None):
+        self.cfg = cfg
+        self.root = cfg.output_root.resolve()
+        self.journal_path = self.root / "publication.json"
+        self.journal = (
+            json.loads(self.journal_path.read_text())
+            if self.journal_path.exists()
+            else {}
+        )
+        self.api = api or HfApi()
+        for repo in (cfg.hub.trajectories_repo, cfg.hub.activations_repo):
+            self.api.create_repo(
+                repo, repo_type="dataset", private=False, exist_ok=True
+            )
+            if self.api.repo_info(repo, repo_type="dataset").private:
+                raise ValueError(f"Expected public dataset repository: {repo}")
+
+    def put(self, repo, path, source):
+        source = Path(source)
+        checksum = file_digest(source)
+        key = f"{repo}:{path}"
+        if key in self.journal:
+            if self.journal[key]["sha256"] != checksum:
+                raise ValueError(f"Immutable published object changed: {path}")
+            return self.journal[key]
+        # Resolve HEAD once: immutable-object lookup and commit use the same parent.
+        parent = self.api.repo_info(repo, repo_type="dataset").sha
+        try:
+            sidecar = hf_hub_download(
+                repo, path + ".sha256.json", repo_type="dataset", revision=parent
+            )
+        except EntryNotFoundError:
+            sidecar = None
+        if sidecar:
+            if json.loads(Path(sidecar).read_text())["sha256"] != checksum:
+                raise ValueError(f"Immutable Hub object differs: {path}")
+            revision = parent
+        else:
+            report(f"Publishing {repo}/{path}: {source.stat().st_size / 2**20:.1f} MiB")
+            with stage_progress(f"Hub upload {path}"):
+                commit = self.api.create_commit(
+                    repo,
+                    repo_type="dataset",
+                    parent_commit=parent,
+                    commit_message=f"Publish immutable {path}",
+                    operations=[
+                        CommitOperationAdd(path_in_repo=path, path_or_fileobj=source),
+                        CommitOperationAdd(
+                            path_in_repo=path + ".sha256.json",
+                            path_or_fileobj=json.dumps({"sha256": checksum}).encode(),
+                        ),
+                    ],
+                )
+            revision = commit.oid
+        value = {
+            "repo": repo,
+            "path": path,
+            "revision": revision,
+            "sha256": checksum,
+            "bytes": source.stat().st_size,
+        }
+        self.journal[key] = value
+        write_json(self.journal_path, self.journal)
+        return value
+
+    def metadata(self, repo, path, value):
+        local = self.root / ".publication" / (digest(path) + ".json")
+        write_json(local, value)
+        return self.put(repo, path, local)
+
+
+def profile(cfg):
+    return f"releases/{cfg.hub.release}/{cfg.dataset.category}"
+
+
+def portable(manifest):
+    return {
+        **manifest,
+        "root": ".",
+        "data_path": "data",
+        "hidden_states_path": "hidden_states",
+    }
+
+
+def provenance(publisher, stage):
+    from speculators.train.utils import save_train_command
+
+    root = publisher.root / "provenance" / "hub" / stage
+    # Keep each attempt; never replace earlier invocation provenance.
+    attempt = root / f"attempt-{len(list(root.glob('attempt-*'))):05d}"
+    save_train_command(str(attempt))
+    files = []
+    for file in sorted((publisher.root / "provenance").rglob("*")):
+        if file.is_file() and file.suffix != ".log":
+            # Content-addressed paths permit additional server/resume attempts.
+            path = f"provenance/{file_digest(file)}/{file.name}"
+            files.append(publisher.put(publisher.cfg.hub.trajectories_repo, path, file))
+    return files
+
+
+def stage_record(publisher, stage, manifest, artifacts):
+    path = f"{profile(publisher.cfg)}/{stage}.json"
+    parent = publisher.api.repo_info(
+        publisher.cfg.hub.trajectories_repo, repo_type="dataset"
+    ).sha
+    try:
+        existing = hf_hub_download(
+            publisher.cfg.hub.trajectories_repo,
+            path,
+            repo_type="dataset",
+            revision=parent,
+        )
+    except EntryNotFoundError:
+        existing = None
+    if existing:
+        previous = json.loads(Path(existing).read_text())
+
+        def identity(items):
+            return [(a["repo"], a["path"], a["sha256"]) for a in items]
+
+        if previous["manifest"]["cache_fingerprint"] != manifest[
+            "cache_fingerprint"
+        ] or identity(previous["artifacts"]) != identity(artifacts):
+            raise ValueError(f"Published {stage} differs; choose a new release")
+        return previous
+    return publisher.metadata(
+        publisher.cfg.hub.trajectories_repo,
+        path,
+        {
+            "version": 1,
+            "stage": stage,
+            "manifest": portable(manifest),
+            "artifacts": artifacts,
+            "provenance": provenance(publisher, stage),
+        },
+    )
+
+
+def select(cfg, publisher):  # noqa: C901 -- streaming selection and frozen publication
+    """Freeze all configured domains once; per-domain preparation uses that registry."""
+    from datasets import load_dataset
+
+    from speculators.bank.workflow import cache_spec, prompt_messages
+
+    catalog_path = f"selections/{cfg.hub.selection}/catalog.json"
+    cfg.hub.selection_root.mkdir(parents=True, exist_ok=True)
+    local = cfg.hub.selection_root / "catalog.json"
+    identity = digest(
+        {
+            "models": cfg.models.model_dump(),
+            "source": cfg.dataset.source,
+            "source_revision": cfg.dataset.revision,
+            "configuration": cfg.dataset.configuration,
+            "sample_limit": cfg.dataset.sample_limit,
+            "partition": cfg.partition.model_dump(),
+            "domains": cfg.hub.domains,
+            "reserved": cfg.hub.adaptation_subset_ids,
+        }
+    )
+    with FileLock(str(local) + ".lock"):
+        if not local.exists():
+            try:
+                remote = hf_hub_download(
+                    cfg.hub.trajectories_repo, catalog_path, repo_type="dataset"
+                )
+            except EntryNotFoundError:
+                remote = None
+            if remote:
+                shutil.copyfile(remote, local)
+        if local.exists():
+            catalog = json.loads(local.read_text())
+            if catalog["identity"] != identity:
+                raise ValueError(
+                    "Frozen selection changed; use a new selection ID "
+                    "and selection_root"
+                )
+        else:
+            api = publisher.api
+            revisions = {
+                "target_sha": api.model_info(
+                    cfg.models.target, revision=cfg.models.target_revision
+                ).sha,
+                "drafter_sha": api.model_info(
+                    cfg.models.drafter, revision=cfg.models.drafter_revision
+                ).sha,
+                "dataset_sha": api.dataset_info(
+                    cfg.dataset.source, revision=cfg.dataset.revision
+                ).sha,
+            }
+            catalog = {
+                "version": 1,
+                "identity": identity,
+                "revisions": revisions,
+                "domains": {},
+            }
+            owned = set()
+            selected_lookup = {}
+            size = cfg.partition.train_examples + cfg.partition.validation_examples
+            for domain in DOMAINS:
+                if domain not in cfg.hub.domains:
+                    continue
+                report(
+                    f"Selecting {domain}; cross-domain registry entries={len(owned)}"
+                )
+                with (
+                    tempfile.TemporaryDirectory(dir=cfg.hub.selection_root) as scratch,
+                    sqlite3.connect(Path(scratch) / "prompts.db") as db,
+                ):
+                    db.execute(
+                        "CREATE TABLE prompts (id TEXT PRIMARY KEY, messages TEXT)"
+                    )
+                    db.execute(
+                        "CREATE TABLE aliases (id TEXT, source TEXT, "
+                        "license TEXT, PRIMARY KEY(id,source))"
+                    )
+                    excluded = 0
+                    rows = load_dataset(
+                        cfg.dataset.source,
+                        name=cfg.dataset.configuration,
+                        split=domain,
+                        revision=revisions["dataset_sha"],
+                        streaming=True,
+                    )
+                    for number, row in enumerate(rows):
+                        if (
+                            cfg.dataset.sample_limit is not None
+                            and number >= cfg.dataset.sample_limit
+                        ):
+                            break
+                        try:
+                            messages = prompt_messages(row)
+                        except ValueError:
+                            excluded += 1
+                            continue
+                        primary = digest(messages)
+                        if primary in owned:
+                            if primary in selected_lookup:
+                                previous = selected_lookup[primary]
+                                alias = str(
+                                    row.get("uuid") or row.get("id") or digest(row)
+                                )
+                                if alias not in previous["source_ids"]:
+                                    previous["source_ids"].append(alias)
+                                    previous["source_ids"].sort()
+                                    previous["source_aliases"].append(
+                                        {
+                                            "id": alias,
+                                            "license": str(row.get("license", "")),
+                                        }
+                                    )
+                                    previous["source_aliases"].sort(
+                                        key=lambda a: a["id"]
+                                    )
+                            continue
+                        db.execute(
+                            "INSERT OR IGNORE INTO prompts VALUES (?,?)",
+                            (primary, json.dumps(messages)),
+                        )
+                        db.execute(
+                            "INSERT OR IGNORE INTO aliases VALUES (?,?,?)",
+                            (
+                                primary,
+                                str(row.get("uuid") or row.get("id") or digest(row)),
+                                str(row.get("license", "")),
+                            ),
+                        )
+                        if number % 10000 == 0:
+                            db.commit()
+                            report(
+                                f"Selecting {domain}: scanned={number}, "
+                                f"unsupported={excluded}"
+                            )
+                    ids = [
+                        r[0] for r in db.execute("SELECT id FROM prompts ORDER BY id")
+                    ]
+                    random.Random(cfg.partition.seed).shuffle(ids)
+                    if max(cfg.partition.subset_ids) >= len(ids) // size:
+                        raise ValueError(f"Insufficient distinct prompts in {domain}")
+                    selected = []
+                    for subset in cfg.partition.subset_ids:
+                        for primary in ids[subset * size : (subset + 1) * size]:
+                            aliases = [
+                                {"id": s, "license": source_license}
+                                for s, source_license in db.execute(
+                                    "SELECT source,license FROM aliases "
+                                    "WHERE id=? ORDER BY source",
+                                    (primary,),
+                                )
+                            ]
+                            selected.append(
+                                {
+                                    "id": primary,
+                                    "messages": json.loads(
+                                        db.execute(
+                                            "SELECT messages FROM prompts WHERE id=?",
+                                            (primary,),
+                                        ).fetchone()[0]
+                                    ),
+                                    "source_ids": [a["id"] for a in aliases],
+                                    "source_aliases": aliases,
+                                    "source_split": domain,
+                                    "subset_id": f"{domain}-{subset:05d}",
+                                    "role": "adaptation"
+                                    if subset in cfg.hub.adaptation_subset_ids
+                                    else "bank",
+                                }
+                            )
+                    # Freeze ownership of the entire earlier domain.
+                    owned.update(ids)
+                    selected_lookup.update({p["id"]: p for p in selected})
+                    catalog["domains"][domain] = {
+                        "prompts": selected,
+                        "unsupported_rows": excluded,
+                    }
+            write_json(local, catalog)
+        publisher.put(cfg.hub.trajectories_repo, catalog_path, local)
+    prompts = catalog["domains"][cfg.dataset.category]["prompts"]
+    root = cfg.output_root.resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    prompt_file = root / "prompts.jsonl"
+    prompt_file.write_text(
+        "".join(json.dumps(p, sort_keys=True) + "\n" for p in prompts)
+    )
+    subsets = []
+    size = cfg.partition.train_examples + cfg.partition.validation_examples
+    for offset, subset in enumerate(cfg.partition.subset_ids):
+        group = prompts[offset * size : (offset + 1) * size]
+        train = cfg.partition.train_examples
+        subsets.append(
+            {
+                "id": f"{cfg.dataset.category}-{subset:05d}",
+                "role": group[0]["role"],
+                "training_seed": 42 + 5 * DOMAINS.index(cfg.dataset.category) + subset
+                if group[0]["role"] == "bank"
+                else None,
+                "train_ids": [p["id"] for p in group[:train]],
+                "validation_ids": [p["id"] for p in group[train:]],
+                "train_indices": list(range(offset * size, offset * size + train)),
+                "validation_indices": list(
+                    range(offset * size + train, (offset + 1) * size)
+                ),
+            }
+        )
+    spec = cache_spec(cfg, catalog["revisions"])
+    manifest = {
+        "version": 1,
+        "category": cfg.dataset.category,
+        "cache_spec": spec,
+        "cache_fingerprint": digest(spec),
+        "revisions": catalog["revisions"],
+        "root": str(root),
+        "data_path": str(root / "data"),
+        "hidden_states_path": str(root / "hidden_states"),
+        "subsets": subsets,
+        "prompts_sha256": file_digest(prompt_file),
+        "prepared": False,
+        "partition_stats": {"selected_prompts": len(prompts)},
+    }
+    write_json(root / "manifest.json", manifest)
+    artifact = publisher.put(
+        cfg.hub.trajectories_repo, f"{profile(cfg)}/prompts.jsonl", prompt_file
+    )
+    stage_record(publisher, "select", manifest, [artifact])
+    return manifest
+
+
+def publish_data(cfg, publisher, manifest):
+    from datasets import load_from_disk
+
+    data = load_from_disk(manifest["data_path"]).with_format(None)
+    prompts = {p["id"]: p for p in read_jsonl(publisher.root / "prompts.jsonl")}
+    files = []
+    for subset in manifest["subsets"]:
+        for split in ("train", "validation"):
+            path = f"{profile(cfg)}/{subset['id']}/{split}.parquet"
+            local = publisher.root / ".publication" / subset["id"] / f"{split}.parquet"
+            local.parent.mkdir(parents=True, exist_ok=True)
+            from datasets import Dataset
+
+            rows = [
+                {
+                    **data[i],
+                    "role": subset["role"],
+                    "membership": split,
+                    "source_aliases": prompts[data[i]["primary_id"]].get(
+                        "source_aliases", []
+                    ),
+                    "source_repo": cfg.dataset.source,
+                    "source_revision": manifest["revisions"]["dataset_sha"],
+                }
+                for i in subset[f"{split}_indices"]
+            ]
+            Dataset.from_list(rows).to_parquet(local)
+            files.append(publisher.put(cfg.hub.trajectories_repo, path, local))
+    stage_record(publisher, "data", manifest, files)
+    # Explicit configs prevent stage manifests from becoming dataset-viewer rows.
+    parent = publisher.api.repo_info(cfg.hub.trajectories_repo, repo_type="dataset").sha
+    paths = publisher.api.list_repo_files(
+        cfg.hub.trajectories_repo, repo_type="dataset", revision=parent
+    )
+    configs = []
+    for domain in DOMAINS:
+        splits = [
+            {
+                "split": split,
+                "path": sorted(
+                    p
+                    for p in paths
+                    if p.startswith(f"releases/{cfg.hub.release}/{domain}/")
+                    and p.endswith(f"/{split}.parquet")
+                ),
+            }
+            for split in ("train", "validation")
+        ]
+        if all(s["path"] for s in splits):
+            configs.append({"config_name": domain, "data_files": splits})
+    card = "---\n" + yaml.safe_dump({"configs": configs}, sort_keys=False) + "---\n"
+    card += "# Frozen EAGLE3 target trajectories\n\n"
+    card += (
+        "Prompt memberships, target token trajectories, "
+        "and references to pinned activation shards.\n\n"
+    )
+    card += f"Source: https://huggingface.co/datasets/{cfg.dataset.source}\n\n"
+    card += (
+        "Retained source UUIDs and licenses are in source_aliases. "
+        "Preserve attribution and respect each source license.\n\n"
+    )
+    card += (
+        "The train split contains both bank and reserved adaptation subsets. "
+        "Filter by subset_id and role before training.\n"
+    )
+    try:
+        previous = hf_hub_download(
+            cfg.hub.trajectories_repo, "README.md", repo_type="dataset", revision=parent
+        )
+    except EntryNotFoundError:
+        previous = None
+    if previous is None or Path(previous).read_text() != card:
+        publisher.api.create_commit(
+            cfg.hub.trajectories_repo,
+            repo_type="dataset",
+            parent_commit=parent,
+            commit_message="Update trajectory configurations and attribution",
+            operations=[
+                CommitOperationAdd(
+                    path_in_repo="README.md", path_or_fileobj=card.encode()
+                )
+            ],
+        )
+
+
+def responses(cfg, publisher, manifest):
+    from speculators.bank.workflow import regenerate
+    from speculators.data_generation.pipeline import repair_responses
+
+    prompts = read_jsonl(publisher.root / "prompts.jsonl")
+    expected = {p["id"] for p in prompts}
+    response_file = publisher.root / "responses.jsonl"
+    saved = {r["primary_id"]: r for r in repair_responses(response_file, expected)}
+    parent = publisher.api.repo_info(cfg.hub.trajectories_repo, repo_type="dataset").sha
+    for path in publisher.api.list_repo_files(
+        cfg.hub.trajectories_repo, repo_type="dataset", revision=parent
+    ):
+        if path.startswith(f"{profile(cfg)}/responses/") and path.endswith(".jsonl"):
+            remote = hf_hub_download(
+                cfg.hub.trajectories_repo, path, repo_type="dataset", revision=parent
+            )
+            for row in read_jsonl(Path(remote)):
+                primary = row["primary_id"]
+                if primary not in expected or (
+                    primary in saved and saved[primary] != row
+                ):
+                    raise ValueError(
+                        "Published response chunk differs from local responses"
+                    )
+                saved[primary] = row
+    response_file.write_text(
+        "".join(json.dumps(saved[p["id"]]) + "\n" for p in prompts if p["id"] in saved)
+    )
+    files = []
+    for start in range(0, len(prompts), cfg.hub.response_chunk_size):
+        batch = prompts[start : start + cfg.hub.response_chunk_size]
+        temporary = publisher.root / ".publication" / "request-prompts.jsonl"
+        temporary.parent.mkdir(parents=True, exist_ok=True)
+        temporary.write_text("".join(json.dumps(p) + "\n" for p in batch))
+        if any(p["id"] not in saved for p in batch):
+            regenerate(cfg, manifest, prompts_path=temporary)
+        available = {
+            r["primary_id"]: r for r in read_jsonl(publisher.root / "responses.jsonl")
+        }
+        missing = [p["id"] for p in batch if p["id"] not in available]
+        if missing:
+            raise ValueError(
+                f"Response chunk incomplete ({len(missing)} missing); rerun to resume"
+            )
+        chunk = temporary.with_name(f"responses-{start:08d}.jsonl")
+        chunk.write_text("".join(json.dumps(available[p["id"]]) + "\n" for p in batch))
+        files.append(
+            publisher.put(
+                cfg.hub.trajectories_repo,
+                f"{profile(cfg)}/responses/{chunk.name}",
+                chunk,
+            )
+        )
+    stage_record(publisher, "responses", manifest, files)
+
+
+def hidden(cfg, publisher, manifest):  # noqa: C901 -- bounded extraction and durable publication
+    """Extract bounded batches, seal/upload shards, then release local payloads."""
+    import torch
+    from datasets import load_from_disk
+    from safetensors.torch import load_file, save_file
+
+    from speculators.cli.generate_offline_data import generate_offline_data
+
+    root = Path(manifest["hidden_states_path"])
+    root.mkdir(parents=True, exist_ok=True)
+    index_path = root / "index.json"
+    index = (
+        json.loads(index_path.read_text())
+        if index_path.exists()
+        else {
+            "version": 1,
+            "rows": {},
+            "cache_gib": cfg.hub.cache_gib,
+            "reserve_gib": cfg.hub.cache_reserve_gib,
+            "prepared_fingerprint": manifest["prepared_fingerprint"],
+        }
+    )
+    if index["prepared_fingerprint"] != manifest["prepared_fingerprint"]:
+        raise ValueError("Activation index belongs to another trajectory dataset")
+    data = load_from_disk(manifest["data_path"]).with_format(None)
+    # Recover sealed shards even when the original machine/local index was lost.
+    parent = publisher.api.repo_info(cfg.hub.activations_repo, repo_type="dataset").sha
+    for path in publisher.api.list_repo_files(
+        cfg.hub.activations_repo, repo_type="dataset", revision=parent
+    ):
+        if path.startswith(profile(cfg) + "/") and path.endswith("-complete.json"):
+            saved = hf_hub_download(
+                cfg.hub.activations_repo, path, repo_type="dataset", revision=parent
+            )
+            complete = json.loads(Path(saved).read_text())
+            if complete["prepared_fingerprint"] != manifest["prepared_fingerprint"]:
+                raise ValueError("Published shard belongs to different trajectories")
+            index["rows"].update(complete["rows"])
+    write_json(index_path, index)
+    for subset in manifest["subsets"]:
+        for split in ("train", "validation"):
+            pending = [
+                i for i in subset[f"{split}_indices"] if str(i) not in index["rows"]
+            ]
+            for start in range(0, len(pending), cfg.hub.extraction_batch_size):
+                indices = pending[start : start + cfg.hub.extraction_batch_size]
+                pending_root = root / ".pending-extraction" / digest(indices)
+                pending_root.mkdir(parents=True, exist_ok=True)
+                with nullcontext(pending_root) as scratch:
+                    if not (scratch / "data").exists():
+                        data.select(indices).save_to_disk(scratch / "data")
+                    generate_offline_data(
+                        model=cfg.models.target,
+                        endpoint=cfg.execution.extraction_endpoint,
+                        preprocessed_data=str(scratch / "data"),
+                        output=str(scratch / "states"),
+                        max_samples=None,
+                        concurrency=cfg.execution.hidden_state_concurrency,
+                        write_concurrency=cfg.execution.hidden_state_write_concurrency,
+                        progress_log_interval=cfg.execution.hidden_state_log_interval,
+                        validate_outputs=True,
+                        trust_existing_outputs=True,
+                        request_timeout=cfg.execution.request_timeout,
+                        max_retries=cfg.execution.max_retries,
+                        fail_on_error=True,
+                        max_consecutive_errors=None,
+                        world_size=1,
+                        rank=0,
+                    )
+                    tensors, summaries, entries, size = {}, {}, [], 0
+
+                    shard_location = f"{profile(cfg)}/{subset['id']}/{split}"
+
+                    def flush(
+                        tensors,
+                        summaries,
+                        entries,
+                        location=shard_location,
+                    ):
+                        if not entries:
+                            return
+                        identity = digest([data[i]["primary_id"] for i in entries])
+                        path = f"{location}/{identity}"
+                        shard, summary = (
+                            scratch / "shard.safetensors",
+                            scratch / "conditioning.safetensors",
+                        )
+                        save_file(tensors, shard)
+                        save_file(summaries, summary)
+                        reference = publisher.put(
+                            cfg.hub.activations_repo, path + ".safetensors", shard
+                        )
+                        compact = publisher.put(
+                            cfg.hub.activations_repo,
+                            path + "-conditioning.safetensors",
+                            summary,
+                        )
+                        for i in entries:
+                            index["rows"][str(i)] = {
+                                "primary_id": data[i]["primary_id"],
+                                "shard": reference,
+                                "summary": compact,
+                            }
+                        # Release payloads only after this durable record.
+                        publisher.metadata(
+                            cfg.hub.activations_repo,
+                            path + "-complete.json",
+                            {
+                                "prepared_fingerprint": manifest[
+                                    "prepared_fingerprint"
+                                ],
+                                "rows": {
+                                    str(i): index["rows"][str(i)] for i in entries
+                                },
+                            },
+                        )
+                        write_json(index_path, index)
+                        report(
+                            f"Durable hidden states: {len(index['rows'])}/{len(data)}"
+                        )
+
+                    for offset, i in enumerate(indices):
+                        payload = load_file(
+                            scratch / "states" / f"hs_{offset}.safetensors"
+                        )
+                        states = payload["hidden_states"]
+                        if (
+                            states.ndim != STATE_NDIM
+                            or states.shape[0] != data[i]["seq_len"]
+                            or states.shape[1] != len(cfg.hidden_states.layer_ids)
+                            or states.dtype != getattr(torch, cfg.hidden_states.dtype)
+                            or payload["token_ids"].tolist() != data[i]["input_ids"]
+                        ):
+                            raise ValueError(
+                                f"Extraction shape/dtype/tokens differ for row {i}"
+                            )
+                        primary = data[i]["primary_id"]
+                        byte_count = sum(
+                            t.numel() * t.element_size() for t in payload.values()
+                        )
+                        if entries and size + byte_count > cfg.hub.shard_bytes:
+                            flush(tensors, summaries, entries)
+                            tensors, summaries, entries, size = {}, {}, [], 0
+                        tensors.update(
+                            {
+                                f"{primary}/{key}": value
+                                for key, value in payload.items()
+                            }
+                        )
+                        boundary = data[i]["prompt_length"]
+                        summaries[primary] = (
+                            payload["hidden_states"][boundary - 1, :-1]
+                            .flatten()
+                            .float()
+                            .clone()
+                        )
+                        entries.append(i)
+                        size += byte_count
+                    flush(tensors, summaries, entries)
+                shutil.rmtree(pending_root)
+    artifact = publisher.put(
+        cfg.hub.activations_repo, f"{profile(cfg)}/index.json", index_path
+    )
+    stage_record(publisher, "hidden", manifest, [artifact])
+
+
+def restore(cfg, stage):  # noqa: C901 -- restore/verify four dependent stages
+    """Hydrate metadata/trajectories; full activations remain lazy shard references."""
+    from datasets import Dataset, concatenate_datasets, load_from_disk
+
+    root = cfg.output_root.resolve()
+    root.mkdir(parents=True, exist_ok=True)
+
+    def record(name):
+        path = hf_hub_download(
+            cfg.hub.trajectories_repo,
+            f"{profile(cfg)}/{name}.json",
+            repo_type="dataset",
+            revision=cfg.hub.trajectories_revision,
+        )
+        return json.loads(Path(path).read_text())
+
+    selection = record("select")
+    manifest = selection["manifest"]
+    existing_manifest = root / "manifest.json"
+    if existing_manifest.exists():
+        existing = json.loads(existing_manifest.read_text())
+        if existing["cache_fingerprint"] != manifest["cache_fingerprint"]:
+            raise ValueError(
+                "Restore selection differs from local data; use a fresh output_root"
+            )
+    manifest.update(
+        root=str(root),
+        data_path=str(root / "data"),
+        hidden_states_path=str(root / "hidden_states"),
+    )
+    for reference in selection["artifacts"]:
+        fetch(reference, root / "prompts.jsonl")
+    if stage in ("responses", "data", "hidden", "all"):
+        response_record = record("responses")
+        chunks = []
+        for reference in response_record["artifacts"]:
+            chunks.append(
+                fetch(reference, root / ".restore" / Path(reference["path"]).name)
+            )
+        (root / "responses.jsonl").write_bytes(b"".join(p.read_bytes() for p in chunks))
+    if stage in ("data", "hidden", "all"):
+        prepared = record("data")
+        datasets = []
+        original_columns = {
+            "input_ids",
+            "loss_mask",
+            "seq_len",
+            "primary_id",
+            "source_ids",
+            "category",
+            "subset_id",
+            "prompt_length",
+            "metadata",
+        }
+        for r in prepared["artifacts"]:
+            table = Dataset.from_parquet(
+                str(fetch(r, root / ".restore" / (digest(r["path"]) + ".parquet")))
+            )
+            datasets.append(
+                table.remove_columns(
+                    [
+                        name
+                        for name in table.column_names
+                        if name not in original_columns
+                    ]
+                )
+            )
+        rows = concatenate_datasets(datasets)
+        if digest(rows.to_list()) != prepared["manifest"]["prepared_fingerprint"]:
+            raise ValueError(
+                "Restored trajectory order or contents differ from publication"
+            )
+        # Train then validation for each subset preserves local order.
+        if not (root / "data").exists():
+            rows.with_format("torch").save_to_disk(root / "data")
+        elif (
+            digest(load_from_disk(root / "data").with_format(None).to_list())
+            != prepared["manifest"]["prepared_fingerprint"]
+        ):
+            raise ValueError(
+                "Existing local trajectories differ; use a fresh output_root"
+            )
+        manifest = {
+            **prepared["manifest"],
+            "root": str(root),
+            "data_path": str(root / "data"),
+            "hidden_states_path": str(root / "hidden_states"),
+        }
+    if stage in ("hidden", "all"):
+        activation = record("hidden")["artifacts"][0]
+        fetch(activation, root / "hidden_states" / "index.json")
+    write_json(root / "manifest.json", manifest)
+    return manifest
+
+
+def prepare(cfg, stage):
+    from speculators.bank.workflow import prepare_arrow, select_data
+
+    root = cfg.output_root.resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    with FileLock(str(root / ".hub-prepare.lock"), timeout=0):
+        if cfg.hub.mode == "consumer":
+            return restore(cfg, stage)
+        publisher = Publisher(cfg)
+        manifest_path = root / "manifest.json"
+        if not manifest_path.exists():
+            if stage not in ("select", "all"):
+                restore(
+                    cfg,
+                    {"responses": "select", "data": "responses", "hidden": "data"}[
+                        stage
+                    ],
+                )
+            else:
+                select(cfg, publisher)
+        manifest = select_data(cfg)
+        provenance(publisher, stage)
+        for current in ["responses", "data", "hidden"] if stage == "all" else [stage]:
+            if current == "select":
+                # Retry publication after an interrupted select stage.
+                path = root / "prompts.jsonl"
+                stage_record(
+                    publisher,
+                    "select",
+                    manifest,
+                    [
+                        publisher.put(
+                            cfg.hub.trajectories_repo,
+                            f"{profile(cfg)}/prompts.jsonl",
+                            path,
+                        )
+                    ],
+                )
+            elif current == "responses":
+                responses(cfg, publisher, manifest)
+            elif current == "data":
+                prepare_arrow(cfg, manifest)
+                publish_data(cfg, publisher, manifest)
+            elif current == "hidden":
+                if not manifest.get("prepared"):
+                    raise ValueError(
+                        "Run prepare --stage data before hidden extraction"
+                    )
+                hidden(cfg, publisher, manifest)
+        write_json(root / "experiment.json", cfg.model_dump(mode="json"))
+        revision = publisher.api.repo_info(
+            cfg.hub.trajectories_repo, repo_type="dataset"
+        ).sha
+        report(f"Hub trajectories revision: {revision}")
+        return manifest

@@ -1,5 +1,6 @@
 """External experiment controls, separate from the ordinary trainer defaults."""
 
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -110,6 +111,44 @@ class Conditioning(Settings):
     states: Literal["prompt"] = "prompt"
 
 
+class HubArtifacts(Settings):
+    mode: Literal["producer", "consumer"] = "producer"
+    trajectories_repo: str = "azeeer/eagle3-qwen3-8b-trajectories-v1"
+    activations_repo: str = "azeeer/eagle3-qwen3-8b-activations-v1"
+    release: str = "r0001"
+    selection: str = "s0001"
+    trajectories_revision: str = "main"
+    selection_root: Path = Path("output/eagle3-selection")
+    domains: list[Literal["chat", "math", "code", "stem"]] = Field(
+        default_factory=lambda: ["chat", "math", "code", "stem"]
+    )
+    adaptation_subset_ids: list[int] = Field(default_factory=lambda: [5])
+    response_chunk_size: int = Field(default=1000, ge=1)
+    extraction_batch_size: int = Field(default=16, ge=1)
+    shard_bytes: int = Field(default=2**30, ge=1024)
+    cache_gib: float = Field(default=40, gt=0)
+    cache_reserve_gib: float = Field(default=8, ge=0)
+
+    @model_validator(mode="after")
+    def valid(self):
+        if self.mode == "consumer" and self.trajectories_revision == "main":
+            raise ValueError("Consumer mode requires a pinned trajectories commit")
+        if self.mode == "consumer" and not re.fullmatch(
+            r"[0-9a-f]{40}", self.trajectories_revision
+        ):
+            raise ValueError("Consumer revision must be a complete Hub commit SHA")
+        for name in (self.release, self.selection):
+            if not name or any(
+                c not in "abcdefghijklmnopqrstuvwxyz0123456789-_" for c in name
+            ):
+                raise ValueError(
+                    "Hub selection/release IDs must be safe lowercase path components"
+                )
+        if not self.domains or len(set(self.domains)) != len(self.domains):
+            raise ValueError("Hub domains must be nonempty and unique")
+        return self
+
+
 class BankConfig(Settings):
     output_root: Path = Path("output/lora-bank-math")
     models: Models = Field(default_factory=Models)
@@ -121,6 +160,7 @@ class BankConfig(Settings):
     training: Training = Field(default_factory=Training)
     execution: Execution = Field(default_factory=Execution)
     conditioning: Conditioning = Field(default_factory=Conditioning)
+    hub: HubArtifacts | None = None
 
     @model_validator(mode="after")
     def compatible(self):

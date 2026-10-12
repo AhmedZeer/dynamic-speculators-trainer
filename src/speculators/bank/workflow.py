@@ -330,6 +330,17 @@ def validate_cache(manifest: dict, cfg: BankConfig | None = None):
         ):
             raise ValueError("Experiment configuration does not match cached data")
         expected = manifest["examples"]
+        index = Path(manifest["hidden_states_path"]) / "index.json"
+        if index.exists():
+            payload = json.loads(index.read_text())
+            if payload["prepared_fingerprint"] != manifest[
+                "prepared_fingerprint"
+            ] or set(payload["rows"]) != {str(i) for i in range(expected)}:
+                raise ValueError("Hub activation index is incomplete or incompatible")
+            report(
+                f"Using {expected} indexed Hub activation rows; shards load on demand"
+            )
+            return
         _check_cache_file_presence(Path(manifest["hidden_states_path"]), expected)
         report(f"Using {expected} saved hidden-state files; payload checks skipped")
 
@@ -367,6 +378,10 @@ def extract(cfg: BankConfig, manifest: dict):
 
 
 def prepare(cfg: BankConfig, stage: str):
+    if cfg.hub is not None:
+        from speculators.bank.hub import prepare as prepare_hub  # noqa: PLC0415
+
+        return prepare_hub(cfg, stage)
     interval = cfg.execution.hidden_state_log_interval
     report(f"Output root: {cfg.output_root.resolve()}")
     manifest_path = cfg.output_root.resolve() / "manifest.json"
@@ -392,7 +407,7 @@ def prepare(cfg: BankConfig, stage: str):
     return manifest
 
 
-def train_config(  # noqa: PLR0917 -- established bank/trainer interface
+def train_config(
     cfg: BankConfig,
     manifest: dict,
     subset_id: str,
@@ -471,11 +486,15 @@ def train(cfg: BankConfig):
             paths[role] = snapshot_download(
                 getattr(cfg.models, role), revision=manifest["revisions"][f"{role}_sha"]
             )
-    total_runs = len(manifest["subsets"]) * len(cfg.training.seeds)
+    bank_subsets = [s for s in manifest["subsets"] if s.get("role", "bank") == "bank"]
+    total_runs = sum(
+        1 if s.get("training_seed") is not None else len(cfg.training.seeds)
+        for s in bank_subsets
+    )
     run_number = 0
     runs = []
     report(
-        f"Bank schedule: {len(manifest['subsets'])} subsets, "
+        f"Bank schedule: {len(bank_subsets)} subsets, "
         f"{len(cfg.training.seeds)} seeds, {total_runs} runs; "
         f"parallel workers={cfg.execution.n_workers}, "
         f"processes per run={cfg.execution.processes}; "
@@ -483,8 +502,13 @@ def train(cfg: BankConfig):
         f"collect={cfg.training.collect_epochs} epochs, "
         f"snapshot interval={cfg.training.save_interval} collection steps"
     )
-    for subset in manifest["subsets"]:
-        for seed in cfg.training.seeds:
+    for subset in bank_subsets:
+        seeds = (
+            [subset["training_seed"]]
+            if subset.get("training_seed") is not None
+            else cfg.training.seeds
+        )
+        for seed in seeds:
             run_number += 1
             settings = train_config(
                 cfg, manifest, subset["id"], seed, paths["target"], paths["drafter"]
@@ -571,7 +595,14 @@ def inspect_bank(cfg: BankConfig):
     root = Path(manifest["root"])
     entries, runs = [], []
     for subset in manifest["subsets"]:
-        for seed in cfg.training.seeds:
+        if subset.get("role", "bank") != "bank":
+            continue
+        seeds = (
+            [subset["training_seed"]]
+            if subset.get("training_seed") is not None
+            else cfg.training.seeds
+        )
+        for seed in seeds:
             run = root / "runs" / subset["id"] / f"seed-{seed}"
             diagnostics = inspect_adapters(run, cfg.lora)
             entries.extend(diagnostics.pop("entries"))

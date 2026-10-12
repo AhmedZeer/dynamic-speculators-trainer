@@ -12,8 +12,18 @@ from speculators.bank.progress import stage_progress
 
 
 class BankFileTransfer(FileTransfer):
+    def __init__(self, hidden_states_path):
+        super().__init__(Path(hidden_states_path))
+        self.hub_store = None
+        if (self.hidden_states_path / "index.json").exists():
+            from speculators.bank.hub_cache import HubActivationStore  # noqa: PLC0415
+
+            self.hub_store = HubActivationStore(self.hidden_states_path)
+
     def get_prompt_states(self, file_idx, prompt_length):
         """Buffered prefix read: avoid response tensors and Drive-backed mmap."""
+        if self.hub_store is not None:
+            return self.hub_store.read(file_idx, prompt_length)
         path = self.hidden_states_path / f"hs_{file_idx}.safetensors"
         with stage_progress(f"Reading prompt row={file_idx}, file={path}", quiet=True):
             try:
@@ -55,6 +65,8 @@ class BankFileTransfer(FileTransfer):
                 raise
 
     def get_cached(self, file_idx):
+        if self.hub_store is not None:
+            return self.hub_store.read(file_idx)
         path = self.hidden_states_path / f"hs_{file_idx}.safetensors"
         # Normal reads are quiet; a blocked read identifies its row and path.
         with stage_progress(

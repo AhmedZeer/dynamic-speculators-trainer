@@ -1,6 +1,8 @@
 """LoRA bank command group."""
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -39,6 +41,74 @@ def train(config: ConfigOption):
         cfg = BankConfig.load(config)
     result = workflow.train(cfg)
     typer.echo(f"Collected {result['candidate_count']} adapter candidates")
+
+
+@app.command()
+def restore(
+    config: ConfigOption,
+    revision: Annotated[
+        str, typer.Option("--revision", help="Pinned trajectories commit SHA")
+    ],
+    stage: Literal["select", "responses", "data", "hidden"] = "hidden",
+):
+    """Restore published artifacts; activation tensors download on demand."""
+    from speculators.bank.config import HubArtifacts  # noqa: PLC0415
+    from speculators.bank.hub import prepare as prepare_hub  # noqa: PLC0415
+
+    cfg = BankConfig.load(config)
+    if cfg.hub is None:
+        raise typer.BadParameter("Config must enable Hub artifacts")
+    cfg.hub = HubArtifacts.model_validate(
+        {**cfg.hub.model_dump(), "mode": "consumer", "trajectories_revision": revision}
+    )
+    result = prepare_hub(cfg, stage)
+    typer.echo(f"Restored {result['root']} through {stage}")
+
+
+@app.command()
+def serve(
+    config: ConfigOption,
+    mode: Literal["responses", "hidden"] = "responses",
+    port: int = 8000,
+):
+    """Launch the pinned target and preserve server provenance; stop to switch modes."""
+    from huggingface_hub import snapshot_download  # noqa: PLC0415
+
+    from speculators.provenance import find_package_repo  # noqa: PLC0415
+
+    cfg = BankConfig.load(config)
+    if not (cfg.output_root / "manifest.json").exists():
+        raise typer.BadParameter(
+            "Run prepare --stage select before starting the server"
+        )
+    manifest = workflow.select_data(cfg)
+    target = snapshot_download(
+        cfg.models.target, revision=manifest["revisions"]["target_sha"]
+    )
+    script = find_package_repo("speculators") / "scripts" / "launch_vllm.py"
+    command = [
+        sys.executable,
+        str(script),
+        "train" if mode == "hidden" else "responses",
+        target,
+        "--provenance-dir",
+        str(cfg.output_root.resolve() / "provenance" / f"server-{mode}"),
+        "--served-model-name",
+        cfg.models.target,
+        "--port",
+        str(port),
+        "--max-model-len",
+        str(cfg.responses.context_length),
+    ]
+    if mode == "hidden":
+        command.extend(
+            [
+                "--target-layer-ids",
+                *map(str, cfg.hidden_states.layer_ids[:-1]),
+                "--include-last-layer",
+            ]
+        )
+    subprocess.run(command, check=True)  # noqa: S603 -- argv only
 
 
 @app.command(name="inspect")

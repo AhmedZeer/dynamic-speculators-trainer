@@ -1,5 +1,6 @@
-# Paths are relative to the working directory. Use a new root for a new experiment.
-output_root: /content/drive/MyDrive/dynamic-speculators-v3/output/lora-bank-math
+# Hub preparation config; training scale-up schedule is a separate phase.
+# Run from the repository root; artifacts stage locally under /data/eagle3.
+output_root: /data/eagle3/math
 models:
   target: Qwen/Qwen3-8B
   target_revision: main
@@ -16,7 +17,13 @@ partition:
   train_examples: 1000
   validation_examples: 100
   seed: 0
-  subset_ids: [0, 1, 2, 3]
+  subset_ids:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
 responses:
   thinking: false
   temperature: 0.7
@@ -26,22 +33,27 @@ responses:
   max_tokens: 4096
   context_length: 8192
 hidden_states:
-  layer_ids: [2, 18, 33, 36]
+  layer_ids:
+  - 2
+  - 18
+  - 33
+  - 36
   dtype: bfloat16
   sequence_length: 8192
 lora:
   rank: 32
   alpha: 64
   dropout: 0.05
-  target_modules: [o_proj, v_proj]
+  target_modules:
+  - o_proj
+  - v_proj
 training:
-  # Already did the 42st seed.
-  # seeds: [42, 43, 44]
-  seeds: [43, 44]
+  seeds:
+  - 42
   warmup_epochs: 1
   collect_epochs: 4
   warmup_lr: 0.0001
-  collect_lr: 0.000001
+  collect_lr: 1.0e-06
   save_interval: 10
   weight_decay: 0.01
   token_budget: 8192
@@ -54,18 +66,37 @@ training:
 execution:
   generation_endpoint: http://localhost:8000/v1/chat/completions
   extraction_endpoint: http://localhost:8000/v1
-  concurrency: 256
+  concurrency: 64
   hidden_state_concurrency: 16
   hidden_state_write_concurrency: 2
   hidden_state_log_interval: 10
   prompt_chunk_size: 1000
-  response_staging_dir: /tmp/speculators-responses
+  response_staging_dir: null
   response_sync_interval: 1000
   request_timeout: 600
   max_retries: 3
-  n_workers: 3  # Increase to run independent seeds/subsets concurrently.
+  n_workers: 1
   processes: 1
   draft_attn_impl: simple_flex_attention
 conditioning:
-  max_examples: 32
+  max_examples: 8
   states: prompt
+hub:
+  mode: producer
+  trajectories_repo: azeeer/eagle3-qwen3-8b-trajectories-v1
+  activations_repo: azeeer/eagle3-qwen3-8b-activations-v1
+  selection: s0001
+  release: r0001
+  selection_root: /data/eagle3/selection-s0001
+  domains:
+  - chat
+  - math
+  - code
+  - stem
+  adaptation_subset_ids:
+  - 5
+  response_chunk_size: 1000
+  extraction_batch_size: 16
+  shard_bytes: 1073741824
+  cache_gib: 40
+  cache_reserve_gib: 8

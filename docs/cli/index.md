@@ -16,6 +16,8 @@ Speculators provides the following CLI commands for different stages of the spec
 | `speculators stitch-mtp`            | Stitch finetuned MTP weights back into verifier checkpoint   | `speculators stitch-mtp --help`         |
 | `speculators convert`               | Convert speculator checkpoints between formats               | `speculators convert --help`            |
 | `speculators generator export`      | Export generator/LoRA weights for inference                   | [→ Details](../experiments/eagle3_generator_vllm.md) |
+| `speculators lora-bank serve`       | Launch the pinned target for responses or extraction          | [→ Details](../experiments/eagle3_hub_preparation.md) |
+| `speculators lora-bank restore`     | Restore a pinned Hub artifact release                         | [→ Details](../experiments/eagle3_hub_preparation.md) |
 | `speculators generator benchmark`   | Compare serial vLLM decoding arms                             | [→ Details](../experiments/eagle3_generator_vllm.md) |
 
 ## Common Workflows

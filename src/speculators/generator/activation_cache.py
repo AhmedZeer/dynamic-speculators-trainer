@@ -41,7 +41,10 @@ class ActivationCache:
         with self.stats_lock:
             setattr(self, field, getattr(self, field) + 1)
 
-    def get_cached(self, index):
+    def get_cached(self, index):  # noqa: C901, PLR0911 -- two storage backends
+        if getattr(self.transfer, "hub_store", None) is not None:
+            # The Hub store already bounds/shares the physical shard cache.
+            return self.transfer.get_cached(index)
         if not self.capacity:
             return self.transfer.get_cached(index)
         target = self.root / f"hs_{index}.safetensors"

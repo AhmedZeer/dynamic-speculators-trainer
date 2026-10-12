@@ -136,6 +136,21 @@ class Corpus:
                 for i in s[key]
             }
         )
+        if (
+            getattr(self.transfer, "hub_store", None) is not None
+            and self.cfg.condition == "last"
+        ):
+            self.summaries = {
+                "indices": torch.tensor(indices),
+                "lengths": torch.tensor(
+                    [self.rows[i]["prompt_length"] for i in indices]
+                ),
+                "last": torch.stack(
+                    [self.transfer.hub_store.read(i, summary=True) for i in indices]
+                ),
+            }
+            atomic_torch_save(path, self.summaries)
+            return
         values = {condition: [] for condition in CONDITIONS}
         lengths = []
         started = time.monotonic()
