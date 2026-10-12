@@ -53,10 +53,19 @@ in every command instead; it uses separate selection/release/output paths and
 prepares 1,100 math examples. Its first CPU selection still checks all domains.
 Pilot selection is not a production append or migration.
 
-The current examples use selection `s0002` and release `r0002` with fresh local
-roots. Earlier deduplicated selections remain immutable. Repeated text or source
-UUIDs receive distinct occurrence IDs derived from source, split, and row index;
-`prompt_hash` is retained as metadata, not used for filtering.
+The examples use the existing selection `s0001` and release `r0001` so that
+published data can be resumed without regenerating it. Existing frozen catalogs
+are reused with their exact membership, including catalogs created before the
+sampler changed. New selections retain repeated source rows; `prompt_hash` is
+metadata, not a filter. A change to the sampler does not change an existing
+selection. To deliberately select new membership, choose a new selection ID,
+release ID, and local roots.
+
+If you already published responses and trajectories under `r0001`, pull the
+updated checkout and rerun `prepare --stage hidden` with the same category config.
+A missing local manifest is restored from the published data stage. Previously
+sealed extraction batches are recovered from their completion records. You do
+not need to rerun selection, responses, or trajectory preparation.
 
 ## Generate responses
 
@@ -167,8 +176,8 @@ reuse an already-running server while its pinned target and context settings
 match the next category; give each server invocation its own provenance as
 shown by the `serve` command.
 
-All four production configs use `out/data/eagle3/<category>-s0002` and the
-shared `out/data/eagle3/selection-s0002` registry. Together they prepare 24
+All four production configs use `out/data/eagle3/<category>-s0001` and the
+shared `out/data/eagle3/selection-s0001` registry. Together they prepare 24
 subsets (26,400 examples): 20 bank subsets and four reserved adaptation subsets.
 Each subset has 1,000 training examples and 100 validation examples. The frozen
 catalog assigns one seed per bank subset: chat 42–46, math 47–51, code 52–56,

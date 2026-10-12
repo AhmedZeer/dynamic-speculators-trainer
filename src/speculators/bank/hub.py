@@ -192,19 +192,20 @@ def select(cfg, publisher):
     catalog_path = f"selections/{cfg.hub.selection}/catalog.json"
     cfg.hub.selection_root.mkdir(parents=True, exist_ok=True)
     local = cfg.hub.selection_root / "catalog.json"
-    identity = digest(
-        {
-            "selection_policy": SELECTION_POLICY,
-            "models": cfg.models.model_dump(),
-            "source": cfg.dataset.source,
-            "source_revision": cfg.dataset.revision,
-            "configuration": cfg.dataset.configuration,
-            "sample_limit": cfg.dataset.sample_limit,
-            "partition": cfg.partition.model_dump(),
-            "domains": cfg.hub.domains,
-            "reserved": cfg.hub.adaptation_subset_ids,
-        }
-    )
+    settings = {
+        "models": cfg.models.model_dump(),
+        "source": cfg.dataset.source,
+        "source_revision": cfg.dataset.revision,
+        "configuration": cfg.dataset.configuration,
+        "sample_limit": cfg.dataset.sample_limit,
+        "partition": cfg.partition.model_dump(),
+        "domains": cfg.hub.domains,
+        "reserved": cfg.hub.adaptation_subset_ids,
+    }
+    identity = digest({"selection_policy": SELECTION_POLICY, **settings})
+    # A sampler change only affects new selections. Older frozen catalogs have
+    # the same configuration identity without a policy field; reuse their rows.
+    legacy_identity = digest(settings)
     with FileLock(str(local) + ".lock"):
         if not local.exists():
             try:
@@ -217,7 +218,7 @@ def select(cfg, publisher):
                 shutil.copyfile(remote, local)
         if local.exists():
             catalog = json.loads(local.read_text())
-            if catalog["identity"] != identity:
+            if catalog["identity"] not in (identity, legacy_identity):
                 raise ValueError(
                     "Frozen selection changed; use a new selection ID "
                     "and selection_root"

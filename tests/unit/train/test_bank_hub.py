@@ -263,6 +263,40 @@ def test_immutable_paths_and_selection_compatibility(preparation):
         workflow.prepare(changed, "select")
 
 
+def test_frozen_catalog_survives_sampler_change(preparation, monkeypatch):
+    cfg, remote, requests, extractions = preparation
+    digest = hub.digest
+
+    def old_digest(value):
+        if isinstance(value, dict) and "selection_policy" in value:
+            value = {k: v for k, v in value.items() if k != "selection_policy"}
+        return digest(value)
+
+    monkeypatch.setattr(hub, "digest", old_digest)
+    original = workflow.prepare(cfg, "select")
+    prompts = read_jsonl(cfg.output_root / "prompts.jsonl")
+    workflow.prepare(cfg, "responses")
+    workflow.prepare(cfg, "data")
+    workflow.prepare(cfg, "hidden")
+    generated = (len(requests), len(extractions))
+    monkeypatch.setattr(hub, "digest", digest)
+    shutil.rmtree(cfg.output_root)
+    shutil.rmtree(cfg.hub.selection_root)
+
+    def forbid_resampling(*args, **kwargs):
+        pytest.fail("Frozen membership must not be resampled")
+
+    monkeypatch.setattr(datasets, "load_dataset", forbid_resampling)
+    resumed = workflow.prepare(cfg, "select")
+    assert resumed["subsets"] == original["subsets"]
+    assert read_jsonl(cfg.output_root / "prompts.jsonl") == prompts
+    # Simulate a replacement GPU machine: recover trajectories and all sealed
+    # activation batches without issuing another response/extraction request.
+    shutil.rmtree(cfg.output_root)
+    workflow.prepare(cfg, "hidden")
+    assert (len(requests), len(extractions)) == generated
+
+
 def test_hub_retains_same_text_in_each_domain(preparation, monkeypatch):
     cfg, remote, requests, extractions = preparation
 
