@@ -1,6 +1,6 @@
 # Hub preparation config; training scale-up schedule is a separate phase.
 # Run from the repository root; artifacts stage locally under /data/eagle3.
-output_root: /data/eagle3/math
+output_root: out/data/eagle3/math
 models:
   target: Qwen/Qwen3-8B
   target_revision: main
@@ -87,7 +87,7 @@ hub:
   activations_repo: azeeer/eagle3-qwen3-8b-activations-v1
   selection: s0001
   release: r0001
-  selection_root: /data/eagle3/selection-s0001
+  selection_root: out/data/eagle3/selection-s0001
   domains:
   - chat
   - math
