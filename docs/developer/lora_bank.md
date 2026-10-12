@@ -42,10 +42,11 @@ Experiment (resolved models, configuration, provenance)
     1–32 examples from one subset + random adapter from its bank
 ```
 
-The initial preset selects four groups of 1,100 distinct prompts: 1,000 training
-examples and 100 extra held-out validation examples per group. Identical prompts
-are deduplicated **before** partitioning; source IDs are retained as aliases.
-Partitioning uses a deterministic shuffle of sorted prompt identities. Validation
+Selection forms groups of 1,100 source-row occurrences: 1,000 training examples
+and 100 extra held-out validation examples per group. Repeated prompts are
+retained within and across domains. A bounded reservoir uniformly samples rows
+with a fixed seed; occurrence IDs remain distinct even when text or UUIDs repeat.
+Validation
 membership is shared across the seeds of a subset. Incomplete groups are reported
 and excluded. V1 accepts text-only, single-user prompts; original source answers
 are discarded in favor of target-generated answers.
@@ -100,7 +101,7 @@ Values below are initial experimental defaults, not established optimal values.
 | Group | Controls | Effect |
 | --- | --- | --- |
 | `models` | Target/drafter IDs and revisions | Defines representations, frozen weights, and adapter compatibility; revisions resolve to immutable Hub SHAs |
-| `dataset` | Source, revision, configuration, split, category, sample limit | Defines available prompts; sample limit applies before deduplication |
+| `dataset` | Source, revision, configuration, split, category, sample limit | Defines available rows; sample limit caps source rows scanned |
 | `partition` | Training/validation sizes, seed, subset IDs | Controls adaptation scope, independent subsets, and membership |
 | `responses` | Thinking, temperature, top-p/top-k, seed, output/context limits | Defines the target trajectory distribution |
 | `hidden_states` | Ordered layer IDs, dtype, sequence length | Defines conditioning features and target loss features |

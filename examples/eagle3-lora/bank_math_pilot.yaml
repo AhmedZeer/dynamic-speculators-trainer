@@ -1,5 +1,5 @@
 # One-subset GPU pilot; distinct publication/selection paths.
-output_root: /data/eagle3/pilot/math
+output_root: /data/eagle3/pilot-s0002/math
 models:
   target: Qwen/Qwen3-8B
   target_revision: main
@@ -79,9 +79,9 @@ hub:
   mode: producer
   trajectories_repo: azeeer/eagle3-qwen3-8b-trajectories-v1
   activations_repo: azeeer/eagle3-qwen3-8b-activations-v1
-  selection: s0001-pilot
-  release: r0001-pilot
-  selection_root: /data/eagle3/selection-s0001-pilot
+  selection: s0002-pilot
+  release: r0002-pilot
+  selection_root: /data/eagle3/selection-s0002-pilot
   domains:
   - chat
   - math

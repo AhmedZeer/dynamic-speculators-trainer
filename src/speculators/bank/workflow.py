@@ -2,7 +2,6 @@
 
 import json
 import os
-import random
 import subprocess
 import sys
 import time
@@ -45,26 +44,12 @@ def prompt_messages(row: dict) -> list[dict]:
     return result
 
 
-def partition_rows(rows, cfg: BankConfig):
-    """Deduplicate identical prompts before splitting; retain all source aliases."""
-    unique = {}
-    for index, row in enumerate(rows):
-        if cfg.dataset.sample_limit is not None and index >= cfg.dataset.sample_limit:
-            break
-        messages = prompt_messages(row)
-        identity = digest(messages)
-        source_id = str(row.get("uuid") or row.get("id") or digest(row))
-        if identity not in unique:
-            unique[identity] = {"id": identity, "messages": messages, "source_ids": []}
-        unique[identity]["source_ids"].append(source_id)
-    for item in unique.values():
-        item["source_ids"] = sorted(set(item["source_ids"]))
-    ordered = [unique[key] for key in sorted(unique)]
-    random.Random(cfg.partition.seed).shuffle(ordered)
+def partition_rows(rows, cfg: BankConfig, *, skip_unsupported=False):
+    """Sample source occurrences; repeated prompts remain independent examples."""
+    from speculators.bank.selection import sample_rows  # noqa: PLC0415
+
+    ordered, stats = sample_rows(rows, cfg, skip_unsupported=skip_unsupported)
     size = cfg.partition.train_examples + cfg.partition.validation_examples
-    groups = len(ordered) // size
-    if max(cfg.partition.subset_ids) >= groups:
-        raise ValueError(f"Only {groups} complete subsets available for selection")
     selected, subsets = [], []
     for subset_number in cfg.partition.subset_ids:
         subset_id = f"{cfg.dataset.category}-{subset_number:05d}"
@@ -89,11 +74,7 @@ def partition_rows(rows, cfg: BankConfig):
     return (
         selected,
         subsets,
-        {
-            "unique_prompts": len(ordered),
-            "complete_subsets": groups,
-            "incomplete_group_examples": len(ordered) % size,
-        },
+        stats,
     )
 
 

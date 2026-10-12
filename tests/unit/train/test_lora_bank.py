@@ -61,19 +61,27 @@ def source_rows():
     ]
 
 
-def test_partition_is_stable_disjoint_and_deduplicates():
+def test_partition_is_stable_disjoint_and_retains_repeated_source_rows():
     rows = source_rows()
     rows.append({**rows[0], "uuid": "alias"})
     selected, subsets, stats = partition_rows(rows, small_config())
-    reordered, _, _ = partition_rows(list(reversed(rows)), small_config())
+    reordered, _, _ = partition_rows(rows, small_config())
     assert [r["id"] for r in selected] == [r["id"] for r in reordered]
-    assert stats["unique_prompts"] == 8
-    assert stats["incomplete_group_examples"] == 2
+    assert stats["source_examples"] == 9
+    assert stats["incomplete_group_examples"] == 0
     all_indices = []
     for subset in subsets:
         assert not set(subset["train_ids"]) & set(subset["validation_ids"])
         all_indices.extend(subset["train_indices"] + subset["validation_indices"])
     assert sorted(all_indices) == list(range(6))
+
+
+def test_identical_text_and_source_ids_are_distinct_occurrences():
+    rows = [source_rows()[0]] * 6
+    selected, _, stats = partition_rows(rows, small_config())
+    assert len(selected) == len({row["id"] for row in selected}) == 6
+    assert len({row["prompt_hash"] for row in selected}) == 1
+    assert stats["source_examples"] == 6
 
 
 def test_preparation_reorders_and_preserves_prompt_boundary(tmp_path):

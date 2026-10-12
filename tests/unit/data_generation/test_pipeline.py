@@ -16,7 +16,7 @@ import torch
 from datasets import load_from_disk
 from safetensors.torch import save_file
 
-from speculators.bank.artifacts import digest, read_jsonl
+from speculators.bank.artifacts import read_jsonl
 from speculators.bank.config import BankConfig
 from speculators.bank.workflow import partition_rows, prepare_arrow
 from speculators.data_generation import pipeline
@@ -65,15 +65,12 @@ def initialize(tmp_path, cfg=None):
     )
 
 
-def test_disk_selection_matches_existing_shuffle_and_aliases(tmp_path):
+def test_source_row_selection_matches_bank_partition():
     bank = config().bank
     bank.partition.subset_ids = [0, 1]
-    excluded = {digest([{"role": "user", "content": "Shared 0"}])}
     source = rows("math")
-    expected, _, _ = partition_rows(
-        (r for r in source if digest(pipeline.prompt_messages(r)) not in excluded), bank
-    )
-    actual, _ = pipeline.selected_rows(source, bank, excluded, tmp_path / "select.db")
+    expected, _, _ = partition_rows(source, bank)
+    actual, _ = pipeline.selected_rows(source, bank)
     assert actual == expected
 
 

@@ -4,9 +4,7 @@
 # ruff: noqa: PLC0415
 
 import json
-import random
 import shutil
-import sqlite3
 import tempfile
 from contextlib import nullcontext
 from pathlib import Path
@@ -184,17 +182,19 @@ def stage_record(publisher, stage, manifest, artifacts):
     )
 
 
-def select(cfg, publisher):  # noqa: C901 -- streaming selection and frozen publication
+def select(cfg, publisher):
     """Freeze all configured domains once; per-domain preparation uses that registry."""
     from datasets import load_dataset
 
-    from speculators.bank.workflow import cache_spec, prompt_messages
+    from speculators.bank.selection import SELECTION_POLICY
+    from speculators.bank.workflow import cache_spec, partition_rows
 
     catalog_path = f"selections/{cfg.hub.selection}/catalog.json"
     cfg.hub.selection_root.mkdir(parents=True, exist_ok=True)
     local = cfg.hub.selection_root / "catalog.json"
     identity = digest(
         {
+            "selection_policy": SELECTION_POLICY,
             "models": cfg.models.model_dump(),
             "source": cfg.dataset.source,
             "source_revision": cfg.dataset.revision,
@@ -241,125 +241,33 @@ def select(cfg, publisher):  # noqa: C901 -- streaming selection and frozen publ
                 "revisions": revisions,
                 "domains": {},
             }
-            owned = set()
-            selected_lookup = {}
-            size = cfg.partition.train_examples + cfg.partition.validation_examples
             for domain in DOMAINS:
                 if domain not in cfg.hub.domains:
                     continue
+                domain_cfg = cfg.model_copy(deep=True)
+                domain_cfg.dataset.category = domain
+                domain_cfg.dataset.split = domain
                 report(
-                    f"Selecting {domain}; cross-domain registry entries={len(owned)}"
+                    f"Selecting source rows for {domain}; duplicate filtering disabled"
                 )
-                with (
-                    tempfile.TemporaryDirectory(dir=cfg.hub.selection_root) as scratch,
-                    sqlite3.connect(Path(scratch) / "prompts.db") as db,
-                ):
-                    db.execute(
-                        "CREATE TABLE prompts (id TEXT PRIMARY KEY, messages TEXT)"
+                rows = load_dataset(
+                    cfg.dataset.source,
+                    name=cfg.dataset.configuration,
+                    split=domain,
+                    revision=revisions["dataset_sha"],
+                    streaming=True,
+                )
+                selected, _, stats = partition_rows(
+                    rows, domain_cfg, skip_unsupported=True
+                )
+                for value in selected:
+                    subset = int(value["subset_id"].rsplit("-", 1)[1])
+                    value["role"] = (
+                        "adaptation"
+                        if subset in cfg.hub.adaptation_subset_ids
+                        else "bank"
                     )
-                    db.execute(
-                        "CREATE TABLE aliases (id TEXT, source TEXT, "
-                        "license TEXT, PRIMARY KEY(id,source))"
-                    )
-                    excluded = 0
-                    rows = load_dataset(
-                        cfg.dataset.source,
-                        name=cfg.dataset.configuration,
-                        split=domain,
-                        revision=revisions["dataset_sha"],
-                        streaming=True,
-                    )
-                    for number, row in enumerate(rows):
-                        if (
-                            cfg.dataset.sample_limit is not None
-                            and number >= cfg.dataset.sample_limit
-                        ):
-                            break
-                        try:
-                            messages = prompt_messages(row)
-                        except ValueError:
-                            excluded += 1
-                            continue
-                        primary = digest(messages)
-                        if primary in owned:
-                            if primary in selected_lookup:
-                                previous = selected_lookup[primary]
-                                alias = str(
-                                    row.get("uuid") or row.get("id") or digest(row)
-                                )
-                                if alias not in previous["source_ids"]:
-                                    previous["source_ids"].append(alias)
-                                    previous["source_ids"].sort()
-                                    previous["source_aliases"].append(
-                                        {
-                                            "id": alias,
-                                            "license": str(row.get("license", "")),
-                                        }
-                                    )
-                                    previous["source_aliases"].sort(
-                                        key=lambda a: a["id"]
-                                    )
-                            continue
-                        db.execute(
-                            "INSERT OR IGNORE INTO prompts VALUES (?,?)",
-                            (primary, json.dumps(messages)),
-                        )
-                        db.execute(
-                            "INSERT OR IGNORE INTO aliases VALUES (?,?,?)",
-                            (
-                                primary,
-                                str(row.get("uuid") or row.get("id") or digest(row)),
-                                str(row.get("license", "")),
-                            ),
-                        )
-                        if number % 10000 == 0:
-                            db.commit()
-                            report(
-                                f"Selecting {domain}: scanned={number}, "
-                                f"unsupported={excluded}"
-                            )
-                    ids = [
-                        r[0] for r in db.execute("SELECT id FROM prompts ORDER BY id")
-                    ]
-                    random.Random(cfg.partition.seed).shuffle(ids)
-                    if max(cfg.partition.subset_ids) >= len(ids) // size:
-                        raise ValueError(f"Insufficient distinct prompts in {domain}")
-                    selected = []
-                    for subset in cfg.partition.subset_ids:
-                        for primary in ids[subset * size : (subset + 1) * size]:
-                            aliases = [
-                                {"id": s, "license": source_license}
-                                for s, source_license in db.execute(
-                                    "SELECT source,license FROM aliases "
-                                    "WHERE id=? ORDER BY source",
-                                    (primary,),
-                                )
-                            ]
-                            selected.append(
-                                {
-                                    "id": primary,
-                                    "messages": json.loads(
-                                        db.execute(
-                                            "SELECT messages FROM prompts WHERE id=?",
-                                            (primary,),
-                                        ).fetchone()[0]
-                                    ),
-                                    "source_ids": [a["id"] for a in aliases],
-                                    "source_aliases": aliases,
-                                    "source_split": domain,
-                                    "subset_id": f"{domain}-{subset:05d}",
-                                    "role": "adaptation"
-                                    if subset in cfg.hub.adaptation_subset_ids
-                                    else "bank",
-                                }
-                            )
-                    # Freeze ownership of the entire earlier domain.
-                    owned.update(ids)
-                    selected_lookup.update({p["id"]: p for p in selected})
-                    catalog["domains"][domain] = {
-                        "prompts": selected,
-                        "unsupported_rows": excluded,
-                    }
+                catalog["domains"][domain] = {"prompts": selected, **stats}
             write_json(local, catalog)
         publisher.put(cfg.hub.trajectories_repo, catalog_path, local)
     prompts = catalog["domains"][cfg.dataset.category]["prompts"]

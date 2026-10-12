@@ -263,6 +263,28 @@ def test_immutable_paths_and_selection_compatibility(preparation):
         workflow.prepare(changed, "select")
 
 
+def test_hub_retains_same_text_in_each_domain(preparation, monkeypatch):
+    cfg, remote, requests, extractions = preparation
+
+    def repeated_source(*args, **kwargs):
+        return [
+            {
+                "uuid": "same-source-id",
+                "license": "cc-by-4.0",
+                "messages": [{"role": "user", "content": "Repeated prompt"}],
+            }
+        ] * 6
+
+    monkeypatch.setattr(datasets, "load_dataset", repeated_source)
+    workflow.prepare(cfg, "select")
+    catalog = json.loads((cfg.hub.selection_root / "catalog.json").read_text())
+    chat = catalog["domains"]["chat"]["prompts"]
+    math = catalog["domains"]["math"]["prompts"]
+    assert len(chat) == len(math) == 6
+    assert len({p["id"] for p in chat + math}) == 12
+    assert len({p["prompt_hash"] for p in chat + math}) == 1
+
+
 def test_interrupted_hidden_upload_retains_payloads_and_recovers_remote_rows(
     preparation,
 ):

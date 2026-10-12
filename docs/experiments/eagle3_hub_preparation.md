@@ -37,9 +37,12 @@ speculators lora-bank prepare \
   --config examples/eagle3-lora/bank_math.yaml --stage select
 ```
 
-The first selection streams chat, math, code, and stem on CPU, uses disk-backed
-deduplication, and freezes a shared cross-domain registry. It periodically logs
-scan progress. Later category selections reuse that registry. Model/source
+The first selection streams chat, math, code, and stem on CPU and uniformly
+samples source-row occurrences with a bounded reservoir. It does not deduplicate
+text, merge aliases, or exclude matching prompts from other domains. It still
+scans the eligible source rows to give each row equal selection probability,
+and periodically logs progress. Later category selections reuse the frozen
+catalog. Model/source
 revisions are resolved once and saved with the selection. Source answers are
 discarded; source UUID aliases and licenses are retained.
 
@@ -49,6 +52,11 @@ adaptation. For a one-subset GPU pilot, use `bank_math_pilot.yaml` consistently
 in every command instead; it uses separate selection/release/output paths and
 prepares 1,100 math examples. Its first CPU selection still checks all domains.
 Pilot selection is not a production append or migration.
+
+The current examples use selection `s0002` and release `r0002` with fresh local
+roots. Earlier deduplicated selections remain immutable. Repeated text or source
+UUIDs receive distinct occurrence IDs derived from source, split, and row index;
+`prompt_hash` is retained as metadata, not used for filtering.
 
 ## Generate responses
 

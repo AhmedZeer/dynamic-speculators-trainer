@@ -11,9 +11,7 @@ There is deliberately no training or Modal dependency in this module.
 import argparse
 import json
 import os
-import random
 import signal
-import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -29,7 +27,7 @@ from pydantic import Field, model_validator
 
 from speculators.bank.artifacts import digest, file_digest, read_jsonl, write_json
 from speculators.bank.config import BankConfig, Settings
-from speculators.bank.workflow import cache_spec, prompt_messages
+from speculators.bank.workflow import cache_spec
 from speculators.provenance import atomic_write
 
 DOMAINS = ("chat", "math", "code", "stem")
@@ -77,72 +75,20 @@ class PrepareConfig(Settings):
             values.pop(key)
         values["partition"]["subset_ids"] = sorted(self.subset_ids)
         return digest(
-            {"bank": values, "domains": [d for d in DOMAINS if d in self.domains]}
+            {
+                "bank": values,
+                "domains": [d for d in DOMAINS if d in self.domains],
+                "selection_policy": "source-rows-v2",
+            }
         )
 
 
-def selected_rows(rows, cfg, excluded, scratch):
-    """Disk-backed deduplication; only IDs and selected prompts occupy RAM."""
-    with sqlite3.connect(scratch) as db:
-        db.execute("CREATE TABLE prompts (id TEXT PRIMARY KEY, payload TEXT)")
-        db.execute(
-            "CREATE TABLE aliases (id TEXT, source TEXT, PRIMARY KEY(id, source))"
-        )
-        for index, row in enumerate(rows):
-            if (
-                cfg.dataset.sample_limit is not None
-                and index >= cfg.dataset.sample_limit
-            ):
-                break
-            messages = prompt_messages(row)
-            identity = digest(messages)
-            if identity in excluded:
-                continue
-            source = str(row.get("uuid") or row.get("id") or digest(row))
-            db.execute(
-                "INSERT OR IGNORE INTO prompts VALUES (?, ?)",
-                (identity, json.dumps(messages)),
-            )
-            db.execute(
-                "INSERT OR IGNORE INTO aliases VALUES (?, ?)", (identity, source)
-            )
-            if index % 10000 == 0:
-                db.commit()
-        ids = [row[0] for row in db.execute("SELECT id FROM prompts ORDER BY id")]
-        random.Random(cfg.partition.seed).shuffle(ids)
-        size = cfg.partition.train_examples + cfg.partition.validation_examples
-        if max(cfg.partition.subset_ids) >= len(ids) // size:
-            raise ValueError(
-                f"Not enough distinct {cfg.dataset.category} prompts "
-                "for requested subsets"
-            )
-        result = []
-        for subset in cfg.partition.subset_ids:
-            for identity in ids[subset * size : (subset + 1) * size]:
-                messages = json.loads(
-                    db.execute(
-                        "SELECT payload FROM prompts WHERE id=?", (identity,)
-                    ).fetchone()[0]
-                )
-                aliases = [
-                    r[0]
-                    for r in db.execute(
-                        "SELECT source FROM aliases WHERE id=? ORDER BY source",
-                        (identity,),
-                    )
-                ]
-                result.append(
-                    {
-                        "id": identity,
-                        "messages": messages,
-                        "source_ids": aliases,
-                        "subset_id": f"{cfg.dataset.category}-{subset:05d}",
-                    }
-                )
-        return result, {
-            "unique_prompts": len(ids),
-            "complete_subsets": len(ids) // size,
-        }
+def selected_rows(rows, cfg):
+    """Use the ordinary source-row selector without duplicate filtering."""
+    from speculators.bank.workflow import partition_rows
+
+    selected, _, stats = partition_rows(rows, cfg)
+    return selected, stats
 
 
 def initialize(cfg, root, model_root, provenance, *, loader=None, revisions=None):
@@ -187,7 +133,7 @@ def initialize(cfg, root, model_root, provenance, *, loader=None, revisions=None
                 streaming=True,
             )
 
-    excluded, entries = set(), []
+    entries = []
     size = cfg.bank.partition.train_examples + cfg.bank.partition.validation_examples
     for domain in DOMAINS:
         if domain not in cfg.domains:
@@ -196,11 +142,7 @@ def initialize(cfg, root, model_root, provenance, *, loader=None, revisions=None
         bank.dataset.category = domain
         bank.dataset.split = domain
         bank.partition.subset_ids = sorted(cfg.subset_ids)
-        with tempfile.TemporaryDirectory(prefix="speculators-selection-") as local:
-            rows, stats = selected_rows(
-                loader(domain), bank, excluded, Path(local) / "selection.db"
-            )
-        excluded.update(row["id"] for row in rows)
+        rows, stats = selected_rows(loader(domain), bank)
         for offset, subset in enumerate(bank.partition.subset_ids):
             subset_id = f"{domain}-{subset:05d}"
             directory = root / "banks" / domain / subset_id

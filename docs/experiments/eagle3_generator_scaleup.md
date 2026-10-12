@@ -61,7 +61,7 @@ are never silently regenerated in place.
 
 ## Logical and physical structure
 
-Stable identities are canonical prompt hashes, subset IDs such as `math-00000`,
+Stable identities are source-row occurrence IDs, subset IDs such as `math-00000`,
 explicit `train`/`validation` membership, and an experiment role of `bank` or
 `adaptation`. Local row numbers and hs_123 filenames are implementation details;
 they cannot serve as globally unique Hub identifiers.
@@ -134,12 +134,13 @@ states; its behavioral validation still requires activation shards.
 
 ## Membership and future additions
 
-Freeze source revisions, canonicalization, ordering seed, category ownership,
-and membership before response generation. Build a shared prompt registry across
-all four domains, preserving aliases. Assign cross-domain duplicates to one
-owner using the fixed category order chat, math, code, stem, before partitioning.
-Record unsupported rows and exclusion reasons rather than silently changing
-membership. A math-first GPU run can consume this globally prepared selection.
+Freeze source revisions, sampling seed, and row membership before response
+generation. Use bounded uniform reservoir sampling over eligible source rows.
+Retain repeated text within and across domains; there is no duplicate filtering
+or category ownership registry. Give each source-row occurrence an independent
+ID, preserve its source UUID/license, and retain a separate prompt hash as
+metadata. Unsupported row counts remain recorded. A math-first GPU run can
+consume the shared frozen selection catalog.
 
 Preserve the earlier initial seed mapping: chat bank seeds 42–46, math 47–51,
 code 52–56, stem 57–61. Persist individual subset-to-seed entries in the catalog.
@@ -148,12 +149,13 @@ the new number of subsets. Partition, response, and generator seeds are separate
 
 Add new math subsets as math-00006, math-00007, etc. Never move 00005 from its
 reserved role. Freeze old prompt identities, split memberships, and artifact
-paths. If the source revision grows, exclude every previously registered prompt
+paths. If the source revision grows, exclude previously assigned source-row occurrences
 and append new complete groups of 1,100 using a separately frozen ordering.
 Keep incomplete remainders in an unassigned pool until enough new prompts exist.
 
-Distinguish versions: v1 is the data/schema family; s0001 is an immutable
-selection; r0001 is an immutable artifact release. A later selection extends
+Distinguish versions: v1 is the data/schema family; s0002 is the current immutable
+selection; r0002 is its artifact release. Earlier selections/releases remain
+frozen. A later selection extends
 the prior registry, while a later release catalogs the available stages and
 new subsets without rewriting old files. Explicit subset roles, counts, seeds,
 profile IDs, checksums, and repository commits belong in each release.
