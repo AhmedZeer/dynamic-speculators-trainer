@@ -9,7 +9,7 @@ are subsequent implementation phases; these commands do not launch them.
 
 ## Install on the GPU machine
 
-Use local SSD storage for `/data/eagle3`; edit `output_root` and
+Use local SSD storage for `out/data/eagle3`; edit `output_root` and
 `hub.selection_root` in the YAMLs if that directory is unavailable. Model
 downloads use the usual Hugging Face cache. A local activation cache is bounded
 at 40 GiB with an 8 GiB free-disk reserve; pending extraction and model weights
@@ -20,7 +20,7 @@ git clone https://github.com/AhmedZeer/dynamic-speculators-trainer.git
 cd dynamic-speculators-trainer
 python -m pip install -e '.[generator]' 'vllm==0.31.0'
 hf auth login
-mkdir -p /data/eagle3
+mkdir -p out/data/eagle3
 ```
 
 For an existing checkout, use `git pull` and reinstall the editable package.
@@ -166,6 +166,51 @@ local roots and category paths. Run category publication serially. You can
 reuse an already-running server while its pinned target and context settings
 match the next category; give each server invocation its own provenance as
 shown by the `serve` command.
+
+All four production configs use `out/data/eagle3/<category>-s0002` and the
+shared `out/data/eagle3/selection-s0002` registry. Together they prepare 24
+subsets (26,400 examples): 20 bank subsets and four reserved adaptation subsets.
+Each subset has 1,000 training examples and 100 validation examples. The frozen
+catalog assigns one seed per bank subset: chat 42–46, math 47–51, code 52–56,
+and STEM 57–61. Subset 00005 of each category is reserved for adaptation and
+excluded from bank collection.
+
+With the response server running, select every category and generate its
+responses and trajectories in terminal B:
+
+```bash
+for domain in math code stem chat; do
+  for stage in select responses data; do
+    speculators lora-bank prepare \
+      --config "examples/eagle3-lora/bank_${domain}.yaml" --stage "$stage" || break 2
+  done
+done
+```
+
+Switch terminal A to the hidden-state server, then extract every category:
+
+```bash
+for domain in math code stem chat; do
+  speculators lora-bank prepare \
+    --config "examples/eagle3-lora/bank_${domain}.yaml" --stage hidden || break
+done
+```
+
+After extraction finishes, collect LoRAs for all four categories:
+
+```bash
+for domain in math code stem chat; do
+  speculators lora-bank train \
+    --config "examples/eagle3-lora/bank_${domain}.yaml" || break
+done
+```
+
+This uses the currently implemented schedule: one warmup epoch, four collection
+epochs at the lower learning rate, checkpoints every 10 updates, and epoch-end
+validation. These are four bank collection commands, not joint generator
+training. The existing `generator_math.yaml` still describes the original math
+ablation; the all-domain generator training interface remains a subsequent
+phase of the scale-up plan.
 
 The old math experiment config is preserved as `bank_math_legacy.yaml`.
 The existing generator and vLLM ablation YAMLs reference that legacy config so

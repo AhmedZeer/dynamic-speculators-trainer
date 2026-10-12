@@ -88,7 +88,14 @@ def build_client_item(dataset_item: dict) -> ClientItem:
     Text-only EAGLE-3 models (e.g. Llama) use a plain tokenizer, so
     ``messages`` is never created and this guard is a no-op.
     """
-    out_dict: dict = {"input_ids": dataset_item["input_ids"].tolist()}
+    # Arrow extraction batches use ordinary lists; formatted training datasets
+    # return tensors (or NumPy arrays). Preserve the saved tokens in either case.
+    input_ids = dataset_item["input_ids"]
+    out_dict: dict = {
+        "input_ids": input_ids.tolist()
+        if hasattr(input_ids, "tolist")
+        else list(input_ids)
+    }
 
     if "messages" in dataset_item and _has_multimodal_content(dataset_item["messages"]):
         out_dict["messages"] = dataset_item["messages"]

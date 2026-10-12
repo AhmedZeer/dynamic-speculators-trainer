@@ -14,8 +14,47 @@ from speculators.bank import progress
 from speculators.bank.config import BankConfig
 from speculators.data_generation import offline
 from speculators.data_generation.offline import publish_hidden_states
+from speculators.train.data import build_client_item
 
 extraction = import_module("speculators.cli.generate_offline_data")
+
+
+@pytest.mark.parametrize("formatted", [False, True])
+def test_saved_extraction_batch_preserves_tokens(tmp_path, formatted):
+    tokens = [1, 42, 999, 2]
+    data = Dataset.from_list(
+        [{"input_ids": tokens, "messages": [{"role": "user", "content": "text"}]}]
+    )
+    path = tmp_path / "batch"
+    data.save_to_disk(path)
+    batch = extraction.load_from_disk(path)
+    if formatted:
+        batch = batch.with_format("torch")
+
+    async def feed():
+        queue = asyncio.Queue()
+        await extraction._feed_queue([0], batch, queue, asyncio.Event())
+        return queue.get_nowait()
+
+    assert asyncio.run(feed()) == {"input_ids": tokens, "idx": 0}
+
+
+def test_client_item_preserves_multimodal_messages():
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/image.png"},
+                }
+            ],
+        }
+    ]
+    assert build_client_item({"input_ids": [1, 2], "messages": messages}) == {
+        "input_ids": [1, 2],
+        "messages": messages,
+    }
 
 
 def make_states(path, tokens=(1, 2), *, finite=True):
@@ -346,6 +385,7 @@ def test_resume_progress_includes_existing_rows_and_only_published_files(  # noq
 
     async def generate(client, model, item, **kwargs):
         assert startup_complete == [True]
+        assert item["input_ids"] == [1, 2]
         requested.append(item["idx"])
         if item["idx"] == 3:
             raise TimeoutError("unavailable")
@@ -355,7 +395,6 @@ def test_resume_progress_includes_existing_rows_and_only_published_files(  # noq
 
     monkeypatch.setattr(extraction, "tqdm", Bar)
     monkeypatch.setattr(extraction.openai, "AsyncOpenAI", Client)
-    monkeypatch.setattr(extraction, "build_client_item", lambda row: row)
     monkeypatch.setattr(extraction, "generate_hidden_states_async", generate)
     caplog.set_level("INFO", logger=extraction.__name__)
     asyncio.run(
