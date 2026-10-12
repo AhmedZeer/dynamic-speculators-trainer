@@ -652,13 +652,15 @@ def hidden(cfg, publisher, manifest):  # noqa: C901 -- bounded extraction and du
                                 "bytes": local.stat().st_size,
                             }
 
+                        shard_reference = reference(path + ".safetensors", shard)
+                        summary_reference = reference(
+                            path + "-conditioning.safetensors", summary
+                        )
                         rows = {
                             str(i): {
                                 "primary_id": data[i]["primary_id"],
-                                "shard": reference(path + ".safetensors", shard),
-                                "summary": reference(
-                                    path + "-conditioning.safetensors", summary
-                                ),
+                                "shard": shard_reference.copy(),
+                                "summary": summary_reference.copy(),
                             }
                             for i in entries
                         }
@@ -683,44 +685,49 @@ def hidden(cfg, publisher, manifest):  # noqa: C901 -- bounded extraction and du
                         queued_rows.update(rows)
                         queued_bytes += shard.stat().st_size + summary.stat().st_size
 
-                    for offset, i in enumerate(indices):
-                        payload = load_file(
-                            scratch / "states" / f"hs_{offset}.safetensors"
-                        )
-                        states = payload["hidden_states"]
-                        if (
-                            states.ndim != STATE_NDIM
-                            or states.shape[0] != data[i]["seq_len"]
-                            or states.shape[1] != len(cfg.hidden_states.layer_ids)
-                            or states.dtype != getattr(torch, cfg.hidden_states.dtype)
-                            or payload["token_ids"].tolist() != data[i]["input_ids"]
-                        ):
-                            raise ValueError(
-                                f"Extraction shape/dtype/tokens differ for row {i}"
+                    with stage_progress(
+                        f"Packaging hidden states: {len(indices)} examples",
+                        interval=cfg.hub.upload_log_interval,
+                    ):
+                        for offset, i in enumerate(indices):
+                            payload = load_file(
+                                scratch / "states" / f"hs_{offset}.safetensors"
                             )
-                        primary = data[i]["primary_id"]
-                        byte_count = sum(
-                            t.numel() * t.element_size() for t in payload.values()
-                        )
-                        if entries and size + byte_count > cfg.hub.shard_bytes:
-                            flush(tensors, summaries, entries)
-                            tensors, summaries, entries, size = {}, {}, [], 0
-                        tensors.update(
-                            {
-                                f"{primary}/{key}": value
-                                for key, value in payload.items()
-                            }
-                        )
-                        boundary = data[i]["prompt_length"]
-                        summaries[primary] = (
-                            payload["hidden_states"][boundary - 1, :-1]
-                            .flatten()
-                            .float()
-                            .clone()
-                        )
-                        entries.append(i)
-                        size += byte_count
-                    flush(tensors, summaries, entries)
+                            states = payload["hidden_states"]
+                            if (
+                                states.ndim != STATE_NDIM
+                                or states.shape[0] != data[i]["seq_len"]
+                                or states.shape[1] != len(cfg.hidden_states.layer_ids)
+                                or states.dtype
+                                != getattr(torch, cfg.hidden_states.dtype)
+                                or payload["token_ids"].tolist() != data[i]["input_ids"]
+                            ):
+                                raise ValueError(
+                                    f"Extraction shape/dtype/tokens differ for row {i}"
+                                )
+                            primary = data[i]["primary_id"]
+                            byte_count = sum(
+                                t.numel() * t.element_size() for t in payload.values()
+                            )
+                            if entries and size + byte_count > cfg.hub.shard_bytes:
+                                flush(tensors, summaries, entries)
+                                tensors, summaries, entries, size = {}, {}, [], 0
+                            tensors.update(
+                                {
+                                    f"{primary}/{key}": value
+                                    for key, value in payload.items()
+                                }
+                            )
+                            boundary = data[i]["prompt_length"]
+                            summaries[primary] = (
+                                payload["hidden_states"][boundary - 1, :-1]
+                                .flatten()
+                                .float()
+                                .clone()
+                            )
+                            entries.append(i)
+                            size += byte_count
+                        flush(tensors, summaries, entries)
                 queued_roots.append(pending_root)
                 report(
                     f"Hidden states staged locally: {len(queued_rows)} "

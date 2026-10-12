@@ -345,11 +345,21 @@ def test_hub_retains_same_text_in_each_domain(preparation, monkeypatch):
     assert len({p["prompt_hash"] for p in chat + math}) == 1
 
 
-def test_hidden_shards_publish_together_in_one_commit(preparation):
+def test_hidden_shards_publish_together_in_one_commit(preparation, monkeypatch):
     cfg, remote, _, extractions = preparation
     workflow.prepare(cfg, "select")
     workflow.prepare(cfg, "responses")
     workflow.prepare(cfg, "data")
+    hashes = {}
+    file_digest = hub.file_digest
+
+    def count_hashes(path):
+        path = Path(path)
+        if ".pending-extraction" in path.parts and path.suffix == ".safetensors":
+            hashes[path] = hashes.get(path, 0) + 1
+        return file_digest(path)
+
+    monkeypatch.setattr(hub, "file_digest", count_hashes)
     repo = cfg.hub.activations_repo
     before = sum(key[0] == repo for key in remote.history)
     workflow.prepare(cfg, "hidden")
@@ -357,6 +367,10 @@ def test_hidden_shards_publish_together_in_one_commit(preparation):
     # Four extraction batches, three objects each: one group commit + final index.
     assert after - before == 2
     assert len(extractions) == 6
+    # One packaging checksum + one publication verification per file, regardless
+    # of how many examples share the shard.
+    assert hashes
+    assert set(hashes.values()) == {2}
     paths = remote.list_repo_files(repo)
     assert len([p for p in paths if p.endswith("-complete.json")]) == 4
     index = json.loads((cfg.output_root / "hidden_states" / "index.json").read_text())
