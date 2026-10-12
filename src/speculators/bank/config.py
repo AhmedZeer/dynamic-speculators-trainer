@@ -125,6 +125,8 @@ class HubArtifacts(Settings):
     adaptation_subset_ids: list[int] = Field(default_factory=lambda: [5])
     response_chunk_size: int = Field(default=1000, ge=1)
     extraction_batch_size: int = Field(default=16, ge=1)
+    upload_batch_examples: int = Field(default=256, ge=1)
+    upload_batch_bytes: int = Field(default=2**31, ge=1024)
     shard_bytes: int = Field(default=2**30, ge=1024)
     cache_gib: float = Field(default=40, gt=0)
     cache_reserve_gib: float = Field(default=8, ge=0)

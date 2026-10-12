@@ -80,32 +80,71 @@ class Publisher:
                 raise ValueError(f"Expected public dataset repository: {repo}")
 
     def put(self, repo, path, source):
-        source = Path(source)
-        checksum = file_digest(source)
-        key = f"{repo}:{path}"
-        if key in self.journal:
-            if self.journal[key]["sha256"] != checksum:
-                raise ValueError(f"Immutable published object changed: {path}")
-            return self.journal[key]
-        # Resolve HEAD once: immutable-object lookup and commit use the same parent.
+        return self.put_many(repo, [(path, source)])[0]
+
+    def put_many(self, repo, files):  # noqa: C901 -- immutable batch verification and commit
+        """Publish related immutable objects and checksums in one atomic commit."""
+        if not files:
+            return []
         parent = self.api.repo_info(repo, repo_type="dataset").sha
-        try:
-            sidecar = hf_hub_download(
-                repo, path + ".sha256.json", repo_type="dataset", revision=parent
+        references, operations = [], []
+        checksums = {}
+        for path, filename in files:
+            source = Path(filename)
+            checksum = file_digest(source)
+            if path in checksums:
+                if checksums[path] != checksum:
+                    raise ValueError(f"Conflicting batch object: {path}")
+                continue
+            checksums[path] = checksum
+            previous = self.journal.get(f"{repo}:{path}")
+            if previous and previous["sha256"] != checksum:
+                raise ValueError(f"Immutable published object changed: {path}")
+            if not previous:
+                try:
+                    sidecar = hf_hub_download(
+                        repo,
+                        path + ".sha256.json",
+                        repo_type="dataset",
+                        revision=parent,
+                    )
+                except EntryNotFoundError:
+                    sidecar = None
+                if sidecar:
+                    if json.loads(Path(sidecar).read_text())["sha256"] != checksum:
+                        raise ValueError(f"Immutable Hub object differs: {path}")
+                else:
+                    operations.extend(
+                        [
+                            CommitOperationAdd(
+                                path_in_repo=path, path_or_fileobj=source
+                            ),
+                            CommitOperationAdd(
+                                path_in_repo=path + ".sha256.json",
+                                path_or_fileobj=json.dumps(
+                                    {"sha256": checksum}
+                                ).encode(),
+                            ),
+                        ]
+                    )
+            references.append(
+                {
+                    "repo": repo,
+                    "path": path,
+                    "revision": parent,
+                    "sha256": checksum,
+                    "bytes": source.stat().st_size,
+                }
             )
-        except EntryNotFoundError:
-            sidecar = None
-        if sidecar:
-            if json.loads(Path(sidecar).read_text())["sha256"] != checksum:
-                raise ValueError(f"Immutable Hub object differs: {path}")
-            revision = parent
-        else:
-            # Tiny summaries, sidecars, and provenance otherwise flood notebooks.
-            size = source.stat().st_size
+        if operations:
+            size = sum(r["bytes"] for r in references)
             if size >= 2**20:
-                report(f"Publishing {repo}/{path}: {size / 2**20:.1f} MiB")
+                report(
+                    f"Publishing {len(operations) // 2} objects to {repo}: "
+                    f"{size / 2**20:.1f} MiB in one commit"
+                )
             with stage_progress(
-                f"Hub upload {path}",
+                "Hub batch upload",
                 interval=self.cfg.hub.upload_log_interval,
                 quiet=True,
             ):
@@ -113,26 +152,15 @@ class Publisher:
                     repo,
                     repo_type="dataset",
                     parent_commit=parent,
-                    commit_message=f"Publish immutable {path}",
-                    operations=[
-                        CommitOperationAdd(path_in_repo=path, path_or_fileobj=source),
-                        CommitOperationAdd(
-                            path_in_repo=path + ".sha256.json",
-                            path_or_fileobj=json.dumps({"sha256": checksum}).encode(),
-                        ),
-                    ],
+                    commit_message=f"Publish {len(operations) // 2} immutable objects",
+                    operations=operations,
                 )
-            revision = commit.oid
-        value = {
-            "repo": repo,
-            "path": path,
-            "revision": revision,
-            "sha256": checksum,
-            "bytes": source.stat().st_size,
-        }
-        self.journal[key] = value
+            for reference in references:
+                reference["revision"] = commit.oid
+        for reference in references:
+            self.journal[f"{repo}:{reference['path']}"] = reference
         write_json(self.journal_path, self.journal)
-        return value
+        return references
 
     def metadata(self, repo, path, value):
         local = self.root / ".publication" / (digest(path) + ".json")
@@ -165,8 +193,8 @@ def provenance(publisher, stage):
         if file.is_file() and file.suffix != ".log":
             # Content-addressed paths permit additional server/resume attempts.
             path = f"provenance/{file_digest(file)}/{file.name}"
-            files.append(publisher.put(publisher.cfg.hub.trajectories_repo, path, file))
-    return files
+            files.append((path, file))
+    return publisher.put_many(publisher.cfg.hub.trajectories_repo, files)
 
 
 def stage_record(publisher, stage, manifest, artifacts):
@@ -514,9 +542,19 @@ def hidden(cfg, publisher, manifest):  # noqa: C901 -- bounded extraction and du
     data = load_from_disk(manifest["data_path"]).with_format(None)
     # Recover sealed shards even when the original machine/local index was lost.
     parent = publisher.api.repo_info(cfg.hub.activations_repo, repo_type="dataset").sha
-    for path in publisher.api.list_repo_files(
+    remote_paths = publisher.api.list_repo_files(
         cfg.hub.activations_repo, repo_type="dataset", revision=parent
-    ):
+    )
+    final_index = f"{profile(cfg)}/index.json"
+    if final_index in remote_paths:
+        published = hf_hub_download(
+            cfg.hub.activations_repo, final_index, repo_type="dataset", revision=parent
+        )
+        final = json.loads(Path(published).read_text())
+        if final["prepared_fingerprint"] != manifest["prepared_fingerprint"]:
+            raise ValueError("Published index belongs to different trajectories")
+        index = final
+    for path in remote_paths:
         if path.startswith(profile(cfg) + "/") and path.endswith("-complete.json"):
             saved = hf_hub_download(
                 cfg.hub.activations_repo, path, repo_type="dataset", revision=parent
@@ -524,8 +562,35 @@ def hidden(cfg, publisher, manifest):  # noqa: C901 -- bounded extraction and du
             complete = json.loads(Path(saved).read_text())
             if complete["prepared_fingerprint"] != manifest["prepared_fingerprint"]:
                 raise ValueError("Published shard belongs to different trajectories")
-            index["rows"].update(complete["rows"])
+            for row in complete["rows"].values():
+                for kind in ("shard", "summary"):
+                    if row[kind]["revision"] == "__commit__":
+                        row[kind]["revision"] = parent
+            for key, row in complete["rows"].items():
+                index["rows"].setdefault(key, row)
     write_json(index_path, index)
+    queued_files, queued_rows, queued_roots = [], {}, []
+    queued_bytes = 0
+
+    def publish_pending():
+        nonlocal queued_bytes
+        if not queued_files:
+            return
+        references = publisher.put_many(cfg.hub.activations_repo, queued_files)
+        by_path = {r["path"]: r for r in references}
+        for row in queued_rows.values():
+            for kind in ("shard", "summary"):
+                row[kind] = by_path[row[kind]["path"]]
+        index["rows"].update(queued_rows)
+        write_json(index_path, index)
+        report(f"Durable hidden states: {len(index['rows'])}/{len(data)}")
+        for directory in queued_roots:
+            shutil.rmtree(directory)
+        queued_files.clear()
+        queued_rows.clear()
+        queued_roots.clear()
+        queued_bytes = 0
+
     for subset in manifest["subsets"]:
         for split in ("train", "validation"):
             pending = [
@@ -570,43 +635,53 @@ def hidden(cfg, publisher, manifest):  # noqa: C901 -- bounded extraction and du
                             return
                         identity = digest([data[i]["primary_id"] for i in entries])
                         path = f"{location}/{identity}"
+                        nonlocal queued_bytes
                         shard, summary = (
-                            scratch / "shard.safetensors",
-                            scratch / "conditioning.safetensors",
+                            scratch / f"{identity}.safetensors",
+                            scratch / f"{identity}-conditioning.safetensors",
                         )
                         save_file(tensors, shard)
                         save_file(summaries, summary)
-                        reference = publisher.put(
-                            cfg.hub.activations_repo, path + ".safetensors", shard
-                        )
-                        compact = publisher.put(
-                            cfg.hub.activations_repo,
-                            path + "-conditioning.safetensors",
-                            summary,
-                        )
-                        for i in entries:
-                            index["rows"][str(i)] = {
-                                "primary_id": data[i]["primary_id"],
-                                "shard": reference,
-                                "summary": compact,
+
+                        def reference(remote_path, local):
+                            return {
+                                "repo": cfg.hub.activations_repo,
+                                "path": remote_path,
+                                "revision": "__commit__",
+                                "sha256": file_digest(local),
+                                "bytes": local.stat().st_size,
                             }
-                        # Release payloads only after this durable record.
-                        publisher.metadata(
-                            cfg.hub.activations_repo,
-                            path + "-complete.json",
+
+                        rows = {
+                            str(i): {
+                                "primary_id": data[i]["primary_id"],
+                                "shard": reference(path + ".safetensors", shard),
+                                "summary": reference(
+                                    path + "-conditioning.safetensors", summary
+                                ),
+                            }
+                            for i in entries
+                        }
+                        complete = scratch / f"{identity}-complete.json"
+                        write_json(
+                            complete,
                             {
+                                "version": 2,
                                 "prepared_fingerprint": manifest[
                                     "prepared_fingerprint"
                                 ],
-                                "rows": {
-                                    str(i): index["rows"][str(i)] for i in entries
-                                },
+                                "rows": rows,
                             },
                         )
-                        write_json(index_path, index)
-                        report(
-                            f"Durable hidden states: {len(index['rows'])}/{len(data)}"
+                        queued_files.extend(
+                            [
+                                (path + ".safetensors", shard),
+                                (path + "-conditioning.safetensors", summary),
+                                (path + "-complete.json", complete),
+                            ]
                         )
+                        queued_rows.update(rows)
+                        queued_bytes += shard.stat().st_size + summary.stat().st_size
 
                     for offset, i in enumerate(indices):
                         payload = load_file(
@@ -646,7 +721,17 @@ def hidden(cfg, publisher, manifest):  # noqa: C901 -- bounded extraction and du
                         entries.append(i)
                         size += byte_count
                     flush(tensors, summaries, entries)
-                shutil.rmtree(pending_root)
+                queued_roots.append(pending_root)
+                report(
+                    f"Hidden states staged locally: {len(queued_rows)} "
+                    "awaiting publication"
+                )
+                if (
+                    len(queued_rows) >= cfg.hub.upload_batch_examples
+                    or queued_bytes >= cfg.hub.upload_batch_bytes
+                ):
+                    publish_pending()
+    publish_pending()
     artifact = publisher.put(
         cfg.hub.activations_repo, f"{profile(cfg)}/index.json", index_path
     )

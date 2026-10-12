@@ -97,6 +97,8 @@ hub:
   - 5
   response_chunk_size: 1000
   extraction_batch_size: 16
+  upload_batch_examples: 256
+  upload_batch_bytes: 2147483648
   shard_bytes: 1073741824
   cache_gib: 40
   cache_reserve_gib: 8

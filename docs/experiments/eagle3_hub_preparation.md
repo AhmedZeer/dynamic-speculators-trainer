@@ -133,11 +133,29 @@ keys, a compact raw last-prompt-token summary, and a completion record containin
 its exact repository commits and checksums. A final category index is published
 only after every expected row is durable.
 
-Completed batch payloads are removed from local staging after publication.
+Completed payloads are removed from local staging after their upload group is published.
 An upload failure retains pending extraction files; rerunning retries them.
 After machine loss, extraction recovers previously sealed shard records and
 generates only missing rows. Unsaved/in-flight work can still be lost; upload
 completion is the durability boundary.
+
+Extraction batches remain at 16 examples, but publication groups accumulate
+until `hub.upload_batch_examples` (256) or `hub.upload_batch_bytes` (2 GiB) is
+reached. The byte threshold is checked after each extraction batch, so a group
+can exceed it by one batch. The final smaller group is always published.
+Each group uploads all its shards, conditioning summaries, completion records,
+and checksum sidecars in a single atomic commit. Provenance files are also
+published together in one commit. This reduces commit creation and lets vLLM
+process several batches between uploads; uploads still block extraction while
+that group is being published.
+
+Local pending files survive a failed upload and are reused on retry. On another
+machine, only successful publication groups are recoverable; uncommitted groups
+must be extracted again. Old individually published shards/completion records
+remain readable. Increasing the thresholds reduces commit frequency but
+increases local staging space and the work exposed to machine loss. Existing
+server-side rate limits must expire before publishing again; batching does not
+reset them.
 
 Nested Hugging Face upload/download progress bars are disabled by default to
 keep notebook output responsive. Large uploads print their size; slow uploads

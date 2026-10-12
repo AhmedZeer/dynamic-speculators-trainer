@@ -30,6 +30,7 @@ def test_preparation_progress_setting_is_scoped(preparation, monkeypatch):
     monkeypatch.setattr(
         hub, "enable_progress_bars", lambda: disabled.__setitem__(0, False)
     )
+
     def interrupt():
         with hub.hub_progress(cfg):
             assert disabled[0]
@@ -42,7 +43,6 @@ def test_preparation_progress_setting_is_scoped(preparation, monkeypatch):
     with hub.hub_progress(cfg):
         assert disabled[0]
     assert disabled[0]
-
 
 
 generate_offline_data = importlib.import_module("speculators.cli.generate_offline_data")
@@ -343,6 +343,64 @@ def test_hub_retains_same_text_in_each_domain(preparation, monkeypatch):
     assert len(chat) == len(math) == 6
     assert len({p["id"] for p in chat + math}) == 12
     assert len({p["prompt_hash"] for p in chat + math}) == 1
+
+
+def test_hidden_shards_publish_together_in_one_commit(preparation):
+    cfg, remote, _, extractions = preparation
+    workflow.prepare(cfg, "select")
+    workflow.prepare(cfg, "responses")
+    workflow.prepare(cfg, "data")
+    repo = cfg.hub.activations_repo
+    before = sum(key[0] == repo for key in remote.history)
+    workflow.prepare(cfg, "hidden")
+    after = sum(key[0] == repo for key in remote.history)
+    # Four extraction batches, three objects each: one group commit + final index.
+    assert after - before == 2
+    assert len(extractions) == 6
+    paths = remote.list_repo_files(repo)
+    assert len([p for p in paths if p.endswith("-complete.json")]) == 4
+    index = json.loads((cfg.output_root / "hidden_states" / "index.json").read_text())
+    for row in index["rows"].values():
+        for kind in ("shard", "summary"):
+            assert len(row[kind]["revision"]) == 40
+            assert Path(
+                remote.download(repo, row[kind]["path"], revision=row[kind]["revision"])
+            ).exists()
+
+
+def test_old_separately_published_shard_is_reused(preparation):
+    cfg, remote, _, extractions = preparation
+    workflow.prepare(cfg, "select")
+    workflow.prepare(cfg, "responses")
+    manifest = workflow.prepare(cfg, "data")
+    data = load_from_disk(manifest["data_path"]).with_format(None)
+    primary = data[0]["primary_id"]
+    publisher = hub.Publisher(cfg)
+    local = cfg.output_root / "old-shard.safetensors"
+    save_file(
+        {
+            f"{primary}/token_ids": torch.tensor(data[0]["input_ids"]),
+            f"{primary}/hidden_states": torch.zeros(3, 4, 3, dtype=torch.bfloat16),
+        },
+        local,
+    )
+    location = f"{hub.profile(cfg)}/math-00000/train/old"
+    shard = publisher.put(cfg.hub.activations_repo, location + ".safetensors", local)
+    save_file({primary: torch.zeros(9)}, local)
+    summary = publisher.put(
+        cfg.hub.activations_repo, location + "-conditioning.safetensors", local
+    )
+    publisher.metadata(
+        cfg.hub.activations_repo,
+        location + "-complete.json",
+        {
+            "prepared_fingerprint": manifest["prepared_fingerprint"],
+            "rows": {"0": {"primary_id": primary, "shard": shard, "summary": summary}},
+        },
+    )
+    workflow.prepare(cfg, "hidden")
+    assert len(extractions) == 5
+    assert primary not in extractions
 
 
 def test_interrupted_hidden_upload_retains_payloads_and_recovers_remote_rows(
