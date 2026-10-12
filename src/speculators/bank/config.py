@@ -128,6 +128,8 @@ class HubArtifacts(Settings):
     shard_bytes: int = Field(default=2**30, ge=1024)
     cache_gib: float = Field(default=40, gt=0)
     cache_reserve_gib: float = Field(default=8, ge=0)
+    progress_bars: bool = False
+    upload_log_interval: float = Field(default=30, ge=1)
 
     @model_validator(mode="after")
     def valid(self):

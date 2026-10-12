@@ -6,19 +6,37 @@
 import json
 import shutil
 import tempfile
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 import yaml
 from filelock import FileLock
 from huggingface_hub import CommitOperationAdd, HfApi, hf_hub_download
 from huggingface_hub.errors import EntryNotFoundError
+from huggingface_hub.utils import (
+    are_progress_bars_disabled,
+    disable_progress_bars,
+    enable_progress_bars,
+)
 
 from speculators.bank.artifacts import digest, file_digest, read_jsonl, write_json
 from speculators.bank.progress import report, stage_progress
 
 DOMAINS = ("chat", "math", "code", "stem")
 STATE_NDIM = 3
+
+
+@contextmanager
+def hub_progress(cfg):
+    """Suppress nested transfer bars during preparation and restore callers' state."""
+    disabled = are_progress_bars_disabled()
+    if not cfg.hub.progress_bars and not disabled:
+        disable_progress_bars()
+    try:
+        yield
+    finally:
+        if not cfg.hub.progress_bars and not disabled:
+            enable_progress_bars()
 
 
 def fetch(reference, destination):
@@ -82,8 +100,15 @@ class Publisher:
                 raise ValueError(f"Immutable Hub object differs: {path}")
             revision = parent
         else:
-            report(f"Publishing {repo}/{path}: {source.stat().st_size / 2**20:.1f} MiB")
-            with stage_progress(f"Hub upload {path}"):
+            # Tiny summaries, sidecars, and provenance otherwise flood notebooks.
+            size = source.stat().st_size
+            if size >= 2**20:
+                report(f"Publishing {repo}/{path}: {size / 2**20:.1f} MiB")
+            with stage_progress(
+                f"Hub upload {path}",
+                interval=self.cfg.hub.upload_log_interval,
+                quiet=True,
+            ):
                 commit = self.api.create_commit(
                     repo,
                     repo_type="dataset",
@@ -724,6 +749,11 @@ def restore(cfg, stage):  # noqa: C901 -- restore/verify four dependent stages
 
 
 def prepare(cfg, stage):
+    with hub_progress(cfg):
+        return _prepare(cfg, stage)
+
+
+def _prepare(cfg, stage):
     from speculators.bank.workflow import prepare_arrow, select_data
 
     root = cfg.output_root.resolve()

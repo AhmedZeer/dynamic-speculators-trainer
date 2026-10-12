@@ -139,6 +139,13 @@ After machine loss, extraction recovers previously sealed shard records and
 generates only missing rows. Unsaved/in-flight work can still be lost; upload
 completion is the durability boundary.
 
+Nested Hugging Face upload/download progress bars are disabled by default to
+keep notebook output responsive. Large uploads print their size; slow uploads
+emit a heartbeat every 30 seconds. Small metadata uploads are quiet, while
+extraction counters and errors remain visible. Set `hub.progress_bars: true`
+to retain the library's progress-bar setting, or adjust
+`hub.upload_log_interval` to change the heartbeat interval.
+
 Every successful stage prints `Hub trajectories revision: <COMMIT_SHA>`.
 Save the final hidden-stage SHA for consumers. Stage manifests and checksum
 sidecars are immutable. Different bytes under a previously published path fail

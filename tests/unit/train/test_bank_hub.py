@@ -19,6 +19,32 @@ from speculators.bank.config import BankConfig
 from speculators.bank.transfer import BankFileTransfer
 from speculators.cli import lora_bank
 
+
+def test_preparation_progress_setting_is_scoped(preparation, monkeypatch):
+    cfg, _, _, _ = preparation
+    disabled = [False]
+    monkeypatch.setattr(hub, "are_progress_bars_disabled", lambda: disabled[0])
+    monkeypatch.setattr(
+        hub, "disable_progress_bars", lambda: disabled.__setitem__(0, True)
+    )
+    monkeypatch.setattr(
+        hub, "enable_progress_bars", lambda: disabled.__setitem__(0, False)
+    )
+    def interrupt():
+        with hub.hub_progress(cfg):
+            assert disabled[0]
+            raise RuntimeError("interrupted upload")
+
+    with pytest.raises(RuntimeError):
+        interrupt()
+    assert not disabled[0]
+    disabled[0] = True
+    with hub.hub_progress(cfg):
+        assert disabled[0]
+    assert disabled[0]
+
+
+
 generate_offline_data = importlib.import_module("speculators.cli.generate_offline_data")
 
 
