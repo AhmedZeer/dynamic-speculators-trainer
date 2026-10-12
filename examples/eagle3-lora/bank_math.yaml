@@ -67,7 +67,7 @@ execution:
   generation_endpoint: http://localhost:8000/v1/chat/completions
   extraction_endpoint: http://localhost:8000/v1
   concurrency: 64
-  hidden_state_concurrency: 16
+  hidden_state_concurrency: 256
   hidden_state_write_concurrency: 2
   hidden_state_log_interval: 10
   prompt_chunk_size: 1000
@@ -96,9 +96,9 @@ hub:
   adaptation_subset_ids:
   - 5
   response_chunk_size: 1000
-  extraction_batch_size: 16
-  upload_batch_examples: 256
-  upload_batch_bytes: 2147483648
+  extraction_batch_size: 512
+  upload_batch_examples: 512
+  upload_batch_bytes: 8589934592 #2147483648
   shard_bytes: 1073741824
   cache_gib: 40
   cache_reserve_gib: 8
