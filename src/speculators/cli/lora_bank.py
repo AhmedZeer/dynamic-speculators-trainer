@@ -76,16 +76,38 @@ def serve(
     config: ConfigOption,
     mode: Literal["responses", "hidden"] = "responses",
     port: int = 8000,
+    resume_from_hf: Annotated[
+        bool,
+        typer.Option(
+            "--resume-from-hf", help="Restore the published selection before launching"
+        ),
+    ] = False,
 ):
     """Launch the pinned target and preserve server provenance; stop to switch modes."""
-    from huggingface_hub import snapshot_download  # noqa: PLC0415
+    from huggingface_hub import HfApi, snapshot_download  # noqa: PLC0415
 
     from speculators.provenance import find_package_repo  # noqa: PLC0415
 
     cfg = BankConfig.load(config)
+    if resume_from_hf:
+        if cfg.hub is None:
+            raise typer.BadParameter("--resume-from-hf requires a Hub-enabled config")
+        from speculators.bank.hub import prepare as prepare_hub  # noqa: PLC0415
+
+        consumer = cfg.model_copy(deep=True)
+        consumer.hub.mode = "consumer"
+        if consumer.hub.trajectories_revision == "main":
+            consumer.hub.trajectories_revision = (
+                HfApi()
+                .repo_info(consumer.hub.trajectories_repo, repo_type="dataset")
+                .sha
+            )
+        with stage_progress("Restoring published selection for server startup"):
+            prepare_hub(consumer, "select")
     if not (cfg.output_root / "manifest.json").exists():
         raise typer.BadParameter(
-            "Run prepare --stage select before starting the server"
+            "Run prepare --stage select for new data, or pass --resume-from-hf "
+            "to restore an existing published selection"
         )
     manifest = workflow.select_data(cfg)
     target = snapshot_download(

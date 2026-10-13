@@ -162,7 +162,19 @@ published completion records remain recoverable. Existing individually published
 shards also remain usable. A server-side rate limit must expire before another
 commit can succeed.
 
-To resume code on a new machine, with its saved trajectories already on Hub:
+To resume code on a new machine, with its saved trajectories already on Hub,
+start the extraction server in terminal A:
+
+```bash
+speculators lora-bank serve \
+  --config examples/eagle3-lora/bank_code.yaml \
+  --mode hidden --resume-from-hf
+```
+
+The server flag restores only selection metadata and prompts, then downloads
+and launches the frozen target revision. It does not perform selection,
+response generation, activation downloads, or publication. When the server is
+ready, start extraction in terminal B:
 
 ```bash
 speculators lora-bank prepare \

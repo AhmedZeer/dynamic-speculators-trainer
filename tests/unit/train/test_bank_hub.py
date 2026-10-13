@@ -48,11 +48,20 @@ def test_preparation_progress_setting_is_scoped(preparation, monkeypatch):
 generate_offline_data = importlib.import_module("speculators.cli.generate_offline_data")
 
 
+@pytest.mark.parametrize("resume_from_hf", [False, True])
 def test_serve_uses_frozen_target_and_server_provenance(
-    preparation, tmp_path, monkeypatch
+    preparation, tmp_path, monkeypatch, resume_from_hf
 ):
     cfg, remote, requests, extractions = preparation
     workflow.prepare(cfg, "select")
+    commits = remote.commits
+    if resume_from_hf:
+        shutil.rmtree(cfg.output_root)
+
+        def forbid_selection(*args, **kwargs):
+            pytest.fail("Server startup must restore frozen data without selecting")
+
+        monkeypatch.setattr(datasets, "load_dataset", forbid_selection)
     config = tmp_path / "bank.yaml"
     config.write_text(yaml.safe_dump(cfg.model_dump(mode="json")))
     resolved = []
@@ -66,7 +75,9 @@ def test_serve_uses_frozen_target_and_server_provenance(
     monkeypatch.setattr(
         lora_bank.subprocess, "run", lambda command, **kwargs: commands.append(command)
     )
-    lora_bank.serve(config, mode="hidden", port=8000)
+    lora_bank.serve(config, mode="hidden", port=8000, resume_from_hf=resume_from_hf)
+    assert remote.commits == commits
+    assert (cfg.output_root / "manifest.json").is_file()
     command = commands[0]
     assert resolved == [(cfg.models.target, "target")]
     assert command[2] == "train"
