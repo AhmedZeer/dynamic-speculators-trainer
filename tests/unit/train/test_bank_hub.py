@@ -228,6 +228,8 @@ def preparation(tmp_path, monkeypatch):
             "adaptation_subset_ids": [1],
             "response_chunk_size": 2,
             "extraction_batch_size": 2,
+            "extraction_scope": "all",
+            "activation_format": "sharded",
             "cache_gib": 0.001,
             "cache_reserve_gib": 0,
             "shard_bytes": 1024,

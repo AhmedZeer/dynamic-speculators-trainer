@@ -49,6 +49,19 @@ def publish_hidden(config: ConfigOption):
 
 
 @app.command()
+def compact_hidden(
+    config: ConfigOption,
+    release: Annotated[str, typer.Option("--release")],
+    output_root: Annotated[Path, typer.Option("--output-root")],
+):
+    """Build training shards in a separate release from published data; no GPU."""
+    from speculators.bank.compaction import compact  # noqa: PLC0415
+
+    result = compact(BankConfig.load(config), release, output_root)
+    typer.echo(f"Training config: {result}")
+
+
+@app.command()
 def train(config: ConfigOption):
     """Train all configured subset/seed runs; resume compatible existing runs."""
     report(f"train; config={config.resolve()}; code={workflow.__file__}")

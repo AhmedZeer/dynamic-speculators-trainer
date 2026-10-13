@@ -87,6 +87,9 @@ class Publisher:
         if not files:
             return []
         parent = self.api.repo_info(repo, repo_type="dataset").sha
+        remote_paths = set(
+            self.api.list_repo_files(repo, repo_type="dataset", revision=parent)
+        )
         references, operations = [], []
         checksums = {}
         for path, filename in files:
@@ -101,14 +104,14 @@ class Publisher:
             if previous and previous["sha256"] != checksum:
                 raise ValueError(f"Immutable published object changed: {path}")
             if not previous:
-                try:
+                if path + ".sha256.json" in remote_paths:
                     sidecar = hf_hub_download(
                         repo,
                         path + ".sha256.json",
                         repo_type="dataset",
                         revision=parent,
                     )
-                except EntryNotFoundError:
+                else:
                     sidecar = None
                 if sidecar:
                     if json.loads(Path(sidecar).read_text())["sha256"] != checksum:
@@ -569,7 +572,7 @@ def hidden(cfg, publisher, manifest, *, publish_only=False, subsets=None):  # no
                 raise ValueError("Published shard belongs to different trajectories")
             for row in complete["rows"].values():
                 for kind in ("shard", "summary"):
-                    if row[kind]["revision"] == "__commit__":
+                    if kind in row and row[kind]["revision"] == "__commit__":
                         row[kind]["revision"] = parent
             for key, row in complete["rows"].items():
                 index["rows"].setdefault(key, row)
@@ -688,8 +691,21 @@ def hidden(cfg, publisher, manifest, *, publish_only=False, subsets=None):  # no
             (raw / f"hs_{i}.safetensors").unlink(missing_ok=True)
 
     shard_limit = min(cfg.hub.shard_bytes, max(1, shutil.disk_usage(root).free // 2))
-    with stage_progress("Packaging extracted hidden states", interval=30):
-        for subset in subsets:
+    if cfg.hub.activation_format == "raw":
+        from speculators.bank.raw_publication import stage_raw
+
+        packages.extend(
+            stage_raw(
+                cfg, manifest, data, included, raw, packaged, skipped | local_rows
+            )
+        )
+        packaging_subsets = []
+    else:
+        packaging_subsets = subsets
+    with stage_progress(
+        "Packaging extracted hidden states", interval=30, quiet=not packaging_subsets
+    ):
+        for subset in packaging_subsets:
             for split in ("train", "validation"):
                 location = f"{profile(cfg)}/{subset['id']}/{split}"
                 tensors, summaries, entries, size = {}, {}, [], 0
@@ -742,7 +758,8 @@ def hidden(cfg, publisher, manifest, *, publish_only=False, subsets=None):  # no
         by_path = {r["path"]: r for r in references}
         for row in pending_rows.values():
             for kind in ("shard", "summary"):
-                row[kind] = by_path[row[kind]["path"]]
+                if kind in row:
+                    row[kind] = by_path[row[kind]["path"]]
         index["rows"].update(pending_rows)
         write_json(index_path, index)
         report(f"Durable hidden states: {len(index['rows'])}/{len(data)}")
@@ -756,6 +773,10 @@ def hidden(cfg, publisher, manifest, *, publish_only=False, subsets=None):  # no
         size = 0
 
     for directory, record in packages:
+        if pending_files and (
+            len(pending_files) + len(record["objects"]) > cfg.hub.upload_max_files
+        ):
+            publish()
         if all(i in index["rows"] for i in record["rows"]):
             shutil.rmtree(directory)
             continue
@@ -770,6 +791,7 @@ def hidden(cfg, publisher, manifest, *, publish_only=False, subsets=None):  # no
         if (
             len(pending_rows) >= cfg.hub.upload_batch_examples
             or size >= cfg.hub.upload_batch_bytes
+            or len(pending_files) >= cfg.hub.upload_max_files
         ):
             publish()
     publish()

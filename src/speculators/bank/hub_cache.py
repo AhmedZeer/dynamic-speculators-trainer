@@ -20,11 +20,12 @@ class HubActivationStore:
         self.capacity = int(self.index["cache_gib"] * 2**30)
         self.reserve = int(self.index["reserve_gib"] * 2**30)
 
-    def read(self, index, prompt_length=None, summary=False):
+    def read(self, index, prompt_length=None, summary=False):  # noqa: C901, PLR0911 -- two supported storage layouts
         row = self.index["rows"].get(str(index))
         if row is None:
             return None
-        reference = row["summary" if summary else "shard"]
+        is_raw = row.get("format") == "raw"
+        reference = row["summary" if summary and not is_raw else "shard"]
         target = self.cache / (reference["sha256"] + ".safetensors")
         # Reads and eviction share a lock so no mmap references outlive eviction.
         with FileLock(str(self.cache / ".lock")):
@@ -52,6 +53,21 @@ class HubActivationStore:
             target.touch()
             with safe_open(target, framework="pt", device="cpu") as tensors:
                 primary = row["primary_id"]
+                if is_raw:
+                    hidden = tensors.get_slice("hidden_states")
+                    if summary:
+                        return (
+                            hidden[row["prompt_length"] - 1, :-1]
+                            .flatten()
+                            .float()
+                            .clone()
+                        )
+                    if prompt_length is not None:
+                        return hidden[:prompt_length].clone()
+                    return {
+                        name: tensors.get_tensor(name).clone()
+                        for name in tensors.keys()  # noqa: SIM118
+                    }
                 if summary:
                     return tensors.get_tensor(primary).clone()
                 if prompt_length is not None:

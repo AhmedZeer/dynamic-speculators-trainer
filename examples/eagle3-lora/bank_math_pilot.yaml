@@ -91,7 +91,9 @@ hub:
   - 5
   response_chunk_size: 1000
   extraction_scope: subset
-  # Commit grouping applies after each subset finishes extraction and packaging.
+  activation_format: raw
+  upload_max_files: 128
+  # Upload original files after each subset; build training shards separately.
   upload_batch_examples: 512
   upload_batch_bytes: 8589934592
   shard_bytes: 1073741824

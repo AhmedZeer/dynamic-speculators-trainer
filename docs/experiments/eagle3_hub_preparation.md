@@ -126,40 +126,34 @@ speculators lora-bank prepare \
 ```
 
 The server extracts auxiliary layers `[2,18,33]` plus final layer `36` on the
-saved token trajectories. The bank calls the original extractor once over the
-one subset at a time. Each subset uses a persistent queue, with concurrency
+saved token trajectories. The bank calls the original extractor once per
+subset. Each subset uses a persistent queue, with concurrency
 controlled by `execution.hidden_state_concurrency`. The production config has
 six subsets of 1,000 train + 100 validation examples; each queue handles 1,100
-examples. There are
-no per-batch Arrow copies, client restarts, packaging pauses, or uploads during
+examples. There are no per-batch Arrow copies, client restarts, or uploads during
 extraction. `hub.extraction_batch_size` is accepted for older YAMLs but ignored.
 
 Raw files are saved under `hidden_states/.raw-states/hs_<global-row>.safetensors`.
 Completed local files are trusted for resume without a payload scan. Newly
-saved files are not scanned for finite values; packaging checks token alignment,
-shape, and dtype as it reads them. Previous per-batch extraction files are
+saved files are not scanned for finite values. Deferred compaction checks token
+alignment, shape, and dtype as it reads them. Previous per-batch extraction files are
 migrated by their saved primary IDs and token sequences, avoiding regeneration.
 
-Once a subset's extraction completes, the client packages approximately 1 GiB Safetensors
-shards and compact last-prompt-token summaries. Each completed local package
-receives an atomic recovery marker under `hidden_states/.packaged/`; only then
-are its raw source files removed. This replaces raw files with reusable packages
-rather than retaining a second full copy. A restart reuses both raw files and
-completed packages.
-
-After that subset's extraction and packaging finish, activation publication begins.
-`hub.upload_batch_examples` (512) and `hub.upload_batch_bytes` (8 GiB) bound
-commit groups during the subset's upload phase; they never interrupt its
-extraction queue. Shards, summaries, completion records, and checksum sidecars are
-published together. Group limits are checked after a complete shard, so a group
-can exceed its threshold by one shard. A successful group is recorded locally
-and its staged packages are removed. Upload failures retain unfinished packages.
+After extraction finishes, `hub.activation_format: raw` uploads the original
+Safetensors files unchanged. There is no tensor repacking or conditioning-summary
+generation on the extraction machine. Checksums and small completion records
+still identify durable examples. `hub.upload_batch_examples` (512),
+`hub.upload_batch_bytes` (8 GiB), and `hub.upload_max_files` (128) bound commit
+groups. Each commit includes the raw files, checksums, and its completion record.
+A successful group is recorded locally before its original files are removed.
+Upload failures retain those files and metadata for retry. Previously sealed
+packages are uploaded as-is rather than unpacked or recomputed.
 The next subset starts only after publication and cleanup finish.
 The final activation index is published once all rows are durable, followed by
 the hidden-stage record and provenance.
 
 **Local storage must fit one subset's remaining activations before publication.** RAM is
-bounded by shard packaging, but the 40 GiB reader-cache limit does not cap raw
+small during raw preparation, but the 40 GiB reader-cache limit does not cap raw
 extraction storage. `hub.extraction_scope: subset` is the default. Set it to
 `all` only when local storage can fit the whole category. On machine loss,
 unpublished raw files and packages are lost;
@@ -176,14 +170,46 @@ speculators lora-bank publish-hidden \
   --config examples/eagle3-lora/bank_code.yaml
 ```
 
-This command does not contact vLLM. It packages only completed local raw files,
-reuses previously sealed packages, uploads them, and releases successfully
-published storage. Packaging reduces the shard target on a nearly full disk to
-leave working space. It still needs room for at least one example and its
-metadata. Missing rows are left for the next extraction run. Partial completion
+This command does not contact vLLM. It uploads completed raw files directly,
+reuses previously sealed packages, and releases successfully published storage.
+It needs working space for small metadata records and the upload library,
+but does not create a second activation copy. Missing rows are left for the next
+extraction run. Partial completion
 records are published, but the immutable final index and hidden-stage record are
 written only when every row is durable. Restart the server and rerun preparation
 after this command frees space. The same command works for math, STEM, and chat.
+
+## Build the training-ready release later
+
+Once the source category is fully published, run compaction on a separate CPU
+machine with sufficient local SSD space. It reads both old shards and new raw
+files, builds approximately 1 GiB training shards and compact conditioning
+summaries, and publishes to a different release. The raw/source release remains
+unchanged:
+
+```bash
+speculators lora-bank compact-hidden \
+  --config examples/eagle3-lora/bank_code.yaml \
+  --release r0001-training \
+  --output-root out/data/eagle3/code-r0001-training
+```
+
+No vLLM server or GPU is used. Inputs are restored at a pinned source revision.
+Trajectories reference their original immutable Hub artifacts instead of being
+generated again. Compaction processes and publishes one subset at a time, using
+a bounded source-download cache; allow space for that cache, the current subset,
+and a shard's working space. Do not reuse the source output directory or source
+release ID. The resulting pinned consumer config is written to:
+
+```bash
+speculators lora-bank train \
+  --config out/data/eagle3/code-r0001-training/bank_training.yaml
+```
+
+The reader supports mixed source indexes containing old shards and raw files.
+Raw indexes compute last-token summaries on demand; the compacted release
+provides separate summary files for fast generator preprocessing. Setting
+`hub.activation_format: sharded` retains the old preparation behavior explicitly.
 
 To resume code on a new machine, with its saved trajectories already on Hub,
 start the extraction server in terminal A:
