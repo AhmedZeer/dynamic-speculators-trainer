@@ -96,7 +96,8 @@ hub:
   adaptation_subset_ids:
   - 5
   response_chunk_size: 1000
-  # Commit grouping applies only after all extraction and packaging finish.
+  extraction_scope: subset
+  # Commit grouping applies after each subset finishes extraction and packaging.
   upload_batch_examples: 512
   upload_batch_bytes: 8589934592
   shard_bytes: 1073741824

@@ -40,6 +40,15 @@ def prepare(
 
 
 @app.command()
+def publish_hidden(config: ConfigOption):
+    """Publish completed local activations and free their storage; no vLLM requests."""
+    cfg = BankConfig.load(config)
+    if cfg.hub is None:
+        raise typer.BadParameter("Publication requires a Hub-enabled bank config")
+    workflow.prepare(cfg, "hidden", publish_only=True)
+
+
+@app.command()
 def train(config: ConfigOption):
     """Train all configured subset/seed runs; resume compatible existing runs."""
     report(f"train; config={config.resolve()}; code={workflow.__file__}")

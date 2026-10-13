@@ -358,11 +358,21 @@ def extract(cfg: BankConfig, manifest: dict):
         validate_cache(manifest, cfg)
 
 
-def prepare(cfg: BankConfig, stage: str, *, resume_from_hf: bool = False):
+def prepare(
+    cfg: BankConfig,
+    stage: str,
+    *,
+    resume_from_hf: bool = False,
+    publish_only: bool = False,
+):
     if cfg.hub is not None:
         from speculators.bank.hub import prepare as prepare_hub  # noqa: PLC0415
 
-        return prepare_hub(cfg, stage, resume_from_hf=resume_from_hf)
+        return prepare_hub(
+            cfg, stage, resume_from_hf=resume_from_hf, publish_only=publish_only
+        )
+    if publish_only:
+        raise ValueError("Publication requires a Hub-enabled bank config")
     if resume_from_hf:
         raise ValueError("--resume-from-hf requires a Hub-enabled bank config")
     interval = cfg.execution.hidden_state_log_interval

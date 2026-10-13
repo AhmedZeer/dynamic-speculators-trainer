@@ -340,7 +340,7 @@ def _finish_startup(callback):
         callback()
 
 
-async def _generate_and_save_hidden_states(
+async def _generate_and_save_hidden_states(  # noqa: C901 -- scoped resumable extraction lifecycle
     model: str | None,
     endpoint: str,
     preprocessed_data: str,
@@ -359,6 +359,7 @@ async def _generate_and_save_hidden_states(
     on_startup_complete: Callable[[], None] | None = None,
     trust_existing_outputs: bool = False,
     skip_indices: list[int] | None = None,
+    include_indices: list[int] | None = None,
 ):
     dataset = await _run_logged_stage(
         f"Loading preprocessed dataset from {preprocessed_data}",
@@ -395,6 +396,13 @@ async def _generate_and_save_hidden_states(
         0, min(max_samples, num_samples) if max_samples is not None else num_samples
     )
     shard_total = target // world_size + int(rank < target % world_size)
+    if include_indices is not None:
+        included = set(include_indices)
+        assigned = get_indices_to_process(
+            num_samples, max_samples, [], world_size, rank
+        )
+        shard_total = sum(i in included for i in assigned)
+        to_process = [i for i in to_process if i in included]
     reused = shard_total - len(to_process)
     if not to_process:
         _finish_startup(on_startup_complete)
@@ -641,6 +649,10 @@ def generate_offline_data(
         list[int] | None,
         typer.Option(help="Skip rows whose activations are already durably stored"),
     ] = None,
+    include_indices: Annotated[
+        list[int] | None,
+        typer.Option(help="Process only these global dataset row indices"),
+    ] = None,
 ) -> None:
     """Generate hidden states offline from a vLLM server.
 
@@ -677,6 +689,7 @@ def generate_offline_data(
                     validate_outputs=validate_outputs,
                     trust_existing_outputs=trust_existing_outputs,
                     skip_indices=skip_indices,
+                    include_indices=include_indices,
                     request_timeout=request_timeout,
                     max_retries=max_retries,
                     fail_on_error=fail_on_error,

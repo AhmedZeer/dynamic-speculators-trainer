@@ -124,6 +124,7 @@ class HubArtifacts(Settings):
     )
     adaptation_subset_ids: list[int] = Field(default_factory=lambda: [5])
     response_chunk_size: int = Field(default=1000, ge=1)
+    extraction_scope: Literal["subset", "all"] = "subset"
     extraction_batch_size: int = Field(
         default=16,
         ge=1,

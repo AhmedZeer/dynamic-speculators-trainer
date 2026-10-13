@@ -127,8 +127,10 @@ speculators lora-bank prepare \
 
 The server extracts auxiliary layers `[2,18,33]` plus final layer `36` on the
 saved token trajectories. The bank calls the original extractor once over the
-entire prepared dataset. A persistent queue feeds remaining examples to vLLM,
-with concurrency controlled by `execution.hidden_state_concurrency`. There are
+one subset at a time. Each subset uses a persistent queue, with concurrency
+controlled by `execution.hidden_state_concurrency`. The production config has
+six subsets of 1,000 train + 100 validation examples; each queue handles 1,100
+examples. There are
 no per-batch Arrow copies, client restarts, packaging pauses, or uploads during
 extraction. `hub.extraction_batch_size` is accepted for older YAMLs but ignored.
 
@@ -138,29 +140,50 @@ saved files are not scanned for finite values; packaging checks token alignment,
 shape, and dtype as it reads them. Previous per-batch extraction files are
 migrated by their saved primary IDs and token sequences, avoiding regeneration.
 
-Once extraction completes, the client packages approximately 1 GiB Safetensors
+Once a subset's extraction completes, the client packages approximately 1 GiB Safetensors
 shards and compact last-prompt-token summaries. Each completed local package
 receives an atomic recovery marker under `hidden_states/.packaged/`; only then
 are its raw source files removed. This replaces raw files with reusable packages
 rather than retaining a second full copy. A restart reuses both raw files and
 completed packages.
 
-Only after extraction and packaging finish does activation publication begin.
+After that subset's extraction and packaging finish, activation publication begins.
 `hub.upload_batch_examples` (512) and `hub.upload_batch_bytes` (8 GiB) bound
-commit groups during this final upload phase; they no longer trigger mid-run
-uploads. Shards, summaries, completion records, and checksum sidecars are
+commit groups during the subset's upload phase; they never interrupt its
+extraction queue. Shards, summaries, completion records, and checksum sidecars are
 published together. Group limits are checked after a complete shard, so a group
 can exceed its threshold by one shard. A successful group is recorded locally
 and its staged packages are removed. Upload failures retain unfinished packages.
+The next subset starts only after publication and cleanup finish.
 The final activation index is published once all rows are durable, followed by
 the hidden-stage record and provenance.
 
-**Local storage must fit all remaining activations before publication.** RAM is
+**Local storage must fit one subset's remaining activations before publication.** RAM is
 bounded by shard packaging, but the 40 GiB reader-cache limit does not cap raw
-extraction storage. On machine loss, unpublished raw files and packages are lost;
+extraction storage. `hub.extraction_scope: subset` is the default. Set it to
+`all` only when local storage can fit the whole category. On machine loss,
+unpublished raw files and packages are lost;
 published completion records remain recoverable. Existing individually published
 shards also remain usable. A server-side rate limit must expire before another
 commit can succeed.
+
+If an older category-wide run filled the disk, stop preparation and the
+extraction server, keep the local output directory, and publish its completed
+files before requesting more activations:
+
+```bash
+speculators lora-bank publish-hidden \
+  --config examples/eagle3-lora/bank_code.yaml
+```
+
+This command does not contact vLLM. It packages only completed local raw files,
+reuses previously sealed packages, uploads them, and releases successfully
+published storage. Packaging reduces the shard target on a nearly full disk to
+leave working space. It still needs room for at least one example and its
+metadata. Missing rows are left for the next extraction run. Partial completion
+records are published, but the immutable final index and hidden-stage record are
+written only when every row is durable. Restart the server and rerun preparation
+after this command frees space. The same command works for math, STEM, and chat.
 
 To resume code on a new machine, with its saved trajectories already on Hub,
 start the extraction server in terminal A:

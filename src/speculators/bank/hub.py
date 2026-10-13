@@ -515,7 +515,7 @@ def responses(cfg, publisher, manifest):
     stage_record(publisher, "responses", manifest, files)
 
 
-def hidden(cfg, publisher, manifest):  # noqa: C901 -- bounded extraction and durable publication
+def hidden(cfg, publisher, manifest, *, publish_only=False, subsets=None):  # noqa: C901 -- extraction and durable publication
     """Extract bounded batches, seal/upload shards, then release local payloads."""
     import torch
     from datasets import load_from_disk
@@ -523,6 +523,8 @@ def hidden(cfg, publisher, manifest):  # noqa: C901 -- bounded extraction and du
 
     from speculators.cli.generate_offline_data import generate_offline_data
 
+    if subsets is None:
+        subsets = manifest["subsets"]
     root = Path(manifest["hidden_states_path"])
     root.mkdir(parents=True, exist_ok=True)
     index_path = root / "index.json"
@@ -602,26 +604,36 @@ def hidden(cfg, publisher, manifest):  # noqa: C901 -- bounded extraction and du
                 source.replace(target)
 
     skipped = set(index["rows"]) | local_rows
-    with stage_progress("Continuous hidden-state extraction", interval=30):
-        generate_offline_data(
-            model=cfg.models.target,
-            endpoint=cfg.execution.extraction_endpoint,
-            preprocessed_data=manifest["data_path"],
-            output=str(raw),
-            max_samples=None,
-            concurrency=cfg.execution.hidden_state_concurrency,
-            write_concurrency=cfg.execution.hidden_state_write_concurrency,
-            progress_log_interval=cfg.execution.hidden_state_log_interval,
-            validate_outputs=False,
-            trust_existing_outputs=True,
-            skip_indices=sorted(int(i) for i in skipped),
-            request_timeout=cfg.execution.request_timeout,
-            max_retries=cfg.execution.max_retries,
-            fail_on_error=True,
-            max_consecutive_errors=None,
-            world_size=1,
-            rank=0,
-        )
+    included = [
+        i
+        for subset in subsets
+        for split in ("train", "validation")
+        for i in subset[f"{split}_indices"]
+    ]
+    if not publish_only:
+        with stage_progress(
+            f"Continuous extraction: {len(included)} examples", interval=30
+        ):
+            generate_offline_data(
+                model=cfg.models.target,
+                endpoint=cfg.execution.extraction_endpoint,
+                preprocessed_data=manifest["data_path"],
+                output=str(raw),
+                max_samples=None,
+                concurrency=cfg.execution.hidden_state_concurrency,
+                write_concurrency=cfg.execution.hidden_state_write_concurrency,
+                progress_log_interval=cfg.execution.hidden_state_log_interval,
+                validate_outputs=False,
+                trust_existing_outputs=True,
+                skip_indices=sorted(int(i) for i in skipped),
+                include_indices=included,
+                request_timeout=cfg.execution.request_timeout,
+                max_retries=cfg.execution.max_retries,
+                fail_on_error=True,
+                max_consecutive_errors=None,
+                world_size=1,
+                rank=0,
+            )
 
     def seal(tensors, summaries, entries, location):
         identity = digest([data[i]["primary_id"] for i in entries])
@@ -675,13 +687,16 @@ def hidden(cfg, publisher, manifest):  # noqa: C901 -- bounded extraction and du
         for i in entries:
             (raw / f"hs_{i}.safetensors").unlink(missing_ok=True)
 
+    shard_limit = min(cfg.hub.shard_bytes, max(1, shutil.disk_usage(root).free // 2))
     with stage_progress("Packaging extracted hidden states", interval=30):
-        for subset in manifest["subsets"]:
+        for subset in subsets:
             for split in ("train", "validation"):
                 location = f"{profile(cfg)}/{subset['id']}/{split}"
                 tensors, summaries, entries, size = {}, {}, [], 0
                 for i in subset[f"{split}_indices"]:
                     if str(i) in skipped or str(i) in local_rows:
+                        continue
+                    if publish_only and not (raw / f"hs_{i}.safetensors").exists():
                         continue
                     row = data[i]
                     payload = load_file(raw / f"hs_{i}.safetensors")
@@ -699,7 +714,7 @@ def hidden(cfg, publisher, manifest):  # noqa: C901 -- bounded extraction and du
                     byte_count = sum(
                         t.numel() * t.element_size() for t in payload.values()
                     )
-                    if entries and size + byte_count > cfg.hub.shard_bytes:
+                    if entries and size + byte_count > shard_limit:
                         seal(tensors, summaries, entries, location)
                         tensors, summaries, entries, size = {}, {}, [], 0
                     primary = row["primary_id"]
@@ -758,6 +773,13 @@ def hidden(cfg, publisher, manifest):  # noqa: C901 -- bounded extraction and du
         ):
             publish()
     publish()
+    if len(index["rows"]) != len(data):
+        provenance(publisher, "hidden-partial")
+        report(
+            f"Published hidden states: {len(index['rows'])}/{len(data)}; "
+            "category is not complete yet"
+        )
+        return
     artifact = publisher.put(
         cfg.hub.activations_repo, f"{profile(cfg)}/index.json", index_path
     )
@@ -859,12 +881,14 @@ def restore(cfg, stage):  # noqa: C901 -- restore/verify four dependent stages
     return manifest
 
 
-def prepare(cfg, stage, *, resume_from_hf=False):
+def prepare(cfg, stage, *, resume_from_hf=False, publish_only=False):
     with hub_progress(cfg):
-        return _prepare(cfg, stage, resume_from_hf=resume_from_hf)
+        return _prepare(
+            cfg, stage, resume_from_hf=resume_from_hf, publish_only=publish_only
+        )
 
 
-def _prepare(cfg, stage, *, resume_from_hf=False):  # noqa: C901 -- ordered stage restoration and publication
+def _prepare(cfg, stage, *, resume_from_hf=False, publish_only=False):  # noqa: C901 -- ordered stage restoration and publication
     from speculators.bank.workflow import prepare_arrow, select_data
 
     root = cfg.output_root.resolve()
@@ -930,7 +954,15 @@ def _prepare(cfg, stage, *, resume_from_hf=False):  # noqa: C901 -- ordered stag
                     raise ValueError(
                         "Run prepare --stage data before hidden extraction"
                     )
-                hidden(cfg, publisher, manifest)
+                if publish_only:
+                    hidden(cfg, publisher, manifest, publish_only=True)
+                elif cfg.hub.extraction_scope == "subset":
+                    for subset in manifest["subsets"]:
+                        report(f"Extracting and publishing subset {subset['id']}")
+                        # Keep global row IDs and the original trajectory fingerprint.
+                        hidden(cfg, publisher, manifest, subsets=[subset])
+                else:
+                    hidden(cfg, publisher, manifest)
         write_json(root / "experiment.json", cfg.model_dump(mode="json"))
         revision = publisher.api.repo_info(
             cfg.hub.trajectories_repo, repo_type="dataset"
