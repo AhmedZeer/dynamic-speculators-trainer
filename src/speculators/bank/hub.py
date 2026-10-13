@@ -6,7 +6,7 @@
 import json
 import shutil
 import tempfile
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from pathlib import Path
 
 import yaml
@@ -554,6 +554,9 @@ def hidden(cfg, publisher, manifest):  # noqa: C901 -- bounded extraction and du
         if final["prepared_fingerprint"] != manifest["prepared_fingerprint"]:
             raise ValueError("Published index belongs to different trajectories")
         index = final
+        # A final index already contains every sealed record. Avoid hundreds of
+        # metadata downloads when resuming a fully published category.
+        remote_paths = []
     for path in remote_paths:
         if path.startswith(profile(cfg) + "/") and path.endswith("-complete.json"):
             saved = hf_hub_download(
@@ -569,176 +572,192 @@ def hidden(cfg, publisher, manifest):  # noqa: C901 -- bounded extraction and du
             for key, row in complete["rows"].items():
                 index["rows"].setdefault(key, row)
     write_json(index_path, index)
-    queued_files, queued_rows, queued_roots = [], {}, []
-    queued_bytes = 0
+    raw = root / ".raw-states"
+    raw.mkdir(exist_ok=True)
+    packaged = root / ".packaged"
+    packaged.mkdir(exist_ok=True)
+    packages = []
+    local_rows = set()
+    for marker in sorted(packaged.glob("*/local.json")):
+        record = json.loads(marker.read_text())
+        if record["prepared_fingerprint"] != manifest["prepared_fingerprint"]:
+            raise ValueError("Local packaged shard belongs to different trajectories")
+        packages.append((marker.parent, record))
+        local_rows.update(record["rows"])
 
-    def publish_pending():
-        nonlocal queued_bytes
-        if not queued_files:
+    # Recover extraction files from the previous per-batch layout without asking
+    # vLLM to compute them again. Token IDs guard against mismatched trajectories.
+    row_ids = {data[i]["primary_id"]: i for i in range(len(data))}
+    for old in sorted((root / ".pending-extraction").glob("*/data")):
+        previous = load_from_disk(old).with_format(None)
+        for offset, row in enumerate(previous):
+            i = row_ids.get(row["primary_id"])
+            source = old.parent / "states" / f"hs_{offset}.safetensors"
+            if i is None or not source.exists():
+                continue
+            if row["input_ids"] != data[i]["input_ids"]:
+                raise ValueError("Pending extraction tokens differ from trajectories")
+            target = raw / f"hs_{i}.safetensors"
+            if not target.exists():
+                source.replace(target)
+
+    skipped = set(index["rows"]) | local_rows
+    with stage_progress("Continuous hidden-state extraction", interval=30):
+        generate_offline_data(
+            model=cfg.models.target,
+            endpoint=cfg.execution.extraction_endpoint,
+            preprocessed_data=manifest["data_path"],
+            output=str(raw),
+            max_samples=None,
+            concurrency=cfg.execution.hidden_state_concurrency,
+            write_concurrency=cfg.execution.hidden_state_write_concurrency,
+            progress_log_interval=cfg.execution.hidden_state_log_interval,
+            validate_outputs=False,
+            trust_existing_outputs=True,
+            skip_indices=sorted(int(i) for i in skipped),
+            request_timeout=cfg.execution.request_timeout,
+            max_retries=cfg.execution.max_retries,
+            fail_on_error=True,
+            max_consecutive_errors=None,
+            world_size=1,
+            rank=0,
+        )
+
+    def seal(tensors, summaries, entries, location):
+        identity = digest([data[i]["primary_id"] for i in entries])
+        path = f"{location}/{identity}"
+        directory = packaged / identity
+        directory.mkdir(exist_ok=True)
+        shard, summary = (
+            directory / "shard.safetensors",
+            directory / "conditioning.safetensors",
+        )
+        save_file(tensors, shard)
+        save_file(summaries, summary)
+
+        def reference(remote_path, local):
+            return {
+                "repo": cfg.hub.activations_repo,
+                "path": remote_path,
+                "revision": "__commit__",
+                "sha256": file_digest(local),
+                "bytes": local.stat().st_size,
+            }
+
+        shard_ref = reference(path + ".safetensors", shard)
+        summary_ref = reference(path + "-conditioning.safetensors", summary)
+        rows = {
+            str(i): {
+                "primary_id": data[i]["primary_id"],
+                "shard": shard_ref.copy(),
+                "summary": summary_ref.copy(),
+            }
+            for i in entries
+        }
+        public_record = {
+            "version": 2,
+            "prepared_fingerprint": manifest["prepared_fingerprint"],
+            "rows": rows,
+        }
+        write_json(directory / "complete.json", public_record)
+        record = {
+            **public_record,
+            "objects": [
+                [path + ".safetensors", shard.name],
+                [path + "-conditioning.safetensors", summary.name],
+                [path + "-complete.json", "complete.json"],
+            ],
+        }
+        # The atomic marker makes completed local packages reusable on restart.
+        write_json(directory / "local.json", record)
+        packages.append((directory, record))
+        local_rows.update(rows)
+        for i in entries:
+            (raw / f"hs_{i}.safetensors").unlink(missing_ok=True)
+
+    with stage_progress("Packaging extracted hidden states", interval=30):
+        for subset in manifest["subsets"]:
+            for split in ("train", "validation"):
+                location = f"{profile(cfg)}/{subset['id']}/{split}"
+                tensors, summaries, entries, size = {}, {}, [], 0
+                for i in subset[f"{split}_indices"]:
+                    if str(i) in skipped or str(i) in local_rows:
+                        continue
+                    row = data[i]
+                    payload = load_file(raw / f"hs_{i}.safetensors")
+                    states = payload["hidden_states"]
+                    if (
+                        states.ndim != STATE_NDIM
+                        or states.shape[0] != row["seq_len"]
+                        or states.shape[1] != len(cfg.hidden_states.layer_ids)
+                        or states.dtype != getattr(torch, cfg.hidden_states.dtype)
+                        or payload["token_ids"].tolist() != row["input_ids"]
+                    ):
+                        raise ValueError(
+                            f"Extraction shape/dtype/tokens differ for row {i}"
+                        )
+                    byte_count = sum(
+                        t.numel() * t.element_size() for t in payload.values()
+                    )
+                    if entries and size + byte_count > cfg.hub.shard_bytes:
+                        seal(tensors, summaries, entries, location)
+                        tensors, summaries, entries, size = {}, {}, [], 0
+                    primary = row["primary_id"]
+                    tensors.update(
+                        {f"{primary}/{key}": value for key, value in payload.items()}
+                    )
+                    summaries[primary] = (
+                        states[row["prompt_length"] - 1, :-1].flatten().float().clone()
+                    )
+                    entries.append(i)
+                    size += byte_count
+                if entries:
+                    seal(tensors, summaries, entries, location)
+
+    # All GPU work and packaging finish before the first activation upload.
+    # Bound each commit by payload/row count, but publish every group only here.
+    pending_files, pending_rows, pending_dirs = [], {}, []
+    size = 0
+
+    def publish():
+        nonlocal size
+        if not pending_files:
             return
-        references = publisher.put_many(cfg.hub.activations_repo, queued_files)
+        references = publisher.put_many(cfg.hub.activations_repo, pending_files)
         by_path = {r["path"]: r for r in references}
-        for row in queued_rows.values():
+        for row in pending_rows.values():
             for kind in ("shard", "summary"):
                 row[kind] = by_path[row[kind]["path"]]
-        index["rows"].update(queued_rows)
+        index["rows"].update(pending_rows)
         write_json(index_path, index)
         report(f"Durable hidden states: {len(index['rows'])}/{len(data)}")
-        for directory in queued_roots:
+        for directory in pending_dirs:
             shutil.rmtree(directory)
-        queued_files.clear()
-        queued_rows.clear()
-        queued_roots.clear()
-        queued_bytes = 0
+        for i in pending_rows:
+            (raw / f"hs_{i}.safetensors").unlink(missing_ok=True)
+        pending_files.clear()
+        pending_rows.clear()
+        pending_dirs.clear()
+        size = 0
 
-    for subset in manifest["subsets"]:
-        for split in ("train", "validation"):
-            pending = [
-                i for i in subset[f"{split}_indices"] if str(i) not in index["rows"]
-            ]
-            for start in range(0, len(pending), cfg.hub.extraction_batch_size):
-                indices = pending[start : start + cfg.hub.extraction_batch_size]
-                pending_root = root / ".pending-extraction" / digest(indices)
-                pending_root.mkdir(parents=True, exist_ok=True)
-                with nullcontext(pending_root) as scratch:
-                    if not (scratch / "data").exists():
-                        data.select(indices).save_to_disk(scratch / "data")
-                    generate_offline_data(
-                        model=cfg.models.target,
-                        endpoint=cfg.execution.extraction_endpoint,
-                        preprocessed_data=str(scratch / "data"),
-                        output=str(scratch / "states"),
-                        max_samples=None,
-                        concurrency=cfg.execution.hidden_state_concurrency,
-                        write_concurrency=cfg.execution.hidden_state_write_concurrency,
-                        progress_log_interval=cfg.execution.hidden_state_log_interval,
-                        validate_outputs=True,
-                        trust_existing_outputs=True,
-                        request_timeout=cfg.execution.request_timeout,
-                        max_retries=cfg.execution.max_retries,
-                        fail_on_error=True,
-                        max_consecutive_errors=None,
-                        world_size=1,
-                        rank=0,
-                    )
-                    tensors, summaries, entries, size = {}, {}, [], 0
-
-                    shard_location = f"{profile(cfg)}/{subset['id']}/{split}"
-
-                    def flush(
-                        tensors,
-                        summaries,
-                        entries,
-                        location=shard_location,
-                    ):
-                        if not entries:
-                            return
-                        identity = digest([data[i]["primary_id"] for i in entries])
-                        path = f"{location}/{identity}"
-                        nonlocal queued_bytes
-                        shard, summary = (
-                            scratch / f"{identity}.safetensors",
-                            scratch / f"{identity}-conditioning.safetensors",
-                        )
-                        save_file(tensors, shard)
-                        save_file(summaries, summary)
-
-                        def reference(remote_path, local):
-                            return {
-                                "repo": cfg.hub.activations_repo,
-                                "path": remote_path,
-                                "revision": "__commit__",
-                                "sha256": file_digest(local),
-                                "bytes": local.stat().st_size,
-                            }
-
-                        shard_reference = reference(path + ".safetensors", shard)
-                        summary_reference = reference(
-                            path + "-conditioning.safetensors", summary
-                        )
-                        rows = {
-                            str(i): {
-                                "primary_id": data[i]["primary_id"],
-                                "shard": shard_reference.copy(),
-                                "summary": summary_reference.copy(),
-                            }
-                            for i in entries
-                        }
-                        complete = scratch / f"{identity}-complete.json"
-                        write_json(
-                            complete,
-                            {
-                                "version": 2,
-                                "prepared_fingerprint": manifest[
-                                    "prepared_fingerprint"
-                                ],
-                                "rows": rows,
-                            },
-                        )
-                        queued_files.extend(
-                            [
-                                (path + ".safetensors", shard),
-                                (path + "-conditioning.safetensors", summary),
-                                (path + "-complete.json", complete),
-                            ]
-                        )
-                        queued_rows.update(rows)
-                        queued_bytes += shard.stat().st_size + summary.stat().st_size
-
-                    with stage_progress(
-                        f"Packaging hidden states: {len(indices)} examples",
-                        interval=cfg.hub.upload_log_interval,
-                    ):
-                        for offset, i in enumerate(indices):
-                            payload = load_file(
-                                scratch / "states" / f"hs_{offset}.safetensors"
-                            )
-                            states = payload["hidden_states"]
-                            if (
-                                states.ndim != STATE_NDIM
-                                or states.shape[0] != data[i]["seq_len"]
-                                or states.shape[1] != len(cfg.hidden_states.layer_ids)
-                                or states.dtype
-                                != getattr(torch, cfg.hidden_states.dtype)
-                                or payload["token_ids"].tolist() != data[i]["input_ids"]
-                            ):
-                                raise ValueError(
-                                    f"Extraction shape/dtype/tokens differ for row {i}"
-                                )
-                            primary = data[i]["primary_id"]
-                            byte_count = sum(
-                                t.numel() * t.element_size() for t in payload.values()
-                            )
-                            if entries and size + byte_count > cfg.hub.shard_bytes:
-                                flush(tensors, summaries, entries)
-                                tensors, summaries, entries, size = {}, {}, [], 0
-                            tensors.update(
-                                {
-                                    f"{primary}/{key}": value
-                                    for key, value in payload.items()
-                                }
-                            )
-                            boundary = data[i]["prompt_length"]
-                            summaries[primary] = (
-                                payload["hidden_states"][boundary - 1, :-1]
-                                .flatten()
-                                .float()
-                                .clone()
-                            )
-                            entries.append(i)
-                            size += byte_count
-                        flush(tensors, summaries, entries)
-                queued_roots.append(pending_root)
-                report(
-                    f"Hidden states staged locally: {len(queued_rows)} "
-                    "awaiting publication"
-                )
-                if (
-                    len(queued_rows) >= cfg.hub.upload_batch_examples
-                    or queued_bytes >= cfg.hub.upload_batch_bytes
-                ):
-                    publish_pending()
-    publish_pending()
+    for directory, record in packages:
+        if all(i in index["rows"] for i in record["rows"]):
+            shutil.rmtree(directory)
+            continue
+        pending_files.extend(
+            (path, directory / filename) for path, filename in record["objects"]
+        )
+        pending_rows.update(record["rows"])
+        pending_dirs.append(directory)
+        size += sum(
+            (directory / filename).stat().st_size for _, filename in record["objects"]
+        )
+        if (
+            len(pending_rows) >= cfg.hub.upload_batch_examples
+            or size >= cfg.hub.upload_batch_bytes
+        ):
+            publish()
+    publish()
     artifact = publisher.put(
         cfg.hub.activations_repo, f"{profile(cfg)}/index.json", index_path
     )
@@ -840,12 +859,12 @@ def restore(cfg, stage):  # noqa: C901 -- restore/verify four dependent stages
     return manifest
 
 
-def prepare(cfg, stage):
+def prepare(cfg, stage, *, resume_from_hf=False):
     with hub_progress(cfg):
-        return _prepare(cfg, stage)
+        return _prepare(cfg, stage, resume_from_hf=resume_from_hf)
 
 
-def _prepare(cfg, stage):
+def _prepare(cfg, stage, *, resume_from_hf=False):  # noqa: C901 -- ordered stage restoration and publication
     from speculators.bank.workflow import prepare_arrow, select_data
 
     root = cfg.output_root.resolve()
@@ -853,6 +872,23 @@ def _prepare(cfg, stage):
     with FileLock(str(root / ".hub-prepare.lock"), timeout=0):
         if cfg.hub.mode == "consumer":
             return restore(cfg, stage)
+        if resume_from_hf:
+            if stage not in ("responses", "data", "hidden"):
+                raise ValueError(
+                    "--resume-from-hf requires responses, data, or hidden stage"
+                )
+            consumer = cfg.model_copy(deep=True)
+            if consumer.hub.trajectories_revision == "main":
+                consumer.hub.trajectories_revision = (
+                    HfApi()
+                    .repo_info(consumer.hub.trajectories_repo, repo_type="dataset")
+                    .sha
+                )
+            restore(
+                consumer,
+                {"responses": "select", "data": "responses", "hidden": "data"}[stage],
+            )
+            report(f"Restored published inputs at {consumer.hub.trajectories_revision}")
         publisher = Publisher(cfg)
         manifest_path = root / "manifest.json"
         if not manifest_path.exists():
@@ -866,7 +902,8 @@ def _prepare(cfg, stage):
             else:
                 select(cfg, publisher)
         manifest = select_data(cfg)
-        provenance(publisher, stage)
+        if stage not in ("hidden", "all"):
+            provenance(publisher, stage)
         for current in ["responses", "data", "hidden"] if stage == "all" else [stage]:
             if current == "select":
                 # Retry publication after an interrupted select stage.

@@ -187,10 +187,12 @@ def preparation(tmp_path, monkeypatch):
     extractions = []
 
     def extract(**kwargs):
-        rows = load_from_disk(kwargs["preprocessed_data"])
+        rows = load_from_disk(kwargs["preprocessed_data"]).with_format(None)
         root = Path(kwargs["output"])
         root.mkdir(parents=True, exist_ok=True)
         for i, row in enumerate(rows):
+            if i in (kwargs.get("skip_indices") or []):
+                continue
             if (root / f"hs_{i}.safetensors").exists():
                 continue
             extractions.append(row["primary_id"])
@@ -355,7 +357,7 @@ def test_hidden_shards_publish_together_in_one_commit(preparation, monkeypatch):
 
     def count_hashes(path):
         path = Path(path)
-        if ".pending-extraction" in path.parts and path.suffix == ".safetensors":
+        if ".packaged" in path.parts and path.suffix == ".safetensors":
             hashes[path] = hashes.get(path, 0) + 1
         return file_digest(path)
 
@@ -364,7 +366,7 @@ def test_hidden_shards_publish_together_in_one_commit(preparation, monkeypatch):
     before = sum(key[0] == repo for key in remote.history)
     workflow.prepare(cfg, "hidden")
     after = sum(key[0] == repo for key in remote.history)
-    # Four extraction batches, three objects each: one group commit + final index.
+    # Four subset/split shards: one group commit + final index.
     assert after - before == 2
     assert len(extractions) == 6
     # One packaging checksum + one publication verification per file, regardless
@@ -380,6 +382,122 @@ def test_hidden_shards_publish_together_in_one_commit(preparation, monkeypatch):
             assert Path(
                 remote.download(repo, row[kind]["path"], revision=row[kind]["revision"])
             ).exists()
+
+
+def test_continuous_extraction_finishes_before_any_activation_upload(
+    preparation, monkeypatch
+):
+    cfg, remote, _, extractions = preparation
+    workflow.prepare(cfg, "select")
+    workflow.prepare(cfg, "responses")
+    manifest = workflow.prepare(cfg, "data")
+    cfg.hub.upload_batch_examples = 1
+    calls = []
+    extract = generate_offline_data.generate_offline_data
+
+    def continuous(**kwargs):
+        calls.append(kwargs)
+        extract(**kwargs)
+
+    commit = remote.create_commit
+
+    def after_extraction(repo, **kwargs):
+        if repo == cfg.hub.activations_repo:
+            assert len(extractions) == 6
+            assert len(calls) == 1
+            assert not list(
+                (cfg.output_root / "hidden_states" / ".raw-states").glob(
+                    "hs_*.safetensors"
+                )
+            )
+        return commit(repo, **kwargs)
+
+    monkeypatch.setattr(generate_offline_data, "generate_offline_data", continuous)
+    monkeypatch.setattr(remote, "create_commit", after_extraction)
+    workflow.prepare(cfg, "hidden")
+    assert calls[0]["preprocessed_data"] == manifest["data_path"]
+    assert calls[0]["validate_outputs"] is False
+
+
+def test_resume_code_from_hf_without_local_inputs(preparation, tmp_path):
+    cfg, remote, requests, extractions = preparation
+    cfg.hub.domains.append("code")
+    cfg.dataset.category = "code"
+    cfg.dataset.split = "code"
+    workflow.prepare(cfg, "select")
+    workflow.prepare(cfg, "responses")
+    workflow.prepare(cfg, "data")
+    workflow.prepare(cfg, "hidden")
+    generated = (len(requests), len(extractions))
+    restored = cfg.model_copy(deep=True)
+    restored.output_root = tmp_path / "new-code-machine"
+    manifest = workflow.prepare(restored, "hidden", resume_from_hf=True)
+    assert manifest["category"] == "code"
+    assert (len(requests), len(extractions)) == generated
+    assert (restored.output_root / "data").is_dir()
+    assert (
+        len(
+            json.loads(
+                (restored.output_root / "hidden_states" / "index.json").read_text()
+            )["rows"]
+        )
+        == 6
+    )
+
+
+def test_machine_loss_between_final_upload_groups_recovers_published_rows(
+    preparation, monkeypatch
+):
+    cfg, remote, _, extractions = preparation
+    workflow.prepare(cfg, "select")
+    workflow.prepare(cfg, "responses")
+    workflow.prepare(cfg, "data")
+    cfg.hub.upload_batch_examples = 2
+    commit = remote.create_commit
+    groups = [0]
+
+    def interrupt_second_group(repo, **kwargs):
+        if repo == cfg.hub.activations_repo and any(
+            op.path_in_repo.endswith("-complete.json") for op in kwargs["operations"]
+        ):
+            groups[0] += 1
+            if groups[0] == 2:
+                raise OSError("rate limited")
+        return commit(repo, **kwargs)
+
+    monkeypatch.setattr(remote, "create_commit", interrupt_second_group)
+    with pytest.raises(OSError, match="rate limited"):
+        workflow.prepare(cfg, "hidden")
+    assert len(extractions) == 6
+    shutil.rmtree(cfg.output_root)
+    workflow.prepare(cfg, "hidden", resume_from_hf=True)
+    # Two rows in the successful group survived machine loss; only four rows
+    # from uncommitted packages need to be extracted again.
+    assert len(extractions) == 10
+
+
+def test_old_pending_batch_is_reused_without_reextraction(preparation):
+    cfg, remote, _, extractions = preparation
+    workflow.prepare(cfg, "select")
+    workflow.prepare(cfg, "responses")
+    manifest = workflow.prepare(cfg, "data")
+    old = cfg.output_root / "hidden_states" / ".pending-extraction" / "old-batch"
+    data = load_from_disk(manifest["data_path"]).with_format(None)
+    data.select([0, 1]).save_to_disk(old / "data")
+    states = old / "states"
+    states.mkdir()
+    for i in range(2):
+        save_file(
+            {
+                "token_ids": torch.tensor(data[i]["input_ids"]),
+                "hidden_states": torch.zeros(3, 4, 3, dtype=torch.bfloat16),
+            },
+            states / f"hs_{i}.safetensors",
+        )
+    workflow.prepare(cfg, "hidden")
+    assert len(extractions) == 4
+    assert data[0]["primary_id"] not in extractions
+    assert data[1]["primary_id"] not in extractions
 
 
 def test_old_separately_published_shard_is_reused(preparation):
@@ -428,9 +546,7 @@ def test_interrupted_hidden_upload_retains_payloads_and_recovers_remote_rows(
     with pytest.raises(OSError, match="interrupted"):
         workflow.prepare(cfg, "hidden")
     assert list(
-        (cfg.output_root / "hidden_states" / ".pending-extraction").rglob(
-            "hs_*.safetensors"
-        )
+        (cfg.output_root / "hidden_states" / ".packaged").glob("*/shard.safetensors")
     )
     workflow.prepare(cfg, "hidden")
     assert len(extractions) == 6

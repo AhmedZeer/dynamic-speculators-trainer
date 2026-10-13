@@ -22,6 +22,12 @@ ConfigOption = Annotated[Path, typer.Option("--config", exists=True, dir_okay=Fa
 def prepare(
     config: ConfigOption,
     stage: Literal["select", "responses", "data", "hidden", "all"] = "all",
+    resume_from_hf: Annotated[
+        bool,
+        typer.Option(
+            "--resume-from-hf", help="Restore published inputs before resuming"
+        ),
+    ] = False,
 ):
     """Prepare selected target responses and their shared hidden-state cache."""
     report(
@@ -29,7 +35,7 @@ def prepare(
     )
     with stage_progress("Loading bank configuration"):
         cfg = BankConfig.load(config)
-    result = workflow.prepare(cfg, stage)
+    result = workflow.prepare(cfg, stage, resume_from_hf=resume_from_hf)
     typer.echo(json.dumps({"root": result["root"], "subsets": len(result["subsets"])}))
 
 

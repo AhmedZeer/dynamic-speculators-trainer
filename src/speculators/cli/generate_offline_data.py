@@ -358,6 +358,7 @@ async def _generate_and_save_hidden_states(
     progress_log_interval: float = 10.0,
     on_startup_complete: Callable[[], None] | None = None,
     trust_existing_outputs: bool = False,
+    skip_indices: list[int] | None = None,
 ):
     dataset = await _run_logged_stage(
         f"Loading preprocessed dataset from {preprocessed_data}",
@@ -381,6 +382,7 @@ async def _generate_and_save_hidden_states(
         interval=progress_log_interval,
     )
     num_samples = len(dataset)
+    existing_file_indices = sorted(set(existing_file_indices) | set(skip_indices or []))
 
     to_process = get_indices_to_process(
         num_samples,
@@ -635,6 +637,10 @@ def generate_offline_data(
             ),
         ),
     ] = 0,
+    skip_indices: Annotated[
+        list[int] | None,
+        typer.Option(help="Skip rows whose activations are already durably stored"),
+    ] = None,
 ) -> None:
     """Generate hidden states offline from a vLLM server.
 
@@ -670,6 +676,7 @@ def generate_offline_data(
                     on_startup_complete=watchdog.finish,
                     validate_outputs=validate_outputs,
                     trust_existing_outputs=trust_existing_outputs,
+                    skip_indices=skip_indices,
                     request_timeout=request_timeout,
                     max_retries=max_retries,
                     fail_on_error=fail_on_error,

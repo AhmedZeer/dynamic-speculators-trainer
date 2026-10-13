@@ -358,11 +358,13 @@ def extract(cfg: BankConfig, manifest: dict):
         validate_cache(manifest, cfg)
 
 
-def prepare(cfg: BankConfig, stage: str):
+def prepare(cfg: BankConfig, stage: str, *, resume_from_hf: bool = False):
     if cfg.hub is not None:
         from speculators.bank.hub import prepare as prepare_hub  # noqa: PLC0415
 
-        return prepare_hub(cfg, stage)
+        return prepare_hub(cfg, stage, resume_from_hf=resume_from_hf)
+    if resume_from_hf:
+        raise ValueError("--resume-from-hf requires a Hub-enabled bank config")
     interval = cfg.execution.hidden_state_log_interval
     report(f"Output root: {cfg.output_root.resolve()}")
     manifest_path = cfg.output_root.resolve() / "manifest.json"

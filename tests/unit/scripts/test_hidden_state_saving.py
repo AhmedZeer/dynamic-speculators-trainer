@@ -343,8 +343,9 @@ def test_heartbeat_reports_stalled_work_and_final_error(caplog):
     )
 
 
+@pytest.mark.parametrize("remote_skipped", [False, True])
 def test_resume_progress_includes_existing_rows_and_only_published_files(  # noqa: C901
-    tmp_path, monkeypatch, caplog
+    tmp_path, monkeypatch, caplog, remote_skipped
 ):
     data, cache = tmp_path / "data", tmp_path / "cache"
     cache.mkdir()
@@ -413,15 +414,19 @@ def test_resume_progress_includes_existing_rows_and_only_published_files(  # noq
             world_size=1,
             rank=0,
             on_startup_complete=lambda: startup_complete.append(True),
+            skip_indices=[3] if remote_skipped else [],
         )
     )
-    assert requested == [1, 3]
-    assert bars[0].options["initial"] == 2
+    assert requested == ([1] if remote_skipped else [1, 3])
+    assert bars[0].options["initial"] == (3 if remote_skipped else 2)
     assert bars[0].options["total"] == 4
     assert bars[0].advanced == 1
-    assert (
-        "finished: 3/4 complete | reused=2 saved=1 failed=1 remaining=1" in caplog.text
+    expected = (
+        "finished: 4/4 complete | reused=3 saved=1 failed=0 remaining=0"
+        if remote_skipped
+        else "finished: 3/4 complete | reused=2 saved=1 failed=1 remaining=1"
     )
+    assert expected in caplog.text
 
 
 def test_slow_startup_stage_logs_before_completion(caplog):

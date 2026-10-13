@@ -126,36 +126,57 @@ speculators lora-bank prepare \
 ```
 
 The server extracts auxiliary layers `[2,18,33]` plus final layer `36` on the
-saved token trajectories. Extraction works in bounded batches of 16 and
-publishes approximately 1 GiB Safetensors shards; batches and subset/split
-boundaries may make smaller shards. Each shard has stable prompt-derived tensor
-keys, a compact raw last-prompt-token summary, and a completion record containing
-its exact repository commits and checksums. A final category index is published
-only after every expected row is durable.
+saved token trajectories. The bank calls the original extractor once over the
+entire prepared dataset. A persistent queue feeds remaining examples to vLLM,
+with concurrency controlled by `execution.hidden_state_concurrency`. There are
+no per-batch Arrow copies, client restarts, packaging pauses, or uploads during
+extraction. `hub.extraction_batch_size` is accepted for older YAMLs but ignored.
 
-Completed payloads are removed from local staging after their upload group is published.
-An upload failure retains pending extraction files; rerunning retries them.
-After machine loss, extraction recovers previously sealed shard records and
-generates only missing rows. Unsaved/in-flight work can still be lost; upload
-completion is the durability boundary.
+Raw files are saved under `hidden_states/.raw-states/hs_<global-row>.safetensors`.
+Completed local files are trusted for resume without a payload scan. Newly
+saved files are not scanned for finite values; packaging checks token alignment,
+shape, and dtype as it reads them. Previous per-batch extraction files are
+migrated by their saved primary IDs and token sequences, avoiding regeneration.
 
-Extraction batches remain at 16 examples, but publication groups accumulate
-until `hub.upload_batch_examples` (256) or `hub.upload_batch_bytes` (2 GiB) is
-reached. The byte threshold is checked after each extraction batch, so a group
-can exceed it by one batch. The final smaller group is always published.
-Each group uploads all its shards, conditioning summaries, completion records,
-and checksum sidecars in a single atomic commit. Provenance files are also
-published together in one commit. This reduces commit creation and lets vLLM
-process several batches between uploads; uploads still block extraction while
-that group is being published.
+Once extraction completes, the client packages approximately 1 GiB Safetensors
+shards and compact last-prompt-token summaries. Each completed local package
+receives an atomic recovery marker under `hidden_states/.packaged/`; only then
+are its raw source files removed. This replaces raw files with reusable packages
+rather than retaining a second full copy. A restart reuses both raw files and
+completed packages.
 
-Local pending files survive a failed upload and are reused on retry. On another
-machine, only successful publication groups are recoverable; uncommitted groups
-must be extracted again. Old individually published shards/completion records
-remain readable. Increasing the thresholds reduces commit frequency but
-increases local staging space and the work exposed to machine loss. Existing
-server-side rate limits must expire before publishing again; batching does not
-reset them.
+Only after extraction and packaging finish does activation publication begin.
+`hub.upload_batch_examples` (512) and `hub.upload_batch_bytes` (8 GiB) bound
+commit groups during this final upload phase; they no longer trigger mid-run
+uploads. Shards, summaries, completion records, and checksum sidecars are
+published together. Group limits are checked after a complete shard, so a group
+can exceed its threshold by one shard. A successful group is recorded locally
+and its staged packages are removed. Upload failures retain unfinished packages.
+The final activation index is published once all rows are durable, followed by
+the hidden-stage record and provenance.
+
+**Local storage must fit all remaining activations before publication.** RAM is
+bounded by shard packaging, but the 40 GiB reader-cache limit does not cap raw
+extraction storage. On machine loss, unpublished raw files and packages are lost;
+published completion records remain recoverable. Existing individually published
+shards also remain usable. A server-side rate limit must expire before another
+commit can succeed.
+
+To resume code on a new machine, with its saved trajectories already on Hub:
+
+```bash
+speculators lora-bank prepare \
+  --config examples/eagle3-lora/bank_code.yaml \
+  --stage hidden --resume-from-hf
+```
+
+The flag restores frozen membership, saved responses, and prepared trajectories
+before extraction. If the YAML points at `main`, the command resolves it to one
+commit SHA for input restoration. It does not regenerate responses or reselect
+prompts. Existing activation completion records are recovered separately, so
+already published examples are skipped without downloading their full activation
+shards. The same flag works with math, STEM, and chat configs. Rerunning with
+local files present reuses those as well.
 
 Nested Hugging Face upload/download progress bars are disabled by default to
 keep notebook output responsive. Large uploads print their size; slow uploads
