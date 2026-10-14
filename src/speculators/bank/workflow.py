@@ -457,7 +457,7 @@ def train_config(
                 "bank_warmup_epochs": cfg.training.warmup_epochs,
                 "bank_collect_epochs": cfg.training.collect_epochs,
                 "bank_collect_lr": cfg.training.collect_lr,
-                "bank_save_interval": cfg.training.save_interval,
+                "bank_loras_per_epoch": cfg.training.loras_per_epoch,
             },
             "trainer": {
                 "epochs": cfg.training.warmup_epochs + cfg.training.collect_epochs,
@@ -508,7 +508,7 @@ def train(cfg: BankConfig):  # noqa: C901 -- subset selection and independent ru
         f"processes per run={cfg.execution.processes}; "
         f"warmup={cfg.training.warmup_epochs} epochs, "
         f"collect={cfg.training.collect_epochs} epochs, "
-        f"snapshot interval={cfg.training.save_interval} collection steps"
+        f"LoRAs per collection epoch={cfg.training.loras_per_epoch}"
     )
     for subset in bank_subsets:
         seeds = (

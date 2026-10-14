@@ -15,9 +15,8 @@ alpha. Freeze the pretrained drafter's remaining parameters and preserve its
 architecture, normalization, and vocabulary mapping.
 
 Each seed starts independently from the pretrained drafter. Train for **one full
-warmup epoch**, then lower the LR and collect for **four full epochs**. Save every
-**10 completed collection optimizer updates**, continuously across epoch
-boundaries. Evaluate **once at each epoch end**, including warmup. Evaluation is
+warmup epoch**, then lower the LR and collect for **four full epochs**. Save **10 LoRAs per collection epoch**, evenly spaced across completed
+optimizer updates, including each epoch's final update. Evaluate **once at each epoch end**, including warmup. Evaluation is
 reporting, not a plateau gate. There is no intermediate validation, best-only
 bank pruning, or return to warmup.
 
@@ -85,11 +84,12 @@ refers to the enclosing epoch's eventual validation, not an individual evaluatio
 of that checkpoint. Adapter entries are immutable; epoch results are separate.
 
 For a run with collection-epoch step counts `S_e`, the candidate count is
-`floor(sum(S_e) / save_interval)`. Sum this over subsets and seeds for the bank.
+`collect_epochs * loras_per_epoch`. Sum this over subsets and seeds for the bank.
 **1,000 examples is not 1,000 steps:** the loader packs variable-length examples
 into a token budget, and distributed world size also changes epoch length.
-There is no off-cadence final bank entry. A run shorter than the save interval
-can complete with zero candidates; inspection makes this visible.
+For an epoch with `S` optimizer updates and requested count `K`, save at
+`ceil(j * S / K)` for `j=1..K`. If `K > S`, training fails with a request to
+lower `loras_per_epoch`; it never duplicates weights to pad the count.
 
 ## External parameters
 
@@ -106,7 +106,7 @@ Values below are initial experimental defaults, not established optimal values.
 | `responses` | Thinking, temperature, top-p/top-k, seed, output/context limits | Defines the target trajectory distribution |
 | `hidden_states` | Ordered layer IDs, dtype, sequence length | Defines conditioning features and target loss features |
 | `lora` | Rank, fixed alpha, dropout, target modules | Controls update capacity, scaling, and regularization |
-| `training` | Seeds, warmup/collection epochs and LRs, save interval | Controls optimization trajectories and bank density |
+| `training` | Seeds, warmup/collection epochs and LRs, LoRAs per collection epoch | Controls optimization trajectories and bank density |
 | `training` | Weight decay, noise, token budget, TTT count/decay, loss | Changes exposure and training objective; token budget also changes updates/epoch |
 | `execution` | Endpoints, request timeout/retries, response concurrency | Controls server interaction and throughput, not generator batch size |
 | `execution` | Hidden-state request/write concurrency | Separates GPU requests from bounded CPU validation and Drive copies |

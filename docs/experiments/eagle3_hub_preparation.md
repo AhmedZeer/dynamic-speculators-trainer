@@ -218,33 +218,21 @@ Raw indexes compute last-token summaries on demand; the compacted release
 provides separate summary files for fast generator preprocessing. Setting
 `hub.activation_format: sharded` retains the old preparation behavior explicitly.
 
-### Local compaction on the extra SSD
+### Optional compaction
 
-The four `bank_<domain>_local.yaml` configs pin the complete source release at
-`058f01d1f0585e98327b2c190a65c796da04fdd4`. They use a shared 20 GiB activation
-cache at `/media/azeer/extra-segment/eagle3/activation-cache`, an 8 GiB disk
-reserve, and 2 GiB upload groups. Compaction applies these local cache settings
-instead of the cache budget embedded in the source index. Run domains serially.
+Compaction remains optional: the trainer consumes raw activation files directly.
+For a separate sharded training release, use a pinned cloud config:
 
 ```bash
-mkdir -p /media/azeer/extra-segment/eagle3/{hf-cache,tmp}
-export HF_HOME=/media/azeer/extra-segment/eagle3/hf-cache
-export TMPDIR=/media/azeer/extra-segment/eagle3/tmp
-hf auth login
-
-for domain in stem chat code; do
-  speculators lora-bank compact-hidden \
-    --config "examples/eagle3-lora/bank_${domain}_local.yaml" \
-    --release r0001-training \
-    --output-root "/media/azeer/extra-segment/eagle3/${domain}-training" || break
-done
+speculators lora-bank compact-hidden \
+  --config examples/eagle3-lora/bank_stem_cloud.yaml \
+  --release r0001-training \
+  --output-root out/data/eagle3/stem-training
 ```
 
-All target categories share the same training release ID but have separate Hub
-paths and output directories. Math is already entirely sharded, so it does not
-require compaction. Its local config is provided if a uniform training release
-is desired; add `math` to the loop only for that purpose. Existing responses and
-activations are reused; no server, extraction run, or GPU is needed.
+The source response and activation release is reused. See the
+[cloud bank guide](eagle3_cloud_banks.md) for scratch-only training without
+compaction.
 
 To resume code on a new machine, with its saved trajectories already on Hub,
 start the extraction server in terminal A:
@@ -357,7 +345,7 @@ done
 ```
 
 This uses the currently implemented schedule: one warmup epoch, four collection
-epochs at the lower learning rate, checkpoints every 10 updates, and epoch-end
+epochs at the lower learning rate, ten LoRAs per collection epoch, and epoch-end
 validation. These are four bank collection commands, not joint generator
 training. The existing `generator_math.yaml` still describes the original math
 ablation. Shared generator bank pretraining is available through
@@ -365,9 +353,8 @@ ablation. Shared generator bank pretraining is available through
 [direct raw-file training and mixed subsets](eagle3_raw_training.md) for parallel
 staging, subset selection, and the commands. Compaction is optional for this path.
 
-The old math experiment config is preserved as `bank_math_legacy.yaml`.
-The existing generator and vLLM ablation YAMLs reference that legacy config so
-they continue to address the original experiment.
+Generator and vLLM example YAMLs reference the cloud bank configs. Adapt
+experiment subset/seed selections to the collected bank you want to evaluate.
 
 ## Storage and validation
 

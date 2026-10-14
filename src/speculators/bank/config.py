@@ -74,7 +74,7 @@ class Training(Settings):
     collect_epochs: int = Field(default=4, ge=1)
     warmup_lr: float = Field(default=1e-4, gt=0)
     collect_lr: float = Field(default=1e-6, gt=0)
-    save_interval: int = Field(default=10, ge=1)
+    loras_per_epoch: int = Field(default=10, ge=1)
     weight_decay: float = Field(default=0.01, ge=0)
     token_budget: int = Field(default=8192, ge=2)
     noise_std: float = Field(default=0.05, ge=0)
@@ -115,7 +115,7 @@ class Conditioning(Settings):
 
 class HubArtifacts(Settings):
     banks_repo: str = "azeeer/eagle3-qwen3-8b-lora-bank-r32-v1"
-    bank_release: str = "b0001"
+    bank_release: str = "b0002"
     mode: Literal["producer", "consumer"] = "producer"
     trajectories_repo: str = "azeeer/eagle3-qwen3-8b-trajectories-v1"
     activations_repo: str = "azeeer/eagle3-qwen3-8b-activations-v1"

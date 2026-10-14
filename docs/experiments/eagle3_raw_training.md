@@ -13,28 +13,28 @@ sizes; the staging command also verifies SHA-256 before training.
 
 ## Restore metadata and stage selected subsets
 
-Run from the repository root. The existing local configs use the extra SSD for
+Run from the repository root. The cloud configs use scratch paths for
 metadata, datasets and outputs. Restoring hidden metadata does not download every
 activation. Staging downloads the exact references from the restored index,
 including small summary files when an existing shard needs them. Downloads run
 concurrently, defaulting to eight workers; no tensor repackaging or Hub upload runs.
 
 ```bash
-export HF_HOME=/media/azeer/extra-segment/eagle3/hf-cache
-export TMPDIR=/media/azeer/extra-segment/eagle3/tmp
+export HF_HOME=/tmp/speculators-hf
+export TMPDIR=/tmp/speculators-temp
 mkdir -p "$HF_HOME" "$TMPDIR"
 
 speculators lora-bank restore \
-  --config examples/eagle3-lora/bank_stem_local.yaml \
+  --config examples/eagle3-lora/bank_stem_cloud.yaml \
   --revision 058f01d1f0585e98327b2c190a65c796da04fdd4 --stage hidden
 
 speculators lora-bank stage-hidden \
-  --config examples/eagle3-lora/bank_stem_local.yaml \
-  --local-dir /media/azeer/extra-segment/eagle3/activations \
+  --config examples/eagle3-lora/bank_stem_cloud.yaml \
+  --local-dir /tmp/speculators-generator-inputs \
   --subset stem-00000 --workers 8
 
 speculators lora-bank train \
-  --config /media/azeer/extra-segment/eagle3/source-stem-r0001/raw_training.yaml
+  --config /tmp/speculators-cloud/b0002/stem/raw_training.yaml
 ```
 
 The generated `raw_training.yaml` selects only the staged bank subsets for LoRA
@@ -58,16 +58,16 @@ First restore and stage math alongside the STEM files above:
 
 ```bash
 speculators lora-bank restore \
-  --config examples/eagle3-lora/bank_math_local.yaml \
+  --config examples/eagle3-lora/bank_math_cloud.yaml \
   --revision 058f01d1f0585e98327b2c190a65c796da04fdd4 --stage hidden
 
 speculators lora-bank stage-hidden \
-  --config examples/eagle3-lora/bank_math_local.yaml \
-  --local-dir /media/azeer/extra-segment/eagle3/activations \
+  --config examples/eagle3-lora/bank_math_cloud.yaml \
+  --local-dir /tmp/speculators-generator-inputs \
   --subset math-00000 --workers 8
 
 speculators lora-bank train \
-  --config /media/azeer/extra-segment/eagle3/source-math-r0001/raw_training.yaml
+  --config /tmp/speculators-cloud/b0002/math/raw_training.yaml
 
 speculators generator pretrain \
   --config examples/eagle3-lora/generator_mixed.yaml
@@ -96,8 +96,7 @@ layout and LoRA shapes must be compatible across banks. Dataset metadata is
 combined with distinct row offsets; activation payloads are read on demand rather
 than concatenated into RAM.
 
-Staging all domains will require substantially more disk than the current 134 GiB
-free space. Smaller combinations work with the same machinery. Setting
+Staging all domains requires enough scratch for all selected activation files. Smaller combinations work with the same machinery. Setting
 `activation_local_dir: null` retains the existing bounded Hub cache behavior,
 including downloads on cache misses; the parallel staging path avoids those
 training-time downloads. The original conditioning, heatmap and adaptation

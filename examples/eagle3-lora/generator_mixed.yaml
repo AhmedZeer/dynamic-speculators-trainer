@@ -1,18 +1,18 @@
 # Run from the repository root. Bank paths resolve relative to this YAML.
 # Restore each bank manifest and collect its LoRAs before generator pretraining.
-bank_config: bank_math_local.yaml
+bank_config: bank_math_cloud.yaml
 additional_bank_configs:
-  - bank_stem_local.yaml
-  # - bank_code_local.yaml
-  # - bank_chat_local.yaml
+  - bank_stem_cloud.yaml
+  # - bank_code_cloud.yaml
+  # - bank_chat_cloud.yaml
 # Explicit list, or all (all bank-role subsets; adaptation subsets are excluded).
 pretraining_subsets: [math-00000, stem-00000]
 bank_subset: math-00000
 conditioning_subset: math-00005
 condition: last
-activation_local_dir: /media/azeer/extra-segment/eagle3/activations
+activation_local_dir: /tmp/speculators-generator-inputs
 output_root: output/generator-mixed-math-stem
-staging_dir: /media/azeer/extra-segment/eagle3/generator-staging
+staging_dir: /tmp/speculators-generator
 device: cuda
 dtype: bfloat16
 n_workers: 1

@@ -155,7 +155,7 @@ def test_generated_train_configuration_roundtrips(tmp_path):
     path = tmp_path / "train.yaml"
     path.write_text(yaml.safe_dump(settings))
     resolved = TrainConfig.resolve(["--config", str(path)])
-    assert resolved.bank.bank_save_interval == 10
+    assert resolved.bank.bank_loras_per_epoch == 10
     assert resolved.trainer.epochs == 5
     assert resolved.data.num_workers == 0
     assert resolved.lora.lora_target_modules == ["o_proj", "v_proj"]
@@ -285,7 +285,7 @@ def cpu_trainer(path, *, resume=False, stop_at=None):
         ),
         TinyLoader(),
         TinyLoader(),
-        schedule=BankSchedule(1, 4, 1e-5, 10),
+        schedule=BankSchedule(1, 4, 1e-5, 3),
         context={"seed": 12},
     )
     trainer.stop_at = stop_at
@@ -293,7 +293,7 @@ def cpu_trainer(path, *, resume=False, stop_at=None):
     return trainer
 
 
-def test_epoch_schedule_and_continuous_collection_cadence(tmp_path, capsys):
+def test_epoch_schedule_and_exact_per_epoch_collection(tmp_path, capsys):
     trainer = cpu_trainer(tmp_path)
     trainer.run_training()
     assert trainer.completed
@@ -302,16 +302,25 @@ def test_epoch_schedule_and_continuous_collection_cadence(tmp_path, capsys):
     assert all(lr == 1e-5 for epoch, lr in trainer.updates if epoch > 0)
     assert trainer.collection_step == 30
     paths = sorted((tmp_path / "snapshots").glob("step-*"))
-    assert [p.name for p in paths] == [
-        "step-00000010",
-        "step-00000020",
-        "step-00000030",
-    ]
-    assert [json.loads((p / "entry.json").read_text())["epoch"] for p in paths] == [
-        2,
+    assert [int(p.name.removeprefix("step-")) for p in paths] == [
         3,
-        4,
+        5,
+        7,
+        10,
+        13,
+        15,
+        17,
+        19,
+        21,
+        24,
+        27,
+        30,
     ]
+    entries = [json.loads((p / "entry.json").read_text()) for p in paths]
+    assert [entry["epoch"] for entry in entries] == [1] * 3 + [2] * 3 + [3] * 3 + [
+        4
+    ] * 3
+    assert all(entry["loras_per_epoch"] == 3 for entry in entries)
     assert len(list((tmp_path / "recovery").iterdir())) == 2
     logs = capsys.readouterr().err
     assert "Epoch 1/5: warmup, lr=0.001" in logs
@@ -320,8 +329,8 @@ def test_epoch_schedule_and_continuous_collection_cadence(tmp_path, capsys):
     assert "collect: epoch=2/5, step=7/7" in logs
     assert logs.count("evaluating held-out examples: starting") == 5
     assert logs.count("validation metrics:") == 5
-    assert logs.count("LoRA snapshot ready:") == 3
-    assert "Run complete: optimizer updates=33, collected LoRAs=3" in logs
+    assert logs.count("LoRA snapshot ready:") == 12
+    assert "Run complete: optimizer updates=33, collected LoRAs=12" in logs
     resumed = cpu_trainer(tmp_path, resume=True)
     resumed.run_training()
     assert resumed.updates == []
@@ -329,6 +338,23 @@ def test_epoch_schedule_and_continuous_collection_cadence(tmp_path, capsys):
     logs = capsys.readouterr().err
     assert "Resuming: phase=done" in logs
     assert "evaluating held-out examples" not in logs
+
+
+@pytest.mark.parametrize(
+    ("steps", "count", "expected"),
+    [
+        (117, 10, [12, 24, 36, 47, 59, 71, 82, 94, 106, 117]),
+        (4, 4, [1, 2, 3, 4]),
+        (7, 1, [7]),
+    ],
+)
+def test_collection_points_include_final_update(steps, count, expected):
+    assert BankSchedule(loras_per_epoch=count).snapshot_steps(steps) == tuple(expected)
+
+
+def test_collection_count_cannot_exceed_optimizer_updates():
+    with pytest.raises(ValueError, match="lower loras_per_epoch"):
+        BankSchedule(loras_per_epoch=10).snapshot_steps(9)
 
 
 def test_mid_epoch_resume_replays_to_identical_adapter(tmp_path, capsys):
@@ -340,8 +366,8 @@ def test_mid_epoch_resume_replays_to_identical_adapter(tmp_path, capsys):
     resumed = cpu_trainer(tmp_path / "resumed", resume=True)
     resumed.run_training()
     logs = capsys.readouterr().err
-    assert "Resuming: phase=collect, epoch=3/5, restored step=3" in logs
-    assert "Epoch 3: 8 optimizer batches; resumed after 3; remaining=5" in logs
+    assert "Resuming: phase=collect, epoch=3/5, restored step=6" in logs
+    assert "Epoch 3: 8 optimizer batches; resumed after 6; remaining=2" in logs
     assert resumed.collection_step == 30
     for name, value in uninterrupted.model.state_dict().items():
         assert torch.equal(value, resumed.model.state_dict()[name]), name
@@ -367,7 +393,7 @@ def test_resume_repairs_unpublished_snapshot(tmp_path):
     resumed = cpu_trainer(tmp_path, resume=True)
     assert (tmp_path / "snapshots" / "step-00000010" / "entry.json").exists()
     resumed.run_training()
-    assert len(list((tmp_path / "snapshots").glob("step-*"))) == 3
+    assert len(list((tmp_path / "snapshots").glob("step-*"))) == 12
 
 
 def test_prepared_cache_trusts_payloads_and_rejects_missing_files(

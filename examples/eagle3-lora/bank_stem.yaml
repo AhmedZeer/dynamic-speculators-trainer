@@ -54,7 +54,7 @@ training:
   collect_epochs: 4
   warmup_lr: 0.0001
   collect_lr: 1.0e-06
-  save_interval: 10
+  loras_per_epoch: 10
   weight_decay: 0.01
   token_budget: 8192
   noise_std: 0.05

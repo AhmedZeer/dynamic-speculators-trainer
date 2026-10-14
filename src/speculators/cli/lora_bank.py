@@ -21,7 +21,11 @@ ConfigOption = Annotated[Path, typer.Option("--config", exists=True, dir_okay=Fa
 def cloud_config(config, scratch_root):
     cfg = BankConfig.load(config)
     if scratch_root is not None:
-        cfg.output_root = scratch_root / cfg.dataset.category
+        cfg.output_root = (
+            scratch_root / cfg.hub.bank_release / cfg.dataset.category
+            if cfg.hub is not None
+            else scratch_root / cfg.dataset.category
+        )
         if cfg.hub is not None:
             cfg.hub.selection_root = scratch_root / "selection-s0001"
     return cfg

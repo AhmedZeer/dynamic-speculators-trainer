@@ -418,7 +418,7 @@ class BankArgs(_Group):
     bank_warmup_epochs: int = Field(default=1, ge=1)
     bank_collect_epochs: int = Field(default=4, ge=1)
     bank_collect_lr: float = Field(default=1e-6, gt=0)
-    bank_save_interval: int = Field(default=10, ge=1)
+    bank_loras_per_epoch: int = Field(default=10, ge=1)
 
 
 class SchedulerArgs(_Group):
@@ -833,7 +833,7 @@ class TrainConfig(BaseSettings):
             )
         if self.trainer.save_best or self.trainer.checkpoint_freq != 1:
             raise ValueError(
-                "Bank snapshots use bank_save_interval, not best-only saves"
+                "Bank snapshots use bank_loras_per_epoch, not best-only saves"
             )
         if self.trainer.fsdp_shard or self.lora.lora_save_merged:
             raise ValueError("Bank training requires adapter-only saves without FSDP")

@@ -893,7 +893,7 @@ def _run_training(cfg: TrainConfig, startup_ready=None):  # noqa: C901
                     cfg.bank.bank_warmup_epochs,
                     cfg.bank.bank_collect_epochs,
                     cfg.bank.bank_collect_lr,
-                    cfg.bank.bank_save_interval,
+                    cfg.bank.bank_loras_per_epoch,
                 ),
                 context=bank_run_context,
             )

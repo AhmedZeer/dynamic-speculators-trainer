@@ -199,6 +199,12 @@ def test_tile_configs_stay_register_resident():
 
     configs = fused_losses._tile_configs()
     assert configs, "the autotuner needs at least one candidate"
+    # Dynamo traces both kernels inside one autograd.Function. Mutable config
+    # aliases across them cause the backward tracing failure seen in bank training.
+    forward = fused_losses.loss_forward_kernel.configs
+    backward = fused_losses.loss_backward_kernel.configs
+    assert forward is not backward
+    assert not {id(c) for c in forward} & {id(c) for c in backward}
 
     warp_size = 64 if getattr(torch.version, "hip", None) is not None else 32
     for config in configs:

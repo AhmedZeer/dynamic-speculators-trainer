@@ -1,5 +1,5 @@
 # Cloud scratch: train-cloud restores inputs and publishes each completed seed.
-output_root: /tmp/speculators-cloud/code
+output_root: /tmp/speculators-cloud/b0002/code
 models:
   target: Qwen/Qwen3-8B
   target_revision: main
@@ -53,7 +53,7 @@ training:
   collect_epochs: 4
   warmup_lr: 0.0001
   collect_lr: 1.0e-06
-  save_interval: 10
+  loras_per_epoch: 10
   weight_decay: 0.01
   token_budget: 8192
   noise_std: 0.05
@@ -86,7 +86,7 @@ hub:
   activations_repo: azeeer/eagle3-qwen3-8b-activations-v1
   selection: s0001
   release: r0001
-  selection_root: /tmp/speculators-cloud/selection-s0001
+  selection_root: /tmp/speculators-cloud/b0002/selection-s0001
   domains:
   - chat
   - math
@@ -105,4 +105,4 @@ hub:
   cache_reserve_gib: 12
   trajectories_revision: 058f01d1f0585e98327b2c190a65c796da04fdd4
   banks_repo: azeeer/eagle3-qwen3-8b-lora-bank-r32-v1
-  bank_release: b0001
+  bank_release: b0002

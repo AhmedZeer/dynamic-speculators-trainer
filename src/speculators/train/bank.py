@@ -27,11 +27,11 @@ class BankSchedule:
     warmup_epochs: int = 1
     collect_epochs: int = 4
     collect_lr: float = 1e-6
-    save_interval: int = 10
+    loras_per_epoch: int = 10
 
     def __post_init__(self):
-        if min(self.warmup_epochs, self.collect_epochs, self.save_interval) < 1:
-            raise ValueError("Bank epoch counts and save interval must be positive")
+        if min(self.warmup_epochs, self.collect_epochs, self.loras_per_epoch) < 1:
+            raise ValueError("Bank epoch counts and LoRAs per epoch must be positive")
         if self.collect_lr <= 0:
             raise ValueError("Collection LR must be positive")
 
@@ -41,6 +41,18 @@ class BankSchedule:
         if epoch < self.warmup_epochs + self.collect_epochs:
             return "collect"
         return "done"
+
+    def snapshot_steps(self, epoch_steps):
+        """Evenly spaced completed updates, always including the epoch's last."""
+        count = self.loras_per_epoch
+        if epoch_steps < count:
+            raise ValueError(
+                f"Requested {count} LoRAs per epoch, but this collection epoch "
+                f"has only {epoch_steps} optimizer updates; lower loras_per_epoch"
+            )
+        return tuple(
+            (i * epoch_steps + count - 1) // count for i in range(1, count + 1)
+        )
 
 
 def capture_rng() -> dict:
@@ -189,7 +201,8 @@ class BankTrainer(Trainer):
             # Recovery is committed before the snapshot; repair an interrupted publish.
             if (
                 self.collection_step
-                and self.collection_step % schedule.save_interval == 0
+                and schedule.phase(state["epoch"]) == "collect"
+                and state["local_step"] in schedule.snapshot_steps(state["epoch_steps"])
             ):
                 self._publish_snapshot(state["epoch"])
         else:
@@ -214,6 +227,11 @@ class BankTrainer(Trainer):
 
     def on_train_epoch_start(self, epoch, num_steps, skip_steps):
         self._epoch_steps = num_steps
+        self._snapshot_steps = (
+            self.schedule.snapshot_steps(num_steps)
+            if self.schedule.phase(epoch) == "collect"
+            else ()
+        )
         self._epoch_started = time.perf_counter()
         self._epoch_resume_step = skip_steps
         self._report(
@@ -258,6 +276,7 @@ class BankTrainer(Trainer):
             self.best_val_loss = float("inf")
         self._last_epoch = state.get("epoch", 0)
         self._last_local_step = state.get("local_step", 0)
+        self._epoch_steps = state.get("epoch_steps", 0)
 
     def _save_recovery(self, epoch, local_step, *, epoch_complete):
         with self._stage(
@@ -270,6 +289,7 @@ class BankTrainer(Trainer):
                 {
                     "epoch": epoch,
                     "local_step": local_step,
+                    "epoch_steps": getattr(self, "_epoch_steps", 0),
                     "epoch_complete": epoch_complete,
                     "global_step": self.global_step,
                     "collection_step": self.collection_step,
@@ -337,6 +357,8 @@ class BankTrainer(Trainer):
                     "global_step": self.global_step,
                     "collection_step": self.collection_step,
                     "adapter_sha256": expected_hash,
+                    "epoch_steps": self._epoch_steps,
+                    "loras_per_epoch": self.schedule.loras_per_epoch,
                     "adapter_config_sha256": file_digest(
                         pending / "adapter/adapter_config.json"
                     ),
@@ -362,9 +384,13 @@ class BankTrainer(Trainer):
             rate = steps / elapsed if elapsed > 0 else 0
             eta = (self._epoch_steps - local_step) / rate if rate > 0 else 0
             lr = self.optimizers[0].param_groups[0]["lr"]
-            next_save = (
-                self.schedule.save_interval
-                - self.collection_step % self.schedule.save_interval
+            next_save = next(
+                (
+                    step - local_step
+                    for step in self._snapshot_steps
+                    if step > local_step
+                ),
+                None,
             )
             self._report(
                 f"{phase}: epoch={epoch + 1}/{self.config.num_epochs}, "
@@ -374,14 +400,11 @@ class BankTrainer(Trainer):
                 f"{rate:.2f} steps/s, epoch ETA={eta:.0f}s"
                 + (
                     f", next snapshot in {next_save} collection steps"
-                    if phase == "collect"
+                    if phase == "collect" and next_save is not None
                     else ""
                 )
             )
-        if (
-            phase == "collect"
-            and self.collection_step % self.schedule.save_interval == 0
-        ):
+        if phase == "collect" and local_step in self._snapshot_steps:
             self._save_recovery(epoch, local_step, epoch_complete=False)
             self._publish_snapshot(epoch)
 
@@ -431,8 +454,11 @@ class BankTrainer(Trainer):
             self._save_recovery(epoch, self._last_local_step, epoch_complete=True)
             self._last_local_step = 0
         self.completed = True
+        snapshot_count = len(
+            list((Path(self.config.save_path) / "snapshots").glob("step-*"))
+        )
         self._report(
             f"Run complete: optimizer updates={self.global_step}, "
-            f"collected LoRAs={self.collection_step // self.schedule.save_interval}, "
+            f"collected LoRAs={snapshot_count}, "
             f"output={self.config.save_path}"
         )

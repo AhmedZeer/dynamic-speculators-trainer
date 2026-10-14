@@ -142,7 +142,7 @@ class BankPublisher(Publisher):
             "bank_warmup_epochs": self.cfg.training.warmup_epochs,
             "bank_collect_epochs": self.cfg.training.collect_epochs,
             "bank_collect_lr": self.cfg.training.collect_lr,
-            "bank_save_interval": self.cfg.training.save_interval,
+            "bank_loras_per_epoch": self.cfg.training.loras_per_epoch,
         }
         if any(actual.get(key) != value for key, value in expected.items()):
             raise ValueError(f"Publication config differs from trained settings: {run}")
