@@ -218,6 +218,34 @@ Raw indexes compute last-token summaries on demand; the compacted release
 provides separate summary files for fast generator preprocessing. Setting
 `hub.activation_format: sharded` retains the old preparation behavior explicitly.
 
+### Local compaction on the extra SSD
+
+The four `bank_<domain>_local.yaml` configs pin the complete source release at
+`058f01d1f0585e98327b2c190a65c796da04fdd4`. They use a shared 20 GiB activation
+cache at `/media/azeer/extra-segment/eagle3/activation-cache`, an 8 GiB disk
+reserve, and 2 GiB upload groups. Compaction applies these local cache settings
+instead of the cache budget embedded in the source index. Run domains serially.
+
+```bash
+mkdir -p /media/azeer/extra-segment/eagle3/{hf-cache,tmp}
+export HF_HOME=/media/azeer/extra-segment/eagle3/hf-cache
+export TMPDIR=/media/azeer/extra-segment/eagle3/tmp
+hf auth login
+
+for domain in stem chat code; do
+  speculators lora-bank compact-hidden \
+    --config "examples/eagle3-lora/bank_${domain}_local.yaml" \
+    --release r0001-training \
+    --output-root "/media/azeer/extra-segment/eagle3/${domain}-training" || break
+done
+```
+
+All target categories share the same training release ID but have separate Hub
+paths and output directories. Math is already entirely sharded, so it does not
+require compaction. Its local config is provided if a uniform training release
+is desired; add `math` to the loop only for that purpose. Existing responses and
+activations are reused; no server, extraction run, or GPU is needed.
+
 To resume code on a new machine, with its saved trajectories already on Hub,
 start the extraction server in terminal A:
 

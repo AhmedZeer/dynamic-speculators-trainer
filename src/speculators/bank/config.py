@@ -137,6 +137,7 @@ class HubArtifacts(Settings):
     shard_bytes: int = Field(default=2**30, ge=1024)
     cache_gib: float = Field(default=40, gt=0)
     cache_reserve_gib: float = Field(default=8, ge=0)
+    compaction_cache_dir: Path | None = None
     progress_bars: bool = False
     upload_log_interval: float = Field(default=30, ge=1)
 

@@ -33,6 +33,13 @@ def compact(cfg, release, output_root):  # noqa: C901 -- ordered source restore 
             )
         manifest = prepare(source, "hidden")
         store = HubActivationStore(Path(manifest["hidden_states_path"]))
+        # Source indexes contain the producer's cache settings. Local compaction
+        # must honor this machine's budget instead of those historical defaults.
+        store.capacity = int(cfg.hub.cache_gib * 2**30)
+        store.reserve = int(cfg.hub.cache_reserve_gib * 2**30)
+        if cfg.hub.compaction_cache_dir is not None:
+            store.cache = cfg.hub.compaction_cache_dir.resolve()
+            store.cache.mkdir(parents=True, exist_ok=True)
         target = cfg.model_copy(deep=True)
         target.output_root = output_root
         target.hub.release = release
