@@ -149,6 +149,7 @@ def test_complete_bank_is_one_commit_and_pinned_restore(bank_setup):
 
 def test_cloud_stages_one_subset_and_publishes_each_seed(bank_setup, monkeypatch):
     cfg, manifest, remote = bank_setup
+    cfg.execution.prefetch_next_subset = False
     monkeypatch.setattr(cloud, "prepare", lambda config, stage: manifest)
     staged, trained = [], []
 

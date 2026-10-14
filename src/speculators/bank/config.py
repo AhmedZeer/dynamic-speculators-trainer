@@ -87,6 +87,10 @@ class Training(Settings):
 
 class Execution(Settings):
     activation_local_dir: Path | None = None
+    dataloader_workers: int = Field(default=4, ge=0)
+    dataloader_prefetch_factor: int = Field(default=2, ge=1)
+    activation_memory_cache_gib: float = Field(default=1, ge=0)
+    prefetch_next_subset: bool = True
     training_subsets: list[str] | None = None
     generation_endpoint: str = "http://localhost:8000/v1/chat/completions"
     extraction_endpoint: str = "http://localhost:8000/v1"

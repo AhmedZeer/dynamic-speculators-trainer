@@ -21,7 +21,7 @@ from speculators.train.distributed import get_dp_rank, get_dp_size
 from speculators.train.distributed_batch_sampler import (
     MultipackDistributedBatchSamplerV2,
 )
-from speculators.train.noise_transforms import AddUniformNoise
+from speculators.train.noise_transforms import AddUniformNoise, IndexedUniformNoise
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,11 @@ def _worker_init_fn(worker_id: int) -> None:  # noqa: ARG001
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     if torch.accelerator.is_available():
         torch.accelerator.set_device_index(local_rank)
+
+
+def _bank_worker_init_fn(worker_id: int) -> None:  # noqa: ARG001
+    # Loader workers prepare CPU tensors only; do not initialize CUDA contexts.
+    torch.set_num_threads(1)
 
 
 def _setup_dataloader(
@@ -88,7 +93,11 @@ def _setup_dataloader(
         ),
         persistent_workers=use_workers,
         multiprocessing_context="spawn" if use_workers else None,
-        worker_init_fn=_worker_init_fn if use_workers else None,
+        worker_init_fn=(
+            (_bank_worker_init_fn if sampler_seed is not None else _worker_init_fn)
+            if use_workers
+            else None
+        ),
         # Iterator creation draws a worker seed even with zero workers. Keep that
         # draw out of training's global RNG so mid-epoch resume preserves dropout.
         generator=(
@@ -133,7 +142,11 @@ def create_train_val_loaders(
     :mod:`speculators.train.distributed`.
     """
     _limit_worker_threads()
-    noise_transform = AddUniformNoise(std=noise_std)
+    noise_transform = (
+        IndexedUniformNoise(noise_std, sampler_seed)
+        if sampler_seed is not None and num_workers > 0
+        else AddUniformNoise(std=noise_std)
+    )
 
     if (train_indices is None) != (val_indices is None):
         raise ValueError("Explicit training and validation selections must be paired")

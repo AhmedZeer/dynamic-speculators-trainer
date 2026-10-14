@@ -2,6 +2,7 @@
 
 import json
 import shutil
+from collections import OrderedDict
 from pathlib import Path
 
 from filelock import FileLock
@@ -12,7 +13,7 @@ from speculators.bank.progress import report
 
 
 class HubActivationStore:
-    def __init__(self, directory, local_dir=None):
+    def __init__(self, directory, local_dir=None, memory_cache_gib=0):
         self.directory = Path(directory)
         self.index = json.loads((self.directory / "index.json").read_text())
         self.cache = self.directory / ".shards"
@@ -20,6 +21,32 @@ class HubActivationStore:
         self.capacity = int(self.index["cache_gib"] * 2**30)
         self.reserve = int(self.index["reserve_gib"] * 2**30)
         self.local_dir = Path(local_dir).resolve() if local_dir else None
+        self.memory_capacity = int(memory_cache_gib * 2**30)
+        self.memory = OrderedDict()
+        self.memory_bytes = 0
+
+    def __getstate__(self):
+        # Spawned workers own separate bounded caches, never serialized payloads.
+        return {**self.__dict__, "memory": OrderedDict(), "memory_bytes": 0}
+
+    def read_local(self, target, row, prompt_length, summary):
+        """Cached tensors are read-only; return a fresh mapping for transforms."""
+        if not self.memory_capacity or prompt_length is not None or summary:
+            return self.read_tensors(target, row, prompt_length, summary)
+        key = (row["shard"]["sha256"], row["primary_id"])
+        if key in self.memory:
+            value, size = self.memory.pop(key)
+            self.memory[key] = (value, size)
+            return dict(value)
+        value = self.read_tensors(target, row, prompt_length, summary)
+        size = sum(t.numel() * t.element_size() for t in value.values())
+        if size <= self.memory_capacity:
+            while self.memory_bytes + size > self.memory_capacity:
+                _, (_, removed) = self.memory.popitem(last=False)
+                self.memory_bytes -= removed
+            self.memory[key] = (value, size)
+            self.memory_bytes += size
+        return dict(value)
 
     def read(self, index, prompt_length=None, summary=False):
         row = self.index["rows"].get(str(index))
@@ -41,7 +68,7 @@ class HubActivationStore:
                 raise ValueError(f"Incomplete local activation file: {target}")
             # An explicitly staged snapshot is immutable and user-owned. It
             # needs neither eviction nor the private cache's global read lock.
-            return self.read_tensors(target, row, prompt_length, summary)
+            return self.read_local(target, row, prompt_length, summary)
         target = self.cache / (reference["sha256"] + ".safetensors")
         # Reads and eviction share a lock so no mmap references outlive eviction.
         with FileLock(str(self.cache / ".lock")):

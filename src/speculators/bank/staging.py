@@ -2,19 +2,21 @@
 
 import json
 import shutil
-from concurrent.futures import ThreadPoolExecutor
+import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextlib import nullcontext
 from pathlib import Path
 
 import yaml
 from huggingface_hub import hf_hub_download
 
-from speculators.bank.artifacts import file_digest
+from speculators.bank.artifacts import digest, file_digest, write_json
 from speculators.bank.hub import hub_progress
 from speculators.bank.progress import report, stage_progress
 
 
-def stage_hidden(cfg, local_dir, subsets, workers=8):  # noqa: C901 -- select, budget and verify immutable inputs
+def staging_plan(cfg, local_dir, subsets):
+    """Resolve immutable inputs and remaining bytes without downloading."""
     manifest = json.loads((cfg.output_root / "manifest.json").read_text())
     index = json.loads(
         (Path(manifest["hidden_states_path"]) / "index.json").read_text()
@@ -44,6 +46,20 @@ def stage_hidden(cfg, local_dir, subsets, workers=8):  # noqa: C901 -- select, b
             raise ValueError("Activation path escapes download folder")
         if not path.is_file() or path.stat().st_size != ref["bytes"]:
             missing_bytes += ref["bytes"]
+    return selected, references, missing_bytes
+
+
+def can_stage(cfg, local_dir, subsets):
+    _, _, missing = staging_plan(cfg, local_dir, subsets)
+    reserve = int(cfg.hub.cache_reserve_gib * 2**30) if cfg.hub else 0
+    return shutil.disk_usage(local_dir).free >= missing + reserve
+
+
+def stage_hidden(cfg, local_dir, subsets, workers=8):  # noqa: C901 -- download/verify pipeline
+    local_dir = local_dir.resolve()
+    selected, references, missing_bytes = staging_plan(cfg, local_dir, subsets)
+    manifest = json.loads((cfg.output_root / "manifest.json").read_text())
+    available = {s["id"]: s for s in manifest["subsets"]}
     reserve = int(cfg.hub.cache_reserve_gib * 2**30) if cfg.hub else 0
     if shutil.disk_usage(local_dir).free < missing_bytes + reserve:
         raise OSError(
@@ -56,6 +72,7 @@ def stage_hidden(cfg, local_dir, subsets, workers=8):  # noqa: C901 -- select, b
     )
 
     def download(ref):
+        start = time.perf_counter()
         path = local_dir / ref["path"]
         if not path.is_file() or path.stat().st_size != ref["bytes"]:
             path = Path(
@@ -67,17 +84,72 @@ def stage_hidden(cfg, local_dir, subsets, workers=8):  # noqa: C901 -- select, b
                     local_dir=local_dir,
                 )
             )
-        if path.stat().st_size != ref["bytes"] or file_digest(path) != ref["sha256"]:
-            raise ValueError(f"Activation checksum mismatch: {path}")
+        return ref, path, time.perf_counter() - start
 
+    def verify(result):
+        ref, path, download_seconds = result
+        start = time.perf_counter()
+        stat = path.stat()
+        identity = {
+            "reference": ref,
+            "size": stat.st_size,
+            "mtime_ns": stat.st_mtime_ns,
+            "ctime_ns": stat.st_ctime_ns,
+            "inode": stat.st_ino,
+        }
+        receipt = local_dir / ".verified" / (digest(ref["path"]) + ".json")
+        try:
+            reused = json.loads(receipt.read_text()) == identity
+        except (OSError, ValueError):
+            reused = False
+        if not reused and (
+            stat.st_size != ref["bytes"] or file_digest(path) != ref["sha256"]
+        ):
+            raise ValueError(f"Activation checksum mismatch: {path}")
+        if not reused:
+            after = path.stat()
+            if (after.st_mtime_ns, after.st_ctime_ns, after.st_size) != (
+                stat.st_mtime_ns,
+                stat.st_ctime_ns,
+                stat.st_size,
+            ):
+                raise ValueError(f"Activation changed during verification: {path}")
+            write_json(receipt, identity)
+        return download_seconds, time.perf_counter() - start, reused
+
+    start = time.perf_counter()
+    download_seconds = verification_seconds = reused = 0
     with (
         hub_progress(cfg) if cfg.hub else nullcontext(),
         stage_progress("Parallel activation staging"),
         ThreadPoolExecutor(max_workers=workers) as pool,
+        ThreadPoolExecutor(max_workers=min(workers, 2)) as verification_pool,
     ):
-        for number, _ in enumerate(pool.map(download, references.values()), 1):
-            if number % 100 == 0 or number == len(references):
-                report(f"Staged and verified {number}/{len(references)} files")
+        downloads = {pool.submit(download, ref) for ref in references.values()}
+        pending = set(downloads)
+        number = 0
+        while pending:
+            completed, pending = wait(pending, return_when=FIRST_COMPLETED)
+            for future in completed:
+                if future in downloads:
+                    downloads.remove(future)
+                    pending.add(verification_pool.submit(verify, future.result()))
+                    continue
+                download_time, verify_time, cached = future.result()
+                download_seconds += download_time
+                verification_seconds += verify_time
+                reused += cached
+                number += 1
+                if number % 100 == 0 or number == len(references):
+                    report(f"Staged and verified {number}/{len(references)} files")
+    elapsed = time.perf_counter() - start
+    report(
+        f"Staging timing: wall={elapsed:.1f}s; download worker-seconds="
+        f"{download_seconds:.1f}; "
+        f"verification worker-seconds={verification_seconds:.1f}; "
+        f"reused checksums={reused}/{len(references)}; "
+        f"effective throughput={missing_bytes / 2**20 / max(elapsed, 0.001):.1f} MiB/s"
+    )
     training = cfg.model_copy(deep=True)
     training.execution.activation_local_dir = local_dir
     training.execution.training_subsets = [

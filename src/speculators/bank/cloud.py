@@ -3,6 +3,7 @@
 import json
 import re
 import shutil
+from concurrent.futures import ThreadPoolExecutor
 
 from filelock import FileLock
 
@@ -10,7 +11,7 @@ from speculators.bank import workflow
 from speculators.bank.hub import prepare
 from speculators.bank.progress import report
 from speculators.bank.publication import BankPublisher
-from speculators.bank.staging import stage_hidden
+from speculators.bank.staging import can_stage, stage_hidden
 
 
 def selected_subsets(manifest, requested=None):
@@ -30,7 +31,7 @@ def seeds_for(cfg, subset):
     )
 
 
-def train_cloud(cfg, subsets=None, workers=8, keep_activations=False):
+def train_cloud(cfg, subsets=None, workers=8, keep_activations=False):  # noqa: C901 -- bounded two-subset pipeline
     if cfg.hub is None or cfg.hub.trajectories_revision == "main":
         raise ValueError(
             "Cloud training requires pinned Hub inputs; use bank_*_cloud.yaml"
@@ -44,6 +45,7 @@ def train_cloud(cfg, subsets=None, workers=8, keep_activations=False):
         manifest = prepare(consumer, "hidden")
         publisher = BankPublisher(consumer)
         selected = selected_subsets(manifest, subsets or cfg.execution.training_subsets)
+        pending_runs = []
         for subset in selected:
             seeds = seeds_for(consumer, subset)
             pending = [
@@ -56,32 +58,61 @@ def train_cloud(cfg, subsets=None, workers=8, keep_activations=False):
                     f"Skipping published subset {subset['id']}; no activation download"
                 )
                 continue
-            # This dedicated folder contains downloaded inputs only. Keep it on
-            # failures, and reuse its stable path when resuming on the same machine.
-            activation_dir = (
-                consumer.output_root.resolve() / ".cloud-activations" / subset["id"]
-            )
-            scratch_root = consumer.output_root.resolve() / ".cloud-activations"
-            if (
-                "/" in subset["id"]
-                or subset["id"] in (".", "..")
-                or not activation_dir.resolve().is_relative_to(scratch_root)
-            ):
-                raise ValueError("Invalid subset scratch path")
-            stage_hidden(consumer, activation_dir, [subset["id"]], workers)
-            for seed in pending:
-                training = consumer.model_copy(deep=True)
-                training.execution.activation_local_dir = activation_dir
-                training.execution.training_subsets = [subset["id"]]
-                training.training.seeds = [seed]
-                workflow.train(training)
-                publisher.publish_run(manifest, subset, seed)
-            if not keep_activations:
-                # All selected seeds are durable before releasing this subset's
-                # owned inputs. Collected LoRAs and recovery states remain local.
-                shutil.rmtree(activation_dir)
-                report(f"Freed staged activations for {subset['id']}")
+            pending_runs.append((subset, pending))
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            prefetched = None
+            for position, (subset, pending) in enumerate(pending_runs):
+                activation_dir = _activation_dir(consumer, subset)
+                if prefetched is not None:
+                    prefetched.result()
+                    prefetched = None
+                else:
+                    stage_hidden(consumer, activation_dir, [subset["id"]], workers)
+                if consumer.execution.prefetch_next_subset and position + 1 < len(
+                    pending_runs
+                ):
+                    next_subset = pending_runs[position + 1][0]
+                    next_dir = _activation_dir(consumer, next_subset)
+                    if can_stage(consumer, next_dir, [next_subset["id"]]):
+                        report(
+                            f"Prefetching next subset {next_subset['id']} "
+                            "during training"
+                        )
+                        prefetched = pool.submit(
+                            stage_hidden,
+                            consumer,
+                            next_dir,
+                            [next_subset["id"]],
+                            workers,
+                        )
+                    else:
+                        report(
+                            "Next-subset prefetch deferred: insufficient scratch space"
+                        )
+                for seed in pending:
+                    training = consumer.model_copy(deep=True)
+                    training.execution.activation_local_dir = activation_dir
+                    training.execution.training_subsets = [subset["id"]]
+                    training.training.seeds = [seed]
+                    workflow.train(training)
+                    publisher.publish_run(manifest, subset, seed)
+                if not keep_activations:
+                    shutil.rmtree(activation_dir)
+                    report(f"Freed staged activations for {subset['id']}")
         return {"repo": consumer.hub.banks_repo, "release": consumer.hub.bank_release}
+
+
+def _activation_dir(consumer, subset):
+    # Dedicated input folders survive failures and same-machine restarts.
+    scratch_root = consumer.output_root.resolve() / ".cloud-activations"
+    activation_dir = scratch_root / subset["id"]
+    if (
+        "/" in subset["id"]
+        or subset["id"] in (".", "..")
+        or not activation_dir.resolve().is_relative_to(scratch_root)
+    ):
+        raise ValueError("Invalid subset scratch path")
+    return activation_dir
 
 
 def publish_banks(cfg, subsets=None):

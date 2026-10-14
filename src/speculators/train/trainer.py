@@ -482,6 +482,11 @@ class Trainer:
 
     def train_epoch(self, epoch: int):
         self.model.train()
+        transform = getattr(
+            getattr(self.train_loader, "dataset", None), "transform", None
+        )
+        if hasattr(transform, "set_epoch"):
+            transform.set_epoch(epoch)
         if hasattr(self.train_loader.batch_sampler, "set_epoch"):
             self.train_loader.batch_sampler.set_epoch(epoch)  # type: ignore[union-attr]
 

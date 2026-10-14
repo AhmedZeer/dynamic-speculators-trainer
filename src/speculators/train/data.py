@@ -153,7 +153,10 @@ class BaseDataset(Dataset):
 
         # Apply transform
         if self.transform:
-            data = self.transform(data)
+            if hasattr(self.transform, "apply_indexed"):
+                data = self.transform.apply_indexed(data, index)
+            else:
+                data = self.transform(data)
 
         return data
 

@@ -157,7 +157,8 @@ def test_generated_train_configuration_roundtrips(tmp_path):
     resolved = TrainConfig.resolve(["--config", str(path)])
     assert resolved.bank.bank_loras_per_epoch == 10
     assert resolved.trainer.epochs == 5
-    assert resolved.data.num_workers == 0
+    assert resolved.data.num_workers == 4
+    assert resolved.data.prefetch_factor == 2
     assert resolved.lora.lora_target_modules == ["o_proj", "v_proj"]
     with pytest.raises(SystemExit):
         TrainConfig.resolve(["--config", str(path), "--max-steps", "10"])

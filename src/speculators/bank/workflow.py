@@ -425,7 +425,12 @@ def train_config(
                 "total_seq_len": cfg.training.token_budget,
                 "hidden_states_dtype": cfg.hidden_states.dtype,
                 "noise_std": cfg.training.noise_std,
-                "num_workers": 0,
+                "num_workers": cfg.execution.dataloader_workers,
+                **(
+                    {"prefetch_factor": cfg.execution.dataloader_prefetch_factor}
+                    if cfg.execution.dataloader_workers
+                    else {}
+                ),
             },
             "generation": {"on_missing": "raise"},
             "backend": {"hidden_states_path": manifest["hidden_states_path"]},
@@ -443,6 +448,15 @@ def train_config(
                 "lora_save_merged": False,
             },
             "bank": {
+                **(
+                    {
+                        "bank_activation_memory_cache_gib": (
+                            cfg.execution.activation_memory_cache_gib
+                        )
+                    }
+                    if cfg.execution.activation_memory_cache_gib
+                    else {}
+                ),
                 **(
                     {
                         "bank_activation_local_dir": str(
@@ -581,6 +595,7 @@ def bank_context(train_cfg):
     # Operational resume switches do not change the experiment identity.
     values.pop("no_resume_from_checkpoint", None)
     values.pop("bank_activation_local_dir", None)
+    values.pop("bank_activation_memory_cache_gib", None)
     context = {
         "cache_fingerprint": manifest["cache_fingerprint"],
         "prepared_fingerprint": manifest["prepared_fingerprint"],

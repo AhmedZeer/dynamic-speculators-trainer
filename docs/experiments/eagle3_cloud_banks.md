@@ -11,7 +11,7 @@ Run one domain:
 ```bash
 speculators lora-bank train-cloud \
   --config examples/eagle3-lora/bank_stem_cloud.yaml \
-  --download-workers 8
+  --download-workers 16
 ```
 
 Or collect all four domains sequentially:
@@ -20,7 +20,7 @@ Or collect all four domains sequentially:
 for domain in math code stem chat; do
   speculators lora-bank train-cloud \
     --config "examples/eagle3-lora/bank_${domain}_cloud.yaml" \
-    --download-workers 8 || break
+    --download-workers 16 || break
 done
 ```
 
@@ -77,8 +77,10 @@ fi
 ```
 
 Only downloaded inputs move; previous run checkpoints remain in their original
-profile. Staging still verifies local file hashes, even when it reports zero
-bytes to download.
+profile. Staging verifies each file once and atomically records its pinned
+reference, size, modification/change timestamps and inode. Unchanged verified
+files reuse that receipt; changed files are rehashed. Downloads and verification
+use separate pools, and logs report wall time and summed worker time separately.
 
 ## What the command does
 
@@ -99,8 +101,8 @@ bytes to download.
    activation folder before staging the next subset. LoRA outputs stay locally
    until scratch is discarded. Add `--keep-activations` to retain downloaded inputs.
 
-The command currently uses one training worker and one subset at a time to keep
-scratch usage bounded. It checks space before staging; the subset's full inputs,
+The command uses one training run at a time, and may stage one future subset in
+the background. It checks space before staging; the active inputs, future inputs,
 models and training output must fit. Uploads happen after each completed seed,
 not after every checkpoint or at the end of the whole category.
 
@@ -164,3 +166,49 @@ speculators lora-bank restore-bank \
 file checksums. It restores the usual `runs/<subset>/seed-*/snapshots/...` layout,
 which the generator already consumes. It downloads only runs completed at the
 pinned bank revision; incomplete or absent runs are not fabricated.
+
+## Training throughput controls
+
+All bank configs now expose:
+
+```yaml
+execution:
+  dataloader_workers: 4
+  dataloader_prefetch_factor: 2
+  activation_memory_cache_gib: 1
+  prefetch_next_subset: true
+```
+
+Loader workers read and assemble CPU batches while the training process runs GPU
+updates. Each worker can prepare two batches ahead; pinned memory and persistent
+workers are already enabled. Workers do not initialize CUDA contexts. These
+settings differ from `n_workers` (independent training runs), `processes` (ranks
+per run), and `--download-workers` (Hub download threads).
+
+The RAM cache holds decoded, owned activation tensors from staged files. It is
+bounded **per worker**, with separate training and validation worker pools: four
+workers and a 1 GiB limit can retain up to 8 GiB across both loaders, plus batches
+and runtime memory. Cache hits avoid reopening and cloning files; augmentation
+creates new tensors so cached payloads stay clean. Set the cache limit to zero
+to disable it. This cache does not preload the whole subset, and its benefit
+depends on reuse; worker prefetching is the primary training optimization.
+
+Positive bank loader worker counts use noise seeded by run seed, epoch and sample
+index, making augmentation independent of worker scheduling and reproducible
+when resuming. This changes the random noise sequence from the legacy serial
+loader, while retaining the same distribution and strength. Already published
+runs are still skipped. An unfinished serial run must keep
+`dataloader_workers: 0` and `activation_memory_cache_gib: 0` to use its saved
+configuration; start a new output root to enable the new loader for that run.
+
+Cloud training downloads at most one future unpublished subset during the
+current subset's training. It checks the additional missing bytes against free
+scratch space plus `hub.cache_reserve_gib`, and falls back to sequential staging
+when they do not fit. Disable `prefetch_next_subset` if concurrent downloads
+compete with training disk I/O. Each subset's files are freed only after all its
+pending seeds have been published.
+
+For the logged STEM subset sizes, two subsets use about 61 GiB, before model
+caches, run output and the configured 12 GiB reserve. The default command uses
+16 download threads; compare against 8 on your runtime rather than assuming
+more threads always improve throughput.

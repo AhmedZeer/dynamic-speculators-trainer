@@ -107,3 +107,14 @@ def test_parallel_staging_writes_consumable_subset_config(tmp_path, monkeypatch)
     resolved = TrainConfig.model_validate(values["train"])
     assert resolved.bank.bank_activation_local_dir == str(local.resolve())
     assert json.loads((root / "manifest.json").read_text()) == manifest
+
+    def unexpected_hash(path):
+        pytest.fail("Verified unchanged files should not be rehashed")
+
+    monkeypatch.setattr("speculators.bank.staging.file_digest", unexpected_hash)
+    stage_hidden(bank, local, ["stem-00000"], workers=2)
+    monkeypatch.setattr("speculators.bank.staging.file_digest", file_digest)
+    path = local / next(iter(references))
+    path.write_bytes(b"x" * path.stat().st_size)
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        stage_hidden(bank, local, ["stem-00000"], workers=2)

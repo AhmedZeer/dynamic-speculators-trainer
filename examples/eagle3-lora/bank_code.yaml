@@ -64,6 +64,10 @@ training:
   log_freq: 10
   gradient_checkpointing: false
 execution:
+  dataloader_workers: 4
+  dataloader_prefetch_factor: 2
+  activation_memory_cache_gib: 1
+  prefetch_next_subset: true
   generation_endpoint: http://localhost:8000/v1/chat/completions
   extraction_endpoint: http://localhost:8000/v1
   concurrency: 64

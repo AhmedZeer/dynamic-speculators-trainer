@@ -411,6 +411,7 @@ class LoraArgs(_Group):
 
 class BankArgs(_Group):
     bank_activation_local_dir: str | None = None
+    bank_activation_memory_cache_gib: float = Field(default=0, ge=0)
     bank_manifest: str | None = Field(
         default=None, description="Prepared LoRA bank manifest; enables bank training."
     )
@@ -839,10 +840,6 @@ class TrainConfig(BaseSettings):
             raise ValueError("Bank training requires adapter-only saves without FSDP")
         if self.data.max_train_samples is not None:
             raise ValueError("Bank membership cannot use max_train_samples")
-        if self.data.num_workers != 0:
-            raise ValueError(
-                "Bank v1 uses num_workers=0 to resume augmentation RNG exactly"
-            )
         if self.generation.on_missing != "raise":
             raise ValueError("Bank training requires on_missing=raise")
         if self.bank.bank_collect_lr >= self.optimizer.lr:

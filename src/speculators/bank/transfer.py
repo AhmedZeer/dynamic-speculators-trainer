@@ -12,13 +12,15 @@ from speculators.bank.progress import stage_progress
 
 
 class BankFileTransfer(FileTransfer):
-    def __init__(self, hidden_states_path, local_dir=None):
+    def __init__(self, hidden_states_path, local_dir=None, memory_cache_gib=0):
         super().__init__(Path(hidden_states_path))
         self.hub_store = None
         if (self.hidden_states_path / "index.json").exists():
             from speculators.bank.hub_cache import HubActivationStore  # noqa: PLC0415
 
-            self.hub_store = HubActivationStore(self.hidden_states_path, local_dir)
+            self.hub_store = HubActivationStore(
+                self.hidden_states_path, local_dir, memory_cache_gib
+            )
 
     def get_prompt_states(self, file_idx, prompt_length):
         """Buffered prefix read: avoid response tensors and Drive-backed mmap."""
