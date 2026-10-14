@@ -126,6 +126,13 @@ speculators lora-bank prepare \
 ```
 
 The server extracts auxiliary layers `[2,18,33]` plus final layer `36` on the
+saved trajectories. Extraction requests one output token, so the hidden-state
+server reserves one extra position: 8,193 for saved inputs up to 8,192 tokens.
+Keep `responses.context_length` and `hidden_states.sequence_length` at 8,192;
+changing those fields changes the prepared-data contract. Response serving
+continues to use the configured generation context limit.
+
+The bank extracts states on the
 saved token trajectories. The bank calls the original extractor once per
 subset. Each subset uses a persistent queue, with concurrency
 controlled by `execution.hidden_state_concurrency`. The production config has

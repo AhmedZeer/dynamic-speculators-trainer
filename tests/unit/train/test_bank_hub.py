@@ -83,7 +83,7 @@ def test_serve_uses_frozen_target_and_server_provenance(
     assert command[2] == "train"
     assert "--provenance-dir" in command
     assert command[command.index("--served-model-name") + 1] == cfg.models.target
-    assert command[command.index("--max-model-len") + 1] == "8192"
+    assert command[command.index("--max-model-len") + 1] == "8193"
     assert command[
         command.index("--target-layer-ids") + 1 : command.index("--include-last-layer")
     ] == ["2", "18", "33"]

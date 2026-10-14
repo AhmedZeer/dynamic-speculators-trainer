@@ -148,7 +148,11 @@ def serve(
         "--port",
         str(port),
         "--max-model-len",
-        str(cfg.responses.context_length),
+        str(
+            max(cfg.responses.context_length, cfg.hidden_states.sequence_length + 1)
+            if mode == "hidden"
+            else cfg.responses.context_length
+        ),
     ]
     if mode == "hidden":
         command.extend(
