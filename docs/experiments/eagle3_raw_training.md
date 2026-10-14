@@ -1,5 +1,9 @@
 # Train directly from published activations
 
+For automatic scratch-only collection and publication of LoRA banks, use the
+[cloud bank command](eagle3_cloud_banks.md). The manual staging commands below
+remain useful when preparing selected inputs for generator training.
+
 Compaction is optional. LoRA-bank training and generator training accept both
 per-example raw safetensors and previously packaged shards. Downloaded files retain
 their Hub repository paths; the trainer reads them directly without another

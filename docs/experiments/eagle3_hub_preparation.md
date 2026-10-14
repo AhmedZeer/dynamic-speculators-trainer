@@ -371,6 +371,9 @@ they continue to address the original experiment.
 
 ## Storage and validation
 
+For scratch-only cloud training and per-run LoRA-bank publication, use the
+[cloud bank commands](eagle3_cloud_banks.md) and `bank_*_cloud.yaml` configs.
+
 Public Hub storage remains subject to account capacity. The one-subset pilot
 measures actual bytes and upload behavior before committing to the larger
 activation corpus. Keep an independent durable copy if account storage cannot

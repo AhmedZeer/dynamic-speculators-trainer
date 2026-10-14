@@ -18,6 +18,15 @@ app = typer.Typer(
 ConfigOption = Annotated[Path, typer.Option("--config", exists=True, dir_okay=False)]
 
 
+def cloud_config(config, scratch_root):
+    cfg = BankConfig.load(config)
+    if scratch_root is not None:
+        cfg.output_root = scratch_root / cfg.dataset.category
+        if cfg.hub is not None:
+            cfg.hub.selection_root = scratch_root / "selection-s0001"
+    return cfg
+
+
 @app.command()
 def prepare(
     config: ConfigOption,
@@ -86,18 +95,61 @@ def train(config: ConfigOption):
 
 
 @app.command()
+def train_cloud(
+    config: ConfigOption,
+    scratch_root: Annotated[Path | None, typer.Option("--scratch-root")] = None,
+    subset: Annotated[list[str] | None, typer.Option("--subset")] = None,
+    download_workers: Annotated[int, typer.Option("--download-workers", min=1)] = 8,
+    keep_activations: Annotated[bool, typer.Option("--keep-activations")] = False,
+):
+    """Restore inputs, train on scratch, publish each run, and skip published runs."""
+    from speculators.bank.cloud import train_cloud as run_cloud  # noqa: PLC0415
+
+    cfg = cloud_config(config, scratch_root)
+    result = run_cloud(cfg, subset, download_workers, keep_activations)
+    typer.echo(f"Published bank: {result['repo']}/releases/{result['release']}")
+
+
+@app.command()
+def publish_bank(
+    config: ConfigOption,
+    scratch_root: Annotated[Path | None, typer.Option("--scratch-root")] = None,
+    subset: Annotated[list[str] | None, typer.Option("--subset")] = None,
+):
+    """Publish completed local LoRA runs, including snapshots and provenance."""
+    from speculators.bank.cloud import publish_banks  # noqa: PLC0415
+
+    publish_banks(cloud_config(config, scratch_root), subset)
+
+
+@app.command()
+def restore_bank(
+    config: ConfigOption,
+    revision: Annotated[str, typer.Option("--revision")],
+    scratch_root: Annotated[Path | None, typer.Option("--scratch-root")] = None,
+    subset: Annotated[list[str] | None, typer.Option("--subset")] = None,
+):
+    """Restore completed bank runs from a pinned bank-repository commit."""
+    from speculators.bank.cloud import restore_banks  # noqa: PLC0415
+
+    count = restore_banks(cloud_config(config, scratch_root), revision, subset)
+    typer.echo(f"Restored {count} completed LoRA runs")
+
+
+@app.command()
 def restore(
     config: ConfigOption,
     revision: Annotated[
         str, typer.Option("--revision", help="Pinned trajectories commit SHA")
     ],
     stage: Literal["select", "responses", "data", "hidden"] = "hidden",
+    scratch_root: Annotated[Path | None, typer.Option("--scratch-root")] = None,
 ):
     """Restore published artifacts; activation tensors download on demand."""
     from speculators.bank.config import HubArtifacts  # noqa: PLC0415
     from speculators.bank.hub import prepare as prepare_hub  # noqa: PLC0415
 
-    cfg = BankConfig.load(config)
+    cfg = cloud_config(config, scratch_root)
     if cfg.hub is None:
         raise typer.BadParameter("Config must enable Hub artifacts")
     cfg.hub = HubArtifacts.model_validate(

@@ -114,6 +114,8 @@ class Conditioning(Settings):
 
 
 class HubArtifacts(Settings):
+    banks_repo: str = "azeeer/eagle3-qwen3-8b-lora-bank-r32-v1"
+    bank_release: str = "b0001"
     mode: Literal["producer", "consumer"] = "producer"
     trajectories_repo: str = "azeeer/eagle3-qwen3-8b-trajectories-v1"
     activations_repo: str = "azeeer/eagle3-qwen3-8b-activations-v1"
@@ -151,7 +153,7 @@ class HubArtifacts(Settings):
             r"[0-9a-f]{40}", self.trajectories_revision
         ):
             raise ValueError("Consumer revision must be a complete Hub commit SHA")
-        for name in (self.release, self.selection):
+        for name in (self.release, self.selection, self.bank_release):
             if not name or any(
                 c not in "abcdefghijklmnopqrstuvwxyz0123456789-_" for c in name
             ):

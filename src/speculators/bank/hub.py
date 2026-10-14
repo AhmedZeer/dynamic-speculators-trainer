@@ -822,7 +822,16 @@ def restore(cfg, stage):  # noqa: C901 -- restore/verify four dependent stages
             repo_type="dataset",
             revision=cfg.hub.trajectories_revision,
         )
-        return json.loads(Path(path).read_text())
+        value = json.loads(Path(path).read_text())
+        # Carry the producer's launch commands, model hashes and patches into
+        # downstream bank publication, even when training starts on fresh scratch.
+        for reference in value.get("provenance", []):
+            folder = digest({"sha256": reference["sha256"], "path": reference["path"]})
+            fetch(
+                reference,
+                root / "provenance" / "source" / folder / Path(reference["path"]).name,
+            )
+        return value
 
     selection = record("select")
     manifest = selection["manifest"]
