@@ -72,6 +72,21 @@ class Corpus:
         self.manifest, first = load_subset(self.manifest_path, cfg.bank_subset)
         _, second = load_subset(self.manifest_path, cfg.conditioning_subset)
         self.subsets = {first["id"]: first, second["id"]: second}
+        self.rows = load_from_disk(self.manifest["data_path"]).with_format(None)
+        self.transfer = BankFileTransfer(
+            Path(self.manifest["hidden_states_path"]),
+            cfg.activation_local_dir or bank.execution.activation_local_dir,
+        )
+        self.pretraining_subsets = []
+        self.bank_roots = {}
+        sources = None
+        if cfg.pretraining_subsets is not None:
+            from speculators.generator.mixed_data import mixed_inputs  # noqa: PLC0415
+
+            mixed = mixed_inputs(cfg, bank)
+            sources = mixed.pop("sources")
+            for key, value in mixed.items():
+                setattr(self, key, value)
         if any(
             cfg.context.max_examples > len(s["train_indices"])
             for s in self.subsets.values()
@@ -85,8 +100,6 @@ class Corpus:
         ]
         if len(set(all_indices)) != len(all_indices):
             raise ValueError("Experiment subsets must have disjoint memberships")
-        self.rows = load_from_disk(self.manifest["data_path"]).with_format(None)
-        self.transfer = BankFileTransfer(Path(self.manifest["hidden_states_path"]))
         self.identity = {
             "version": 1,
             "prepared_fingerprint": self.manifest["prepared_fingerprint"],
@@ -94,6 +107,9 @@ class Corpus:
             "revisions": self.manifest["revisions"],
             "subsets": self.subsets,
         }
+        if sources is not None:
+            self.identity["sources"] = sources
+            self.identity["pretraining_subsets"] = self.pretraining_subsets
         self.cache_key = digest(self.identity)
         self.local = cfg.staging_dir / self.cache_key
         self.activations = ActivationCache(

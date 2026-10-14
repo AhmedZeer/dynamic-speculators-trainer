@@ -65,6 +65,12 @@ def heatmap(config: ConfigOption, condition: ConditionOption = None):
 
 
 @app.command()
+def pretrain(config: ConfigOption, condition: ConditionOption = None):
+    """Pretrain a shared generator on selected subsets, including multiple banks."""
+    _run(config, "pretrain", condition=condition)
+
+
+@app.command()
 def adaptation(
     config: ConfigOption,
     condition: ConditionOption = None,

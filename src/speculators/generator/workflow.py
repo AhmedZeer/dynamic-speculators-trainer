@@ -79,6 +79,8 @@ def execute(cfg, jobs, *, n_workers=None):
             subset = (
                 cfg.bank_subset if job["kind"] == "heatmap" else cfg.conditioning_subset
             )
+            if job["kind"] == "pretraining":
+                subset = job["subsets"][0]
             runs.append(
                 TrainingRun(
                     number,
@@ -197,6 +199,30 @@ def heatmap(cfg):
     return results
 
 
+def pretrain(cfg):
+    """Uniformly sample subsets, then matching bank snapshots and prompt cohorts."""
+    if cfg.pretraining_subsets is None:
+        raise ValueError("Set pretraining_subsets to a list or all")
+    if cfg.condition is None:
+        raise ValueError("Mixed pretraining requires an explicit condition")
+    condition = selected_condition(cfg)
+    bank = BankConfig.load(cfg.bank_config)
+    corpus = Corpus(cfg, bank)
+    snapshots = []
+    for subset in corpus.pretraining_subsets:
+        for entry in discover_snapshots(corpus.bank_roots[subset], subset):
+            snapshots.append({**entry, "subset": subset})
+    if not snapshots:
+        raise ValueError("No bank subsets selected for pretraining")
+    job = {
+        "kind": "pretraining",
+        "condition": condition,
+        "subsets": corpus.pretraining_subsets,
+        "snapshots": snapshots,
+    }
+    return execute(cfg, [(job, cfg.output_root / "pretraining")])
+
+
 def export_heatmaps(root, cfg, results):
     columns = [
         " & ".join(f"seed-{s}" for s in group) for group in cfg.heatmap.seed_groups
@@ -299,7 +325,7 @@ def explicit_pretrained_source(cfg, bank, corpus, condition):
     if not source.is_file():
         raise FileNotFoundError(f"Pretrained checkpoint not found: {source}")
     identity = json.loads((source.parent / "resolved_experiment.json").read_text())
-    if identity["job"]["kind"] != "heatmap":
+    if identity["job"]["kind"] not in ("heatmap", "pretraining"):
         raise ValueError("Pretrained arm requires a bank-pretrained heatmap checkpoint")
     if identity["job"]["condition"] != condition:
         raise ValueError("Pretrained checkpoint conditioning differs from --condition")

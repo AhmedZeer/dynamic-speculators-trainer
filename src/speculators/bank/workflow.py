@@ -443,6 +443,15 @@ def train_config(
                 "lora_save_merged": False,
             },
             "bank": {
+                **(
+                    {
+                        "bank_activation_local_dir": str(
+                            cfg.execution.activation_local_dir
+                        )
+                    }
+                    if cfg.execution.activation_local_dir is not None
+                    else {}
+                ),
                 "bank_manifest": str(root / "manifest.json"),
                 "bank_subset_id": subset_id,
                 "bank_warmup_epochs": cfg.training.warmup_epochs,
@@ -466,7 +475,7 @@ def train_config(
     }
 
 
-def train(cfg: BankConfig):
+def train(cfg: BankConfig):  # noqa: C901 -- subset selection and independent run dispatch
     from huggingface_hub import snapshot_download  # noqa: PLC0415
 
     interval = cfg.execution.hidden_state_log_interval
@@ -480,6 +489,12 @@ def train(cfg: BankConfig):
                 getattr(cfg.models, role), revision=manifest["revisions"][f"{role}_sha"]
             )
     bank_subsets = [s for s in manifest["subsets"] if s.get("role", "bank") == "bank"]
+    if cfg.execution.training_subsets is not None:
+        requested = cfg.execution.training_subsets
+        unknown = set(requested) - {s["id"] for s in bank_subsets}
+        if not requested or unknown:
+            raise ValueError(f"Invalid training subset selection: {requested}")
+        bank_subsets = [s for s in bank_subsets if s["id"] in requested]
     total_runs = sum(
         1 if s.get("training_seed") is not None else len(cfg.training.seeds)
         for s in bank_subsets
@@ -565,6 +580,7 @@ def bank_context(train_cfg):
     values = train_cfg.flatten()
     # Operational resume switches do not change the experiment identity.
     values.pop("no_resume_from_checkpoint", None)
+    values.pop("bank_activation_local_dir", None)
     context = {
         "cache_fingerprint": manifest["cache_fingerprint"],
         "prepared_fingerprint": manifest["prepared_fingerprint"],

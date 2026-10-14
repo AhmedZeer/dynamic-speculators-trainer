@@ -410,6 +410,7 @@ class LoraArgs(_Group):
 
 
 class BankArgs(_Group):
+    bank_activation_local_dir: str | None = None
     bank_manifest: str | None = Field(
         default=None, description="Prepared LoRA bank manifest; enables bank training."
     )

@@ -86,6 +86,8 @@ class Training(Settings):
 
 
 class Execution(Settings):
+    activation_local_dir: Path | None = None
+    training_subsets: list[str] | None = None
     generation_endpoint: str = "http://localhost:8000/v1/chat/completions"
     extraction_endpoint: str = "http://localhost:8000/v1"
     concurrency: int = Field(default=32, ge=1)

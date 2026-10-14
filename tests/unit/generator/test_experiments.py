@@ -1,5 +1,6 @@
 import copy
 import json
+import shutil
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -1029,6 +1030,78 @@ def test_tracking_names_and_distinct_projects(tmp_path):
         WandbSettings(projects=dict.fromkeys(cfg.wandb.projects, "same"))
     with pytest.raises(ValueError, match="each"):
         WandbSettings(projects={"conditioning": "one"})
+
+
+def test_mixed_pretraining_matches_context_and_target_subset(
+    synthetic_experiment, monkeypatch, tmp_path, fake_wandb
+):
+    cfg, factory = synthetic_experiment
+    primary_bank = BankConfig.load(cfg.bank_config)
+    primary_path = primary_bank.output_root / "manifest.json"
+    manifest = json.loads(primary_path.read_text())
+    manifest["revisions"] = {"target_sha": "target", "drafter_sha": "draft"}
+    write_json(primary_path, manifest)
+    second = tmp_path / "second-bank"
+    secondary_manifest = copy.deepcopy(manifest)
+    secondary_manifest["prepared_fingerprint"] = "secondary"
+    for subset in secondary_manifest["subsets"]:
+        subset["id"] = subset["id"].replace("math", "stem")
+    secondary_manifest["subsets"][1]["role"] = "adaptation"
+    write_json(second / "manifest.json", secondary_manifest)
+    shutil.copytree(
+        primary_bank.output_root / "runs" / "math-00000", second / "runs" / "stem-00000"
+    )
+    bank_path = tmp_path / "second.yaml"
+    secondary_bank = primary_bank.model_copy(update={"output_root": second})
+    bank_path.write_text(yaml.safe_dump(secondary_bank.model_dump(mode="json")))
+    cfg.additional_bank_configs = [bank_path]
+    cfg.pretraining_subsets = ["math-00000", "stem-00000"]
+    cfg.condition = "last"
+    cfg.optimization.episodes_per_update = 16
+    cfg.wandb.enabled = True
+    tracking = fake_wandb
+    seen = set()
+
+    def checked_factory(config, bank):
+        runtime = factory(config, bank)
+        original_context, original_get = runtime.corpus.context, runtime.cache.get
+        current = {}
+
+        def context(indices, *args):
+            matching = [
+                name
+                for name in cfg.pretraining_subsets
+                if set(indices) <= set(runtime.corpus.indices(name))
+            ]
+            current["subset"] = matching[0] if matching else None
+            return original_context(indices, *args)
+
+        def target(path):
+            assert f"/{current['subset']}/" in path
+            seen.add(current["subset"])
+            return original_get(path)
+
+        runtime.corpus.context, runtime.cache.get = context, target
+        return runtime
+
+    monkeypatch.setattr(workflow, "Runtime", checked_factory)
+    corpus = Corpus(cfg, primary_bank)
+    assert corpus.indices("stem-00000") == list(range(40, 50))
+    torch.testing.assert_close(
+        corpus.transfer.get_cached(40)["token_ids"],
+        corpus.transfer.get_cached(0)["token_ids"],
+    )
+    result = workflow.pretrain(cfg)[0]
+    assert seen == {"math-00000", "stem-00000"}
+    assert set(result["history"][-1]["subsets"]) == seen
+    assert tracking.runs[0].kwargs["project"] == "eagle3-generator-pretraining"
+    assert any(
+        "validation/subset_stem-00000/context_8/full_acc_0" in log
+        for log in tracking.runs[0].logs
+    )
+    cfg.pretraining_subsets = "all"
+    all_corpus = Corpus(cfg, primary_bank)
+    assert "stem-00001" not in all_corpus.pretraining_subsets
 
 
 def test_tracking_preserves_training_identity_and_failed_run_id(

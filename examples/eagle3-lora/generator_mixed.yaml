@@ -1,0 +1,39 @@
+# Run from the repository root. Bank paths resolve relative to this YAML.
+# Restore each bank manifest and collect its LoRAs before generator pretraining.
+bank_config: bank_math_local.yaml
+additional_bank_configs:
+  - bank_stem_local.yaml
+  # - bank_code_local.yaml
+  # - bank_chat_local.yaml
+# Explicit list, or all (all bank-role subsets; adaptation subsets are excluded).
+pretraining_subsets: [math-00000, stem-00000]
+bank_subset: math-00000
+conditioning_subset: math-00005
+condition: last
+activation_local_dir: /media/azeer/extra-segment/eagle3/activations
+output_root: output/generator-mixed-math-stem
+staging_dir: /media/azeer/extra-segment/eagle3/generator-staging
+device: cuda
+dtype: bfloat16
+n_workers: 1
+preprocessing_workers: 8
+activation_prefetch_workers: 4
+activation_cache_gib: 0  # Read the staged files directly; no extra payload copies.
+context:
+  min_examples: 1
+  max_examples: 8
+  evaluation_sizes: [1, 4, 8]
+optimization:
+  loss_fn: lk_hybrid  # Used for drafter validation, not bank reconstruction.
+  lr: 0.0001
+  max_grad_norm: 0.85
+  warmup_updates: 100
+  pretraining_updates: 10000
+  pretraining_validation_interval: 250
+  episodes_per_update: 4
+  checkpoint_interval: 500
+  token_budget: 8192
+wandb:
+  enabled: true
+  mode: online
+  pretraining_project: eagle3-generator-pretraining

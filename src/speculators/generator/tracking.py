@@ -30,6 +30,8 @@ def run_name(cfg, job):
     stage = job["kind"]
     subset = cfg.bank_subset if stage.startswith("heatmap") else cfg.conditioning_subset
     parts = [stage, subset]
+    if stage == "pretraining":
+        parts = [stage, "+".join(job["subsets"])]
     if "arm" in job:
         parts.append(job["arm"])
     parts.append(job["condition"])
@@ -51,7 +53,11 @@ class ExperimentTracker:
         self.cfg, self.job, self.output, self.identity = cfg, job, output, identity
         self.run = self.module = None
         stage = "heatmap" if job["kind"].startswith("heatmap") else job["kind"]
-        self.project = cfg.wandb.projects[stage]
+        self.project = (
+            cfg.wandb.pretraining_project
+            if stage == "pretraining"
+            else cfg.wandb.projects[stage]
+        )
         self.run_id = digest(
             {
                 "identity": identity,
@@ -156,6 +162,16 @@ class ExperimentTracker:
                     for key, value in context.items()
                 }
             )
+        if "subsets" in metrics:
+            for subset, result in metrics["subsets"].items():
+                values[f"validation/subset_{subset}/score"] = result["score"]
+                for size, context in result["contexts"].items():
+                    values.update(
+                        {
+                            f"validation/subset_{subset}/context_{size}/{key}": value
+                            for key, value in context.items()
+                        }
+                    )
         self.log(values)
 
     def result(self, result):

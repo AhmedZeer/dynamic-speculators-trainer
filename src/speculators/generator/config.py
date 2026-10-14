@@ -75,6 +75,7 @@ class Heatmap(Settings):
 
 
 class WandbSettings(Settings):
+    pretraining_project: str = "eagle3-generator-pretraining"
     enabled: bool = False
     mode: Literal["online", "offline"] = "offline"
     entity: str | None = None
@@ -98,11 +99,17 @@ class WandbSettings(Settings):
         if not all(names) or len(set(names)) != len(names):
             raise ValueError("W&B project names must be nonempty and different")
         self.projects = dict(zip(self.projects, names, strict=True))
+        self.pretraining_project = self.pretraining_project.strip()
+        if not self.pretraining_project or self.pretraining_project in names:
+            raise ValueError("Pretraining requires its own nonempty W&B project")
         return self
 
 
 class ExperimentConfig(Settings):
     bank_config: Path
+    additional_bank_configs: list[Path] = Field(default_factory=list)
+    pretraining_subsets: list[str] | Literal["all"] | None = None
+    activation_local_dir: Path | None = None
     output_root: Path = Path("output/generator-math")
     staging_dir: Path = Path("/tmp/speculators-generator")  # noqa: S108
     conditioning_subset: str = "math-00001"
@@ -130,6 +137,13 @@ class ExperimentConfig(Settings):
     def separate_subsets(self):
         if self.conditioning_subset == self.bank_subset:
             raise ValueError("Conditioning/adaptation and bank subsets must differ")
+        if isinstance(self.pretraining_subsets, list) and (
+            not self.pretraining_subsets
+            or len(set(self.pretraining_subsets)) != len(self.pretraining_subsets)
+        ):
+            raise ValueError("Pretraining subsets must be nonempty and unique")
+        if self.additional_bank_configs and self.pretraining_subsets is None:
+            raise ValueError("Additional banks require pretraining_subsets")
         return self
 
     @classmethod
@@ -140,4 +154,8 @@ class ExperimentConfig(Settings):
         bank_path = Path(values["bank_config"])
         if not bank_path.is_absolute():
             values["bank_config"] = path.resolve().parent / bank_path
+        values["additional_bank_configs"] = [
+            p if p.is_absolute() else path.resolve().parent / p
+            for p in map(Path, values.get("additional_bank_configs", []))
+        ]
         return cls.model_validate(values)

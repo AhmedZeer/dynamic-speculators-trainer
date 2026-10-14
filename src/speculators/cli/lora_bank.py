@@ -62,6 +62,20 @@ def compact_hidden(
 
 
 @app.command()
+def stage_hidden(
+    config: ConfigOption,
+    local_dir: Annotated[Path, typer.Option("--local-dir")],
+    subset: Annotated[list[str] | None, typer.Option("--subset")] = None,
+    workers: Annotated[int, typer.Option("--workers", min=1)] = 8,
+):
+    """Download selected subsets in parallel; consume raw or sharded files directly."""
+    from speculators.bank.staging import stage_hidden as stage_files  # noqa: PLC0415
+
+    path = stage_files(BankConfig.load(config), local_dir, subset or ["all"], workers)
+    typer.echo(f"Training config: {path}")
+
+
+@app.command()
 def train(config: ConfigOption):
     """Train all configured subset/seed runs; resume compatible existing runs."""
     report(f"train; config={config.resolve()}; code={workflow.__file__}")

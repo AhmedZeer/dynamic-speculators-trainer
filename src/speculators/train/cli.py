@@ -806,7 +806,9 @@ def _run_training(cfg: TrainConfig, startup_ready=None):  # noqa: C901
         from speculators.bank.transfer import BankFileTransfer  # noqa: PLC0415
 
         if type(transfer) is FileTransfer:
-            transfer = BankFileTransfer(transfer.hidden_states_path)
+            transfer = BankFileTransfer(
+                transfer.hidden_states_path, args.bank_activation_local_dir
+            )
             report(
                 "Bank hidden-state reads: buffered file I/O with slow-read diagnostics"
             )

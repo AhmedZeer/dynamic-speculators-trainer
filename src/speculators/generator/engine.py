@@ -313,6 +313,11 @@ class Runtime:
 
 def run_identity(cfg, bank, corpus, job):
     settings = cfg.model_dump(mode="json")
+    # Preserve identities of existing single-subset experiments.
+    if not cfg.additional_bank_configs:
+        settings.pop("additional_bank_configs")
+    if cfg.pretraining_subsets is None:
+        settings.pop("pretraining_subsets")
     for key in (
         "n_workers",
         "heatmap_n_workers",
@@ -323,6 +328,7 @@ def run_identity(cfg, bank, corpus, job):
         "activation_cache_gib",
         "activation_cache_reserve_gib",
         "activation_prefetch_workers",
+        "activation_local_dir",
         "condition",
         "pretrained_checkpoint",
     ):
@@ -455,7 +461,7 @@ def _run_job(runtime, job, output, tracker):  # noqa: C901 -- recovery and two t
             if optimizer_step is None:
                 optimizer_step = (
                     progress
-                    if job["kind"] == "heatmap"
+                    if job["kind"] in ("heatmap", "pretraining")
                     else epoch_updates(
                         cfg, runtime.corpus, cfg.conditioning_subset, progress
                     )
@@ -467,12 +473,18 @@ def _run_job(runtime, job, output, tracker):  # noqa: C901 -- recovery and two t
             del state
     started = time.monotonic()
     subset = cfg.bank_subset if job["kind"] == "heatmap" else cfg.conditioning_subset
-    if job["kind"] == "heatmap":
+    if job["kind"] in ("heatmap", "pretraining"):
         selected = job["snapshots"]
-        by_seed = {
-            seed: [s for s in selected if s["seed"] == seed] for seed in job["seeds"]
-        }
-        indices = runtime.corpus.indices(subset)
+        selections = (
+            {
+                name: [s for s in selected if s["subset"] == name]
+                for name in job["subsets"]
+            }
+            if job["kind"] == "pretraining"
+            else {subset: selected}
+        )
+        if any(not entries for entries in selections.values()):
+            raise ValueError("Every pretraining subset must have bank snapshots")
 
         def validate_heatmap(step):
             if cfg.heatmap_n_workers > 1:
@@ -480,8 +492,32 @@ def _run_job(runtime, job, output, tracker):  # noqa: C901 -- recovery and two t
                 lock = FileLock(str(cfg.staging_dir / "heatmap-validation.lock"))
             else:
                 lock = nullcontext()
-            with lock, stage_progress(f"Heatmap validation at update={step}"):
-                metrics = runtime.evaluate(subset, condition, generator)
+            with lock, stage_progress(f"{job['kind']} validation at update={step}"):
+                per_subset = {
+                    name: runtime.evaluate(name, condition, generator)
+                    for name in selections
+                }
+                metrics = next(iter(per_subset.values()))
+                if job["kind"] == "pretraining":
+                    metrics = {
+                        "score": sum(m["score"] for m in per_subset.values())
+                        / len(per_subset),
+                        "validation_examples": sum(
+                            m["validation_examples"] for m in per_subset.values()
+                        ),
+                        "contexts": {
+                            size: {
+                                key: sum(
+                                    m["contexts"][size][key]
+                                    for m in per_subset.values()
+                                )
+                                / len(per_subset)
+                                for key in values
+                            }
+                            for size, values in metrics["contexts"].items()
+                        },
+                        "subsets": per_subset,
+                    }
             history.append({"update": step, **metrics})
             tracker.validation(metrics, step)
             generator.train()
@@ -502,8 +538,22 @@ def _run_job(runtime, job, output, tracker):  # noqa: C901 -- recovery and two t
             for _ in range(cfg.optimization.episodes_per_update):
                 size = rng.randint(cfg.context.min_examples, cfg.context.max_examples)
                 context_sizes.append(size)
-                cohort = rng.sample(indices, size)
-                target = rng.choice(by_seed[rng.choice(job["seeds"])])
+                episode_subset = (
+                    rng.choice(list(selections))
+                    if job["kind"] == "pretraining"
+                    else subset
+                )
+                cohort = rng.sample(runtime.corpus.indices(episode_subset), size)
+                entries = selections[episode_subset]
+                seeds = (
+                    list(dict.fromkeys(entry["seed"] for entry in entries))
+                    if job["kind"] == "pretraining"
+                    else job["seeds"]
+                )
+                seed = rng.choice(seeds)
+                target = rng.choice(
+                    [entry for entry in entries if entry["seed"] == seed]
+                )
                 generated = generator(
                     *runtime.corpus.context(cohort, condition, runtime.device)
                 )

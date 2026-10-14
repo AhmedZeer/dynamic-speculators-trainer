@@ -360,8 +360,10 @@ This uses the currently implemented schedule: one warmup epoch, four collection
 epochs at the lower learning rate, checkpoints every 10 updates, and epoch-end
 validation. These are four bank collection commands, not joint generator
 training. The existing `generator_math.yaml` still describes the original math
-ablation; the all-domain generator training interface remains a subsequent
-phase of the scale-up plan.
+ablation. Shared generator bank pretraining is available through
+`generator pretrain` and `generator_mixed.yaml`; see
+[direct raw-file training and mixed subsets](eagle3_raw_training.md) for parallel
+staging, subset selection, and the commands. Compaction is optional for this path.
 
 The old math experiment config is preserved as `bank_math_legacy.yaml`.
 The existing generator and vLLM ablation YAMLs reference that legacy config so
