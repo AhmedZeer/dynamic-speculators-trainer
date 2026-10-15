@@ -162,7 +162,14 @@ class Corpus:
                     [self.rows[i]["prompt_length"] for i in indices]
                 ),
                 "last": torch.stack(
-                    [self.transfer.hub_store.read(i, summary=True) for i in indices]
+                    [
+                        self.transfer.hub_store.read(
+                            i,
+                            prompt_length=self.rows[i]["prompt_length"],
+                            summary=True,
+                        )
+                        for i in indices
+                    ]
                 ),
             }
             atomic_torch_save(path, self.summaries)

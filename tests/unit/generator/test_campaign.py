@@ -239,7 +239,6 @@ def tiny_campaign(tmp_path, monkeypatch):
                 indexed[str(index)] = {
                     "format": "raw",
                     "primary_id": primary,
-                    "prompt_length": 2,
                     "shard": reference(source, f"{domain}/hs_{index}.safetensors"),
                 }
             name = f"{domain}-{number:05d}"
@@ -375,11 +374,20 @@ def test_lazy_summaries_only_read_requested_examples(tiny_campaign):
         corpus.prepare(tiny_drafter())
         assert not calls
         index = corpus.indices("math-00000")[0]
+        ref, metadata = corpus.reference(index, summary=True)
+        assert "prompt_length" not in metadata
+        # Exercise the initial-validation prefetch path from the reported crash.
+        assert corpus.references([index], full=True) == [ref]
         first = corpus.context([index], "last", "cpu")
         second = corpus.context([index], "last", "cpu")
         assert len(calls) == 1
         assert corpus.summary_misses == corpus.summary_hits == 1
         torch.testing.assert_close(first[0], second[0])
+        payload = corpus.transfer.get_cached(index)
+        boundary = corpus.rows[index]["prompt_length"]
+        torch.testing.assert_close(
+            first[0][0], payload["hidden_states"][boundary - 1, :-1].flatten().float()
+        )
         schedule = EpisodeSchedule(local, corpus, job["subsets"])
         assert schedule.update(5) == schedule.update(5)
         assert schedule.update(5) != schedule.update(6)
@@ -570,3 +578,25 @@ def test_wandb_training_and_shaded_comparison(tiny_campaign, monkeypatch):
     assert any(
         "validation/category_math/offline_agreement" in log for log in runs[0].logs
     )
+
+
+def test_standard_prepare_supports_indexes_without_prompt_lengths(tiny_campaign):
+    from speculators.generator.data import Corpus  # noqa: PLC0415
+
+    cfg, _ = tiny_campaign
+    local = campaign.job_config(cfg, campaign.jobs(cfg)[0])
+    cache = campaign_cache.CampaignCache(cfg.staging_dir / "files", cfg.downloads)
+    try:
+        corpus = Corpus(local, BankConfig.load(local.bank_config))
+        for transfer in corpus.transfer.transfers:
+            transfer.hub_store.shared_cache = cache
+        corpus.prepare(tiny_drafter())
+        assert corpus.summaries["last"].shape == (48, 24)
+        index = int(corpus.summaries["indices"][0])
+        boundary = corpus.rows[index]["prompt_length"]
+        states = corpus.transfer.get_cached(index)["hidden_states"]
+        torch.testing.assert_close(
+            corpus.summaries["last"][0], states[boundary - 1, :-1].flatten().float()
+        )
+    finally:
+        cache.close()

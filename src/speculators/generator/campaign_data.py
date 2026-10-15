@@ -81,7 +81,9 @@ class CampaignCorpus(Corpus):
             "version": 1,
             "reference": ref,
             "primary_id": row["primary_id"],
-            "prompt_length": row["prompt_length"],
+            # Older published indexes omit boundaries. The prepared Arrow row
+            # owns the prompt boundary regardless of index format/version.
+            "prompt_length": self.rows[index]["prompt_length"],
             "condition": "last",
             "models": self.manifest["revisions"],
         }
@@ -115,7 +117,11 @@ class CampaignCorpus(Corpus):
                     value = torch.load(path, map_location="cpu", weights_only=True)
                     self.summary_hits += 1
                 else:
-                    value = self.transfer.read(index, summary=True)
+                    value = self.transfer.read(
+                        index,
+                        prompt_length=self.rows[index]["prompt_length"],
+                        summary=True,
+                    )
                     if value is None or not torch.isfinite(value).all():
                         raise ValueError(f"Invalid prompt summary: row={index}")
                     atomic_torch_save(path, value)

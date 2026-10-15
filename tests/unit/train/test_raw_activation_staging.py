@@ -124,3 +124,30 @@ def test_parallel_staging_writes_consumable_subset_config(
     path.write_bytes(b"x" * path.stat().st_size)
     with pytest.raises(ValueError, match="checksum mismatch"):
         stage_hidden(bank, local, ["stem-00000"], 2, include_validation)
+
+
+@pytest.mark.parametrize("legacy_boundary", [None, 5])
+def test_raw_summary_uses_explicit_trajectory_boundary(tmp_path, legacy_boundary):
+    from speculators.bank.hub_cache import HubActivationStore  # noqa: PLC0415
+
+    states = torch.arange(48).reshape(6, 4, 2).to(torch.bfloat16)
+    path = tmp_path / "raw.safetensors"
+    save_file({"hidden_states": states, "token_ids": torch.arange(6)}, path)
+    row = {"format": "raw", "primary_id": "sample"}
+    if legacy_boundary is not None:
+        row["prompt_length"] = legacy_boundary
+    result = HubActivationStore.read_tensors(path, row, prompt_length=3, summary=True)
+    torch.testing.assert_close(result, states[2, :-1].flatten().float())
+    # Explicit boundaries must not be written back into immutable source indexes.
+    assert row.get("prompt_length") == legacy_boundary
+
+
+@pytest.mark.parametrize("boundary", [None, 0, 7])
+def test_raw_summary_rejects_missing_or_invalid_boundary(tmp_path, boundary):
+    from speculators.bank.hub_cache import HubActivationStore  # noqa: PLC0415
+
+    path = tmp_path / "raw.safetensors"
+    save_file({"hidden_states": torch.zeros(6, 4, 2)}, path)
+    row = {"format": "raw", "primary_id": "sample"}
+    with pytest.raises(ValueError, match="valid trajectory prompt_length"):
+        HubActivationStore.read_tensors(path, row, prompt_length=boundary, summary=True)

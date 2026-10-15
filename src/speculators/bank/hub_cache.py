@@ -108,9 +108,17 @@ class HubActivationStore:
             if is_raw:
                 hidden = tensors.get_slice("hidden_states")
                 if summary:
-                    return (
-                        hidden[row["prompt_length"] - 1, :-1].flatten().float().clone()
+                    boundary = (
+                        prompt_length
+                        if prompt_length is not None
+                        else row.get("prompt_length")
                     )
+                    if boundary is None or not 1 <= boundary <= hidden.get_shape()[0]:
+                        raise ValueError(
+                            "Raw activation summaries require a valid trajectory "
+                            "prompt_length"
+                        )
+                    return hidden[boundary - 1, :-1].flatten().float().clone()
                 if prompt_length is not None:
                     return hidden[:prompt_length].clone()
                 return {
