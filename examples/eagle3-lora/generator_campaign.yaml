@@ -1,0 +1,56 @@
+# Run from the repository root. No vLLM process is used by this campaign.
+bank_config: bank_math_cloud.yaml
+additional_bank_configs:
+  - bank_code_cloud.yaml
+  - bank_stem_cloud.yaml
+  - bank_chat_cloud.yaml
+bank_revision: 2305403f0f3b560fafb6c6d261c370ab3a95759d
+# Put these on the machine's local SSD; outputs/checkpoints must survive restarts.
+input_root: output/generator-campaign-inputs
+output_root: output/generator-campaign
+staging_dir: /tmp/speculators-campaign
+condition: last
+seed: 42
+device: cuda
+dtype: bfloat16
+n_workers: 1
+heatmap_n_workers: 1
+activation_prefetch_workers: 2
+preprocessing_workers: 4
+factor_cache_mib: 256
+context:
+  min_examples: 1
+  max_examples: 8
+  evaluation_sizes: [4]
+optimization:
+  loss_fn: lk_hybrid
+  lr: 0.0001
+  weight_decay: 0.01
+  max_grad_norm: 0.85
+  warmup_updates: 100
+  pretraining_updates: 10000
+  pretraining_validation_interval: 250
+  episodes_per_update: 4
+  checkpoint_interval: 500
+  log_interval: 10
+  token_budget: 8192
+adaptation_updates: 1000
+downloads:
+  capacity_gib: 350
+  reserve_gib: 50
+  workers: 4
+  verification_workers: 2
+  lookahead_updates: 8
+pilot:
+  updates: 100
+  worker_counts: [4, 8]
+  max_data_wait_fraction: 0.2
+wandb:
+  enabled: true
+  mode: online
+  pretraining_project: eagle3-bank-vs-direct
+  group: bank-vs-direct-v1
+  projects:
+    conditioning: eagle3-generator-conditioning
+    heatmap: eagle3-generator-heatmap
+    adaptation: eagle3-generator-adaptation

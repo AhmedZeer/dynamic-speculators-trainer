@@ -54,7 +54,7 @@ def set_learning_rate(optimizer, cfg, step):
 
 
 class Runtime:
-    def __init__(self, cfg, bank):
+    def __init__(self, cfg, bank, *, corpus_factory=Corpus):
         self.cfg, self.bank = cfg, bank
         self.device = torch.device(cfg.device)
         if self.device.type == "cuda" and not torch.cuda.is_available():
@@ -62,7 +62,7 @@ class Runtime:
                 "CUDA is unavailable; use device: cpu for a synthetic smoke test"
             )
         self.dtype = getattr(torch, cfg.dtype)
-        self.corpus = Corpus(cfg, bank)
+        self.corpus = corpus_factory(cfg, bank)
         paths = {}
         for role in ("target", "drafter"):
             with stage_progress(f"Resolving pinned {role} snapshot"):
@@ -318,6 +318,8 @@ def run_identity(cfg, bank, corpus, job):
         settings.pop("additional_bank_configs")
     if cfg.pretraining_subsets is None:
         settings.pop("pretraining_subsets")
+    if cfg.experiment_subsets is None:
+        settings.pop("experiment_subsets")
     for key in (
         "n_workers",
         "heatmap_n_workers",

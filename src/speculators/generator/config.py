@@ -109,6 +109,9 @@ class ExperimentConfig(Settings):
     bank_config: Path
     additional_bank_configs: list[Path] = Field(default_factory=list)
     pretraining_subsets: list[str] | Literal["all"] | None = None
+    # Explicit mixed experiment membership, including adaptation-role subsets.
+    # Separate from pretraining_subsets, whose bank-only restriction stays intact.
+    experiment_subsets: list[str] | None = None
     activation_local_dir: Path | None = None
     output_root: Path = Path("output/generator-math")
     staging_dir: Path = Path("/tmp/speculators-generator")  # noqa: S108
@@ -135,6 +138,14 @@ class ExperimentConfig(Settings):
 
     @model_validator(mode="after")
     def separate_subsets(self):
+        if self.experiment_subsets is not None and (
+            not self.experiment_subsets
+            or len(set(self.experiment_subsets)) != len(self.experiment_subsets)
+            or self.pretraining_subsets is not None
+        ):
+            raise ValueError(
+                "Use unique experiment_subsets separately from pretraining_subsets"
+            )
         if self.conditioning_subset == self.bank_subset:
             raise ValueError("Conditioning/adaptation and bank subsets must differ")
         if isinstance(self.pretraining_subsets, list) and (
@@ -142,7 +153,11 @@ class ExperimentConfig(Settings):
             or len(set(self.pretraining_subsets)) != len(self.pretraining_subsets)
         ):
             raise ValueError("Pretraining subsets must be nonempty and unique")
-        if self.additional_bank_configs and self.pretraining_subsets is None:
+        if (
+            self.additional_bank_configs
+            and self.pretraining_subsets is None
+            and self.experiment_subsets is None
+        ):
             raise ValueError("Additional banks require pretraining_subsets")
         return self
 

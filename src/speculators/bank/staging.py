@@ -17,7 +17,7 @@ from speculators.bank.hub import hub_progress
 from speculators.bank.progress import report, stage_progress
 
 
-def _download_with_retries(ref, local_dir):
+def _download_with_retries(ref, local_dir, on_retry=None):
     """Retry transient Hub failures while preserving resumable local downloads."""
     attempts = 6
     for attempt in range(1, attempts + 1):
@@ -32,18 +32,22 @@ def _download_with_retries(ref, local_dir):
                 )
             )
         except (httpx.TransportError, httpx.HTTPStatusError) as exc:
-            if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code not in (
-                408, 429, 500, 502, 503, 504
-            ):
+            if isinstance(
+                exc, httpx.HTTPStatusError
+            ) and exc.response.status_code not in (408, 429, 500, 502, 503, 504):
                 raise
             if attempt == attempts:
                 raise
+            if on_retry is not None:
+                on_retry()
             delay = min(2**attempt, 30) + random.uniform(0, 1)
             report(
                 f"Activation download failed ({type(exc).__name__}): {ref['path']}; "
                 f"retry {attempt}/{attempts - 1} in {delay:.1f}s"
             )
             time.sleep(delay)
+
+    raise RuntimeError("Activation download retry loop exhausted")
 
 
 def staging_plan(cfg, local_dir, subsets, include_validation=True):

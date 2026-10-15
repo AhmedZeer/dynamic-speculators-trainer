@@ -80,7 +80,7 @@ class Corpus:
         self.pretraining_subsets = []
         self.bank_roots = {}
         sources = None
-        if cfg.pretraining_subsets is not None:
+        if cfg.pretraining_subsets is not None or cfg.experiment_subsets is not None:
             from speculators.generator.mixed_data import mixed_inputs  # noqa: PLC0415
 
             mixed = mixed_inputs(cfg, bank)

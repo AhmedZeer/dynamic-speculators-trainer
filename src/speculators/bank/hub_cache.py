@@ -48,12 +48,16 @@ class HubActivationStore:
             self.memory_bytes += size
         return dict(value)
 
-    def read(self, index, prompt_length=None, summary=False):
+    def read(self, index, prompt_length=None, summary=False):  # noqa: C901 -- local/shared/Hub backends
         row = self.index["rows"].get(str(index))
         if row is None:
             return None
         is_raw = row.get("format") == "raw"
         reference = row["summary" if summary and not is_raw else "shard"]
+        shared_cache = getattr(self, "shared_cache", None)
+        if shared_cache is not None:
+            with shared_cache.open(reference) as target:
+                return self.read_tensors(target, row, prompt_length, summary)
         if self.local_dir is not None:
             target = (self.local_dir / reference["path"]).resolve()
             if not target.is_relative_to(self.local_dir):

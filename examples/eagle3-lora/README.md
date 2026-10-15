@@ -110,3 +110,11 @@ four collection epochs, snapshots every 10 updates, and epoch-end validation.
 The three offline generator experiments use a separate configuration with
 1–8 conditioning examples. See [the experiment guide](../../docs/experiments/eagle3_generator.md)
 and [generator_math.yaml](generator_math.yaml) for commands and controls.
+
+## Bank versus direct pretraining campaign
+
+The [campaign runbook](../../docs/experiments/eagle3_generator_campaign.md) and
+[configuration](generator_campaign.yaml) define six paired pretraining jobs,
+four joint adaptation jobs on subsets 00002–00005, and a training-only download
+pilot for an A100 40 GB. Activations are fetched on demand; validation uses
+context size 4 and reports offline agreement. No vLLM inference is launched.

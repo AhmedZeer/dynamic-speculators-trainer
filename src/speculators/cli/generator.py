@@ -14,6 +14,26 @@ app = typer.Typer(
 ConfigOption = Annotated[Path, typer.Option("--config", exists=True, dir_okay=False)]
 
 
+@app.command()
+def campaign(
+    config: ConfigOption,
+    stage: Annotated[
+        str, typer.Option(help="prepare, pilot, pretraining, adaptation, or all")
+    ] = "all",
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+):
+    """Run the paired bank/direct campaign and joint adaptation; no vLLM inference."""
+    import json  # noqa: PLC0415
+
+    from speculators.generator.campaign import run_campaign  # noqa: PLC0415
+    from speculators.generator.campaign_config import CampaignConfig  # noqa: PLC0415
+
+    if stage not in ("prepare", "pilot", "pretraining", "adaptation", "all"):
+        raise typer.BadParameter("Unknown campaign stage")
+    result = run_campaign(CampaignConfig.load(config), stage, dry_run)
+    typer.echo(json.dumps(result, indent=2))
+
+
 class ConditionName(str, Enum):
     last = "last"
     last_mean = "last_mean"

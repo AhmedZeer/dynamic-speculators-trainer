@@ -71,7 +71,7 @@ def mixed_inputs(cfg, primary_bank):  # noqa: C901 -- compatibility and row rema
             if subset["id"] in available:
                 raise ValueError(f"Duplicate subset across banks: {subset['id']}")
             available[subset["id"]] = (bank, subset)
-    requested = cfg.pretraining_subsets
+    requested = cfg.experiment_subsets or cfg.pretraining_subsets
     selected = (
         [name for name, (_, s) in available.items() if s.get("role", "bank") == "bank"]
         if requested == "all"
@@ -80,7 +80,9 @@ def mixed_inputs(cfg, primary_bank):  # noqa: C901 -- compatibility and row rema
     unknown = set(selected) - available.keys()
     if unknown:
         raise ValueError(f"Unknown pretraining subsets: {sorted(unknown)}")
-    if any(available[name][1].get("role", "bank") != "bank" for name in selected):
+    if cfg.experiment_subsets is None and any(
+        available[name][1].get("role", "bank") != "bank" for name in selected
+    ):
         raise ValueError("Reserved adaptation subsets cannot enter bank pretraining")
     needed = set(selected)
     subsets, datasets, transfers, sources, roots = {}, [], [], [], {}

@@ -27,6 +27,8 @@ def wandb_module():
 
 
 def run_name(cfg, job):
+    if "label" in job:
+        return cfg.wandb.name_prefix + job["label"] + f"-gseed{cfg.seed}"
     stage = job["kind"]
     subset = cfg.bank_subset if stage.startswith("heatmap") else cfg.conditioning_subset
     parts = [stage, subset]
@@ -104,6 +106,7 @@ class ExperimentTracker:
         self.run = self.module.init(**kwargs)
         self.run.define_metric("optimizer_step")
         self.run.define_metric("train/*", step_metric="optimizer_step")
+        self.run.define_metric("cache/*", step_metric="optimizer_step")
         self.run.define_metric("validation/*", step_metric="optimizer_step")
         write_json(
             self.output / "tracking_config.json", self.cfg.wandb.model_dump(mode="json")
