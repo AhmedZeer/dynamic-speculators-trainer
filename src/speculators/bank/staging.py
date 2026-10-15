@@ -1,18 +1,49 @@
 """Parallel, pinned activation downloads without rewriting tensor payloads."""
 
 import json
+import random
 import shutil
 import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextlib import nullcontext
 from pathlib import Path
 
+import httpx
 import yaml
 from huggingface_hub import hf_hub_download
 
 from speculators.bank.artifacts import digest, file_digest, write_json
 from speculators.bank.hub import hub_progress
 from speculators.bank.progress import report, stage_progress
+
+
+def _download_with_retries(ref, local_dir):
+    """Retry transient Hub failures while preserving resumable local downloads."""
+    attempts = 6
+    for attempt in range(1, attempts + 1):
+        try:
+            return Path(
+                hf_hub_download(
+                    repo_id=ref["repo"],
+                    repo_type="dataset",
+                    revision=ref["revision"],
+                    filename=ref["path"],
+                    local_dir=local_dir,
+                )
+            )
+        except (httpx.TransportError, httpx.HTTPStatusError) as exc:
+            if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code not in (
+                408, 429, 500, 502, 503, 504
+            ):
+                raise
+            if attempt == attempts:
+                raise
+            delay = min(2**attempt, 30) + random.uniform(0, 1)
+            report(
+                f"Activation download failed ({type(exc).__name__}): {ref['path']}; "
+                f"retry {attempt}/{attempts - 1} in {delay:.1f}s"
+            )
+            time.sleep(delay)
 
 
 def staging_plan(cfg, local_dir, subsets, include_validation=True):
@@ -80,15 +111,7 @@ def stage_hidden(cfg, local_dir, subsets, workers=8, include_validation=True):  
         start = time.perf_counter()
         path = local_dir / ref["path"]
         if not path.is_file() or path.stat().st_size != ref["bytes"]:
-            path = Path(
-                hf_hub_download(
-                    repo_id=ref["repo"],
-                    repo_type="dataset",
-                    revision=ref["revision"],
-                    filename=ref["path"],
-                    local_dir=local_dir,
-                )
-            )
+            path = _download_with_retries(ref, local_dir)
         return ref, path, time.perf_counter() - start
 
     def verify(result):
