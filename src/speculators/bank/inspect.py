@@ -102,6 +102,9 @@ def inspect_adapters(run: Path, lora):
             distances.append(update_distance(previous, pairs, scale))
         previous = pairs
         metrics_path = run / "epochs" / f"{entry['epoch']}.json"
+        epoch_summary = (
+            json.loads(metrics_path.read_text()) if metrics_path.exists() else None
+        )
         entries.append(
             {
                 **entry,
@@ -112,9 +115,12 @@ def inspect_adapters(run: Path, lora):
                     name: [list(a.shape), list(b.shape)]
                     for name, (a, b) in pairs.items()
                 },
-                "epoch_validation": json.loads(metrics_path.read_text())
-                if metrics_path.exists()
-                else None,
+                "epoch_summary": epoch_summary,
+                "epoch_validation": (
+                    epoch_summary
+                    if epoch_summary and epoch_summary.get("validation_performed", True)
+                    else None
+                ),
             }
         )
     recovery = run / "recovery"

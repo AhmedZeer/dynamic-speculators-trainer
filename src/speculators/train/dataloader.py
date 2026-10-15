@@ -134,7 +134,8 @@ def create_train_val_loaders(
     train_indices: list[int] | None = None,
     val_indices: list[int] | None = None,
     sampler_seed: int | None = None,
-) -> tuple[DataLoader, DataLoader]:
+    include_validation: bool = True,
+) -> tuple[DataLoader, DataLoader | None]:
     """Create training and validation DataLoaders.
 
     Non-data SP ranks get lightweight loaders with no workers (they receive
@@ -174,24 +175,26 @@ def create_train_val_loaders(
         generation_validation_retries=generation_validation_retries,
         max_consecutive_generation_failures=max_consecutive_generation_failures,
     )
-    val_dataset: BaseDataset = ArrowDataset(
-        datapath=data_path,
-        max_len=total_seq_len,
-        transfer=transfer,
-        vllm_endpoint=vllm_endpoint,
-        on_missing=on_missing,
-        on_generate=on_generate,
-        train_ratio=train_data_ratio,
-        max_train_samples=max_train_samples,
-        split="val",
-        row_indices=val_indices,
-        model=verifier_name_or_path,
-        hidden_states_dtype=hidden_states_dtype,
-        request_timeout=request_timeout,
-        max_retries=max_retries,
-        generation_validation_retries=generation_validation_retries,
-        max_consecutive_generation_failures=max_consecutive_generation_failures,
-    )
+    val_dataset = None
+    if include_validation:
+        val_dataset: BaseDataset = ArrowDataset(
+            datapath=data_path,
+            max_len=total_seq_len,
+            transfer=transfer,
+            vllm_endpoint=vllm_endpoint,
+            on_missing=on_missing,
+            on_generate=on_generate,
+            train_ratio=train_data_ratio,
+            max_train_samples=max_train_samples,
+            split="val",
+            row_indices=val_indices,
+            model=verifier_name_or_path,
+            hidden_states_dtype=hidden_states_dtype,
+            request_timeout=request_timeout,
+            max_retries=max_retries,
+            generation_validation_retries=generation_validation_retries,
+            max_consecutive_generation_failures=max_consecutive_generation_failures,
+        )
 
     train_loader = _setup_dataloader(
         train_dataset,
@@ -204,15 +207,17 @@ def create_train_val_loaders(
         max_batches=max_train_batches,
         sampler_seed=sampler_seed,
     )
-    val_loader = _setup_dataloader(
-        val_dataset,
-        total_seq_len,
-        hidden_size,
-        num_target_layers=num_target_layers,
-        num_workers=num_workers,
-        prefetch_factor=prefetch_factor,
-        preprocess=preprocess,
-        sampler_seed=sampler_seed,
-    )
+    val_loader = None
+    if val_dataset is not None:
+        val_loader = _setup_dataloader(
+            val_dataset,
+            total_seq_len,
+            hidden_size,
+            num_target_layers=num_target_layers,
+            num_workers=num_workers,
+            prefetch_factor=prefetch_factor,
+            preprocess=preprocess,
+            sampler_seed=sampler_seed,
+        )
 
     return train_loader, val_loader

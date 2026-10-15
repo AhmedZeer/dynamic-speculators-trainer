@@ -67,13 +67,15 @@ def train_cloud(cfg, subsets=None, workers=8, keep_activations=False):  # noqa: 
                     prefetched.result()
                     prefetched = None
                 else:
-                    stage_hidden(consumer, activation_dir, [subset["id"]], workers)
+                    stage_hidden(
+                        consumer, activation_dir, [subset["id"]], workers, False
+                    )
                 if consumer.execution.prefetch_next_subset and position + 1 < len(
                     pending_runs
                 ):
                     next_subset = pending_runs[position + 1][0]
                     next_dir = _activation_dir(consumer, next_subset)
-                    if can_stage(consumer, next_dir, [next_subset["id"]]):
+                    if can_stage(consumer, next_dir, [next_subset["id"]], False):
                         report(
                             f"Prefetching next subset {next_subset['id']} "
                             "during training"
@@ -84,6 +86,7 @@ def train_cloud(cfg, subsets=None, workers=8, keep_activations=False):  # noqa: 
                             next_dir,
                             [next_subset["id"]],
                             workers,
+                            False,
                         )
                     else:
                         report(

@@ -132,7 +132,8 @@ def test_cloud_overlaps_or_defers_next_download(
     next_started, release_next = Event(), Event()
     paths = []
 
-    def stage(config, local_dir, subsets, workers):
+    def stage(config, local_dir, subsets, workers, include_validation=True):
+        assert not include_validation
         local_dir.mkdir(parents=True)
         paths.append(local_dir)
         if subsets == ["math-00001"]:

@@ -61,7 +61,10 @@ def test_snapshot_layout_reads_without_fetch_or_cache_copy(tmp_path, monkeypatch
     assert not list((hidden / ".shards").glob("*.safetensors"))
 
 
-def test_parallel_staging_writes_consumable_subset_config(tmp_path, monkeypatch):
+@pytest.mark.parametrize("include_validation", [True, False])
+def test_parallel_staging_writes_consumable_subset_config(
+    tmp_path, monkeypatch, include_validation
+):
     root, local = tmp_path / "bank", tmp_path / "download"
     references, rows = {}, {}
     for index in range(2):
@@ -89,7 +92,7 @@ def test_parallel_staging_writes_consumable_subset_config(tmp_path, monkeypatch)
     }
     write_json(root / "manifest.json", manifest)
     write_json(root / "hidden" / "index.json", {"rows": rows})
-    barrier = Barrier(2)
+    barrier = Barrier(2 if include_validation else 1)
 
     def download(**kwargs):
         assert kwargs["revision"] == "a" * 40
@@ -101,7 +104,10 @@ def test_parallel_staging_writes_consumable_subset_config(tmp_path, monkeypatch)
 
     monkeypatch.setattr("speculators.bank.staging.hf_hub_download", download)
     bank = BankConfig(output_root=root)
-    generated = BankConfig.load(stage_hidden(bank, local, ["stem-00000"], workers=2))
+    generated = BankConfig.load(
+        stage_hidden(bank, local, ["stem-00000"], 2, include_validation)
+    )
+    assert (local / list(references)[1]).exists() == include_validation
     assert generated.execution.training_subsets == ["stem-00000"]
     values = train_config(generated, manifest, "stem-00000", 42, "target", "draft")
     resolved = TrainConfig.model_validate(values["train"])
@@ -112,9 +118,9 @@ def test_parallel_staging_writes_consumable_subset_config(tmp_path, monkeypatch)
         pytest.fail("Verified unchanged files should not be rehashed")
 
     monkeypatch.setattr("speculators.bank.staging.file_digest", unexpected_hash)
-    stage_hidden(bank, local, ["stem-00000"], workers=2)
+    stage_hidden(bank, local, ["stem-00000"], 2, include_validation)
     monkeypatch.setattr("speculators.bank.staging.file_digest", file_digest)
     path = local / next(iter(references))
     path.write_bytes(b"x" * path.stat().st_size)
     with pytest.raises(ValueError, match="checksum mismatch"):
-        stage_hidden(bank, local, ["stem-00000"], workers=2)
+        stage_hidden(bank, local, ["stem-00000"], 2, include_validation)

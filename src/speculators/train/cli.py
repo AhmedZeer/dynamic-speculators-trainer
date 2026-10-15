@@ -818,9 +818,7 @@ def _run_training(cfg: TrainConfig, startup_ready=None):  # noqa: C901
                 "GiB per worker"
             )
 
-    with _bank_stage(
-        cfg, "Loading saved training/validation data and building packed batches"
-    ):
+    with _bank_stage(cfg, "Loading saved data and building packed batches"):
         train_loader, val_loader = create_train_val_loaders(
             data_path=args.data_path,
             total_seq_len=args.total_seq_len,
@@ -845,6 +843,7 @@ def _run_training(cfg: TrainConfig, startup_ready=None):  # noqa: C901
             train_indices=bank_subset["train_indices"] if bank_subset else None,
             val_indices=bank_subset["validation_indices"] if bank_subset else None,
             sampler_seed=cfg.seed if bank_subset else None,
+            include_validation=bank_subset is None,
         )
 
     # Get trainer kwargs from model class

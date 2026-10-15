@@ -91,7 +91,7 @@ def completed_run(cfg, manifest, subset, seed):
             "adapter_config_sha256": file_digest(adapter / "adapter_config.json"),
         },
     )
-    write_json(run / "epochs" / "1.json", {"loss": 0.5})
+    write_json(run / "epochs" / "1.json", {"validation_performed": False})
     recovery = run / "recovery" / "1"
     shutil.copytree(adapter, recovery / "adapter")
     write_json(
@@ -123,6 +123,8 @@ def test_complete_bank_is_one_commit_and_pinned_restore(bank_setup):
     record, commit = publisher.publish_run(manifest, subset, 42)
     assert remote.commits == 1
     assert record["candidate_count"] == 1
+    _, diagnostics = publisher.validate_run(manifest, subset, 42)
+    assert diagnostics["entries"][0]["epoch_validation"] is None
     assert "runs/math-00000/seed-42/train_command.txt" in record["files"]
     assert (
         "runs/math-00000/seed-42/recovery/1/optimizer_state_dict.pt" in record["files"]
@@ -153,8 +155,9 @@ def test_cloud_stages_one_subset_and_publishes_each_seed(bank_setup, monkeypatch
     monkeypatch.setattr(cloud, "prepare", lambda config, stage: manifest)
     staged, trained = [], []
 
-    def stage(config, local_dir, subsets, workers):
+    def stage(config, local_dir, subsets, workers, include_validation=True):
         assert workers == 8
+        assert not include_validation
         local_dir.mkdir(parents=True)
         (local_dir / "activation").write_bytes(b"downloaded input")
         staged.append((subsets[0], local_dir))

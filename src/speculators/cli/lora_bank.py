@@ -106,7 +106,7 @@ def train_cloud(
     download_workers: Annotated[int, typer.Option("--download-workers", min=1)] = 8,
     keep_activations: Annotated[bool, typer.Option("--keep-activations")] = False,
 ):
-    """Restore inputs, train on scratch, publish each run, and skip published runs."""
+    """Restore inputs, train without evaluation, and publish each pending run."""
     from speculators.bank.cloud import train_cloud as run_cloud  # noqa: PLC0415
 
     cfg = cloud_config(config, scratch_root)

@@ -41,8 +41,9 @@ Regular `bank_<domain>.yaml` configs prepare new data in producer mode under
 trajectories SHA and use `/tmp` scratch. They also name the public bank repo and
 bank release explicitly, and reserve 12 GiB during staging instead of 8 GiB.
 Model identities, layers, rank/alpha, loss and learning rates are the same.
-The current STEM cloud override has one collection epoch; regular STEM and the
-other cloud configs have four. Cloud mode does not inherently change the recipe.
+All four cloud configs use one warmup epoch and one collection epoch, saving ten
+LoRAs per run. Regular configs have four collection epochs. Cloud mode does not
+inherently change the recipe.
 
 Configure the adapter count with:
 
@@ -87,14 +88,13 @@ use separate pools, and logs report wall time and summed worker time separately.
 1. Restore the trajectory dataset, manifest and activation index.
 2. Check for matching completed runs in the public LoRA bank repository.
 3. Stage the next unpublished subset's activations with parallel, verified
-   downloads. Training reads raw files or existing shards directly from scratch.
+   downloads, excluding validation-only activations. Training reads raw files or
+   existing shards directly from scratch.
 4. Train each pending seed, using the existing bank recipe: one warmup epoch at
-   LR `1e-4`, four collection epochs at LR `1e-6`, rank 32 / alpha 64, KL loss,
+   LR `1e-4`, one collection epoch at LR `1e-6`, rank 32 / alpha 64, KL loss,
    and `training.loras_per_epoch: 10` adapters per collection epoch.
-   STEM cloud retains its customized one-collection-epoch setting; other
-   cloud domains use four collection epochs.
 5. Publish each completed seed in one atomic Hub commit, including adapter
-   snapshots, adapter configs, snapshot entries, epoch validation, the final
+   snapshots, adapter configs, snapshot entries, epoch summaries, the final
    recovery states and optimizer/RNG files, training command, source patch,
    resolved settings and any available preparation/server provenance.
 6. Once the subset's seeds are published, remove only that subset's downloaded
@@ -185,10 +185,14 @@ workers are already enabled. Workers do not initialize CUDA contexts. These
 settings differ from `n_workers` (independent training runs), `processes` (ranks
 per run), and `--download-workers` (Hub download threads).
 
+Bank training performs no held-out validation and creates no validation loader.
+The prepared validation split stays available for separate evaluation, but is not
+added to the training membership. Epoch summaries record `validation_performed:
+false`; publication requires completed training, not validation metrics.
+
 The RAM cache holds decoded, owned activation tensors from staged files. It is
-bounded **per worker**, with separate training and validation worker pools: four
-workers and a 1 GiB limit can retain up to 8 GiB across both loaders, plus batches
-and runtime memory. Cache hits avoid reopening and cloning files; augmentation
+bounded **per worker**: four training workers and a 1 GiB limit can retain up to
+4 GiB, plus batches and runtime memory. Cache hits avoid reopening and cloning files; augmentation
 creates new tensors so cached payloads stay clean. Set the cache limit to zero
 to disable it. This cache does not preload the whole subset, and its benefit
 depends on reuse; worker prefetching is the primary training optimization.

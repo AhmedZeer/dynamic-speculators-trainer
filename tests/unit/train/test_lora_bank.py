@@ -285,7 +285,7 @@ def cpu_trainer(path, *, resume=False, stop_at=None):
             resume_from_checkpoint=resume,
         ),
         TinyLoader(),
-        TinyLoader(),
+        None,
         schedule=BankSchedule(1, 4, 1e-5, 3),
         context={"seed": 12},
     )
@@ -298,7 +298,7 @@ def test_epoch_schedule_and_exact_per_epoch_collection(tmp_path, capsys):
     trainer = cpu_trainer(tmp_path)
     trainer.run_training()
     assert trainer.completed
-    assert trainer.evaluations == [0, 1, 2, 3, 4]
+    assert trainer.evaluations == []
     assert [lr for epoch, lr in trainer.updates if epoch == 0] == [1e-3] * 3
     assert all(lr == 1e-5 for epoch, lr in trainer.updates if epoch > 0)
     assert trainer.collection_step == 30
@@ -328,8 +328,12 @@ def test_epoch_schedule_and_exact_per_epoch_collection(tmp_path, capsys):
     assert "Epoch 2/5: collect, lr=1e-05" in logs
     assert "warmup: epoch=1/5, step=3/3" in logs
     assert "collect: epoch=2/5, step=7/7" in logs
-    assert logs.count("evaluating held-out examples: starting") == 5
-    assert logs.count("validation metrics:") == 5
+    assert "evaluating held-out examples" not in logs
+    assert "validation metrics:" not in logs
+    assert all(
+        json.loads(path.read_text())["validation_performed"] is False
+        for path in (tmp_path / "epochs").glob("*.json")
+    )
     assert logs.count("LoRA snapshot ready:") == 12
     assert "Run complete: optimizer updates=33, collected LoRAs=12" in logs
     resumed = cpu_trainer(tmp_path, resume=True)

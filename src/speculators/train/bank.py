@@ -179,10 +179,8 @@ class BankTrainer(Trainer):
             raise ValueError("Bank epoch budget must equal warmup + collection")
         if config.max_steps is not None or config.scheduler_type != "none":
             raise ValueError("Step limits and LR schedulers conflict with bank epochs")
-        if config.save_best or config.fsdp_shard or val_loader is None:
-            raise ValueError(
-                "Bank runs require validation, no FSDP, and no best-only saves"
-            )
+        if config.save_best or config.fsdp_shard:
+            raise ValueError("Bank runs require no FSDP and no best-only saves")
         if not is_lora_model(raw_model(model)):
             raise ValueError("Bank runs require a PEFT LoRA model")
         if config.optimizer != "adamw" or schedule.collect_lr >= config.lr:
@@ -430,15 +428,6 @@ class BankTrainer(Trainer):
                 f"{self.schedule.phase(epoch)}, lr={lr:g}"
             ):
                 self.train_epoch(epoch)
-            self._save_recovery(epoch, self._last_local_step, epoch_complete=False)
-            with self._stage(f"Epoch {epoch + 1}: evaluating held-out examples"):
-                metrics = self.val_epoch(epoch)
-            self._report(
-                f"Epoch {epoch + 1} validation metrics: "
-                f"{json.dumps(metrics, sort_keys=True)}"
-            )
-            if metrics and "loss_epoch" in metrics:
-                self.best_val_loss = min(self.best_val_loss, metrics["loss_epoch"])
             if self.rank == 0:
                 write_json(
                     Path(self.config.save_path) / "epochs" / f"{epoch}.json",
@@ -448,7 +437,7 @@ class BankTrainer(Trainer):
                         "global_step": self.global_step,
                         "collection_step": self.collection_step,
                         "lr": lr,
-                        "metrics": metrics,
+                        "validation_performed": False,
                     },
                 )
             self._save_recovery(epoch, self._last_local_step, epoch_complete=True)

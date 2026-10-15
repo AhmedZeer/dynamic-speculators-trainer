@@ -15,7 +15,7 @@ from speculators.bank.hub import hub_progress
 from speculators.bank.progress import report, stage_progress
 
 
-def staging_plan(cfg, local_dir, subsets):
+def staging_plan(cfg, local_dir, subsets, include_validation=True):
     """Resolve immutable inputs and remaining bytes without downloading."""
     manifest = json.loads((cfg.output_root / "manifest.json").read_text())
     index = json.loads(
@@ -28,7 +28,10 @@ def staging_plan(cfg, local_dir, subsets):
     references = {}
     for name in selected:
         subset = available[name]
-        for number in subset["train_indices"] + subset["validation_indices"]:
+        indices = subset["train_indices"] + (
+            subset["validation_indices"] if include_validation else []
+        )
+        for number in indices:
             row = index["rows"][str(number)]
             for kind in ("shard", "summary"):
                 if kind in row:
@@ -49,15 +52,17 @@ def staging_plan(cfg, local_dir, subsets):
     return selected, references, missing_bytes
 
 
-def can_stage(cfg, local_dir, subsets):
-    _, _, missing = staging_plan(cfg, local_dir, subsets)
+def can_stage(cfg, local_dir, subsets, include_validation=True):
+    _, _, missing = staging_plan(cfg, local_dir, subsets, include_validation)
     reserve = int(cfg.hub.cache_reserve_gib * 2**30) if cfg.hub else 0
     return shutil.disk_usage(local_dir).free >= missing + reserve
 
 
-def stage_hidden(cfg, local_dir, subsets, workers=8):  # noqa: C901 -- download/verify pipeline
+def stage_hidden(cfg, local_dir, subsets, workers=8, include_validation=True):  # noqa: C901 -- download/verify pipeline
     local_dir = local_dir.resolve()
-    selected, references, missing_bytes = staging_plan(cfg, local_dir, subsets)
+    selected, references, missing_bytes = staging_plan(
+        cfg, local_dir, subsets, include_validation
+    )
     manifest = json.loads((cfg.output_root / "manifest.json").read_text())
     available = {s["id"]: s for s in manifest["subsets"]}
     reserve = int(cfg.hub.cache_reserve_gib * 2**30) if cfg.hub else 0
