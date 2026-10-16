@@ -5,7 +5,7 @@ additional_bank_configs:
 - bank_stem_cloud.yaml
 - bank_chat_cloud.yaml
 input_root: output/generator-campaign-online-inputs
-output_root: output/generator-campaign-online
+output_root: output/generator-campaign-online-v2
 staging_dir: /tmp/speculators-campaign-online
 condition: last
 seed: 42
