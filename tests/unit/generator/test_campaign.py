@@ -401,6 +401,17 @@ def test_ten_jobs_train_resume_and_reject_changed_sources(tiny_campaign):
     assert len(results) == 10
     assert all(len(result["history"]) == 2 for result in results)
     assert all(set(result["history"][-1]["contexts"]) == {"4"} for result in results)
+    for result in results:
+        assert result["validation_seconds"] == sum(
+            row["validation_seconds"] for row in result["history"]
+        )
+        assert result["elapsed_seconds"] >= result["validation_seconds"] > 0
+        assert result["training_seconds"] > 0
+        assert all(
+            subset["elapsed_seconds"] > 0
+            for row in result["history"]
+            for subset in row["subsets"].values()
+        )
     assert len(calls) == len(set(calls))
     before = len(calls)
     assert campaign.run_one(cfg, campaign.jobs(cfg)[0])["score"] == results[0]["score"]

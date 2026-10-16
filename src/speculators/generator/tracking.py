@@ -195,6 +195,14 @@ class ExperimentTracker:
                     "baseline_score": result["history"][0]["score"],
                 }
             )
+        for key in (
+            "training_seconds",
+            "validation_seconds",
+            "data_wait_seconds",
+            "setup_seconds",
+        ):
+            if key in result:
+                self.run.summary[key] = result[key]
         if "snapshots" in self.job:
             self.run.summary["checkpoint_count"] = len(self.job["snapshots"])
         if self.cfg.wandb.upload_artifacts:

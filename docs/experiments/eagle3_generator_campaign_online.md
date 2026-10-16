@@ -96,6 +96,19 @@ time, process RSS, GPU allocations, whole-device GPU memory, disk IO, temporary
 file high-water mark, free disk, and checkpoint sizes. These also go to W&B.
 Extraction seconds sum concurrent requests, so can exceed elapsed wall time.
 
+Console validation progress prints completed contexts and measured elapsed seconds.
+Each validation pass also logs `validation/seconds`, cumulative validation seconds,
+and per-subset seconds to W&B. Training logs each reported update's wall seconds,
+cumulative training seconds, and `time/session_elapsed_seconds`. `result.json`
+and W&B summaries record `training_seconds`, `validation_seconds`, and
+`data_wait_seconds`. These training/validation totals include completed updates
+and passes restored from checkpoints; `elapsed_seconds` measures only the current
+job invocation, including model loading, initial validation, tracker startup, and
+checkpoint writes, but excluding final reporting and process cleanup.
+`setup_seconds` separately records preparation/model loading before the training
+routine. All durations are measured with a monotonic clock, with CUDA synchronized at phase
+boundaries; no remaining-time estimate is substituted for a measurement.
+
 The existing design stays the same: six matched bank/direct pretraining jobs
 with 1/2/4 subsets per category (4K/8K/16K examples), 10K updates, and identical
 episode sampling within each pair. Bank targets are the ten first-collection-epoch

@@ -49,12 +49,15 @@ def synchronize(runtime):
 
 @torch.no_grad()
 def evaluate_subset(runtime, subset, generator):
+    synchronize(runtime)
+    started = time.perf_counter()
     runtime.drafter.eval()
     if generator is not None:
         generator.eval()
     indices = runtime.corpus.indices(subset, validation=True)
     cohorts = list(groups(indices, runtime.cfg.seed + 9000, 4, 4))
     accumulated = {}
+    report(f"Validation {subset}: starting; contexts={len(cohorts)}")
     for position, cohort in enumerate(cohorts):
         upcoming = [i for group in cohorts[position : position + 8] for i in group]
         refs = runtime.corpus.references(upcoming, full=True)
@@ -71,10 +74,17 @@ def evaluate_subset(runtime, subset, generator):
             _, _, metrics = runtime.forward(batch, factors)
             for key, value in metrics.items():
                 accumulated[key] = accumulated.get(key, 0.0) + float(value)
+        if position == 0 or (position + 1) % 10 == 0 or position + 1 == len(cohorts):
+            synchronize(runtime)
+            report(
+                f"Validation {subset}: contexts={position + 1}/{len(cohorts)}; "
+                f"elapsed={time.perf_counter() - started:.2f}s"
+            )
     normalized = normalize_counted_metrics(accumulated)
     return {
         "score": normalized["full_acc_0"],
         "validation_examples": len(indices),
+        "elapsed_seconds": time.perf_counter() - started,
         "contexts": {"4": normalized},
     }
 
@@ -229,7 +239,10 @@ def _prefetch(runtime, schedule, step, updates, lookahead, objective):
     runtime.corpus.cache.prefetch(refs)
 
 
-def run_training(runtime, job, output, identity, *, lookahead):  # noqa: C901 -- durable update loop
+def run_training(runtime, job, output, identity, *, lookahead, started=None):  # noqa: C901 -- durable update loop
+    entered = time.perf_counter()
+    started = entered if started is None else started
+    setup_seconds = entered - started
     cfg = runtime.cfg
     generator = None if job["arm"] == "fresh_lora" else runtime.new_generator("last")
     if generator is None:
@@ -291,7 +304,6 @@ def run_training(runtime, job, output, identity, *, lookahead):  # noqa: C901 --
         )
 
     cache_start = runtime.corpus.cache.snapshot()
-    started = time.perf_counter()
     if runtime.device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(runtime.device)
     with (
@@ -300,9 +312,12 @@ def run_training(runtime, job, output, identity, *, lookahead):  # noqa: C901 --
     ):
 
         def validate():
-            runtime.corpus.cache.protect([])
+            synchronize(runtime)
             validation_started = time.perf_counter()
+            report(f"{job['label']}: validation starting at update={progress}")
+            runtime.corpus.cache.protect([])
             metrics = evaluate(runtime, job["validation_subsets"], generator)
+            synchronize(runtime)
             row = {
                 "update": progress,
                 "validation_seconds": time.perf_counter() - validation_started,
@@ -313,6 +328,15 @@ def run_training(runtime, job, output, identity, *, lookahead):  # noqa: C901 --
             tracker.log(
                 {
                     "optimizer_step": progress,
+                    "validation/seconds": row["validation_seconds"],
+                    "validation/cumulative_seconds": sum(
+                        r["validation_seconds"] for r in history
+                    ),
+                    "time/session_elapsed_seconds": time.perf_counter() - started,
+                    **{
+                        f"validation/subset_{name}/seconds": value["elapsed_seconds"]
+                        for name, value in metrics["subsets"].items()
+                    },
                     **{
                         f"validation/category_{d}/offline_agreement": v
                         for d, v in metrics["categories"].items()
@@ -320,6 +344,11 @@ def run_training(runtime, job, output, identity, *, lookahead):  # noqa: C901 --
                 }
             )
             write_json(output / "metrics.json", history)
+            report(
+                f"{job['label']}: validation completed at update={progress}; "
+                f"wall={row['validation_seconds']:.2f}s; "
+                f"session_elapsed={time.perf_counter() - started:.2f}s"
+            )
 
         if not history:
             validate()
@@ -357,6 +386,7 @@ def run_training(runtime, job, output, identity, *, lookahead):  # noqa: C901 --
                     "train/examples_seen": examples_seen,
                     "train/cumulative_gpu_compute_seconds": compute_total,
                     "train/cumulative_update_seconds": wall_total,
+                    "time/session_elapsed_seconds": time.perf_counter() - started,
                     "train/data_wait_fraction": values["train/data_wait_seconds"]
                     / max(elapsed, 1e-9),
                     "train/host_rss_bytes": psutil.Process().memory_info().rss,
@@ -386,6 +416,8 @@ def run_training(runtime, job, output, identity, *, lookahead):  # noqa: C901 --
                     f"{job['label']}: update={progress}/{job['updates']}; "
                     f"wall={elapsed:.2f}s; "
                     f"data={values['train/data_wait_seconds']:.2f}s; "
+                    f"training_total={wall_total:.2f}s; "
+                    f"session_elapsed={time.perf_counter() - started:.2f}s; "
                     f"cache={cache['cache_bytes'] / 2**30:.2f} GiB"
                 )
             if (
@@ -406,6 +438,7 @@ def run_training(runtime, job, output, identity, *, lookahead):  # noqa: C901 --
             "score": history[-1]["score"],
             "metric": "offline agreement (full_acc_0), context size 4",
             "elapsed_seconds": time.perf_counter() - started,
+            "setup_seconds": setup_seconds,
             "trainable_parameters": sum(p.numel() for p in parameters),
             "checkpoint_path": str(checkpoint.resolve()),
             "checkpoint_bytes": checkpoint.stat().st_size,
@@ -414,6 +447,7 @@ def run_training(runtime, job, output, identity, *, lookahead):  # noqa: C901 --
             "cache_start": cache_start,
             "cache_end": cache_end,
             "training_seconds": sum(t["train/update_seconds"] for t in timing),
+            "validation_seconds": sum(r["validation_seconds"] for r in history),
             "data_wait_seconds": sum(t["train/data_wait_seconds"] for t in timing),
             "summary_hits": runtime.corpus.summary_hits,
             "summary_misses": runtime.corpus.summary_misses,
@@ -422,4 +456,11 @@ def run_training(runtime, job, output, identity, *, lookahead):  # noqa: C901 --
             result["score_change"] = result["score"] - history[0]["score"]
         write_json(output / "result.json", result)
         tracker.result(result)
+        report(
+            f"{job['label']}: completed; "
+            f"session_wall={result['elapsed_seconds']:.2f}s; "
+            f"setup={setup_seconds:.2f}s; "
+            f"training_total={result['training_seconds']:.2f}s; "
+            f"validation_total={result['validation_seconds']:.2f}s"
+        )
     return result

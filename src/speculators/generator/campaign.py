@@ -3,6 +3,7 @@
 import gc
 import json
 import shutil
+import time
 from pathlib import Path
 
 import torch
@@ -160,6 +161,7 @@ def run_one(  # noqa: C901 -- shared online/offline run lifecycle
     download_settings=None,
     local_inputs=None,
 ):
+    started = time.perf_counter()
     job = _source(cfg, original_job)
     local_cfg = job_config(cfg, job, staging_dir=staging_dir)
     output = cfg.output_root / job["stage"] / job.get("profile", "") / job["label"]
@@ -229,7 +231,12 @@ def run_one(  # noqa: C901 -- shared online/offline run lifecycle
             local_cfg, bank, corpus_factory=lambda _cfg, _bank: corpus, **runtime_args
         )
         return run_training(
-            runtime, job, output, identity, lookahead=cfg.downloads.lookahead_updates
+            runtime,
+            job,
+            output,
+            identity,
+            lookahead=cfg.downloads.lookahead_updates,
+            started=started,
         )
     finally:
         cache.close()
