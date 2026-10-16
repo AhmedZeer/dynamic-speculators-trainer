@@ -1,6 +1,7 @@
 """Local packed inputs and online extraction exercised with real tiny training."""
 
 import json
+import shlex
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -220,6 +221,22 @@ def test_local_input_rejects_changed_membership(online_campaign):
     write_json(path, record)
     with pytest.raises(ValueError, match="identity/order"):
         load_local_inputs(cfg)
+
+
+def test_parquet_only_download_reports_metadata_repair_command(online_campaign):
+    cfg, downloads, requests = online_campaign
+    (cfg.trajectories_path / "releases/r0001/math/data.json").unlink()
+    with pytest.raises(FileNotFoundError, match="Missing trajectory metadata") as error:
+        load_local_inputs(cfg)
+    command = shlex.split(str(error.value).splitlines()[-1])
+    assert command[:3] == ["hf", "download", "azeeer/eagle3-qwen3-8b-trajectories-v1"]
+    assert command[3:7] == [
+        f"releases/r0001/{domain}/data.json" for domain in campaign.DOMAINS
+    ]
+    assert command[command.index("--local-dir") + 1] == str(cfg.trajectories_path)
+    assert command[command.index("--revision") + 1] == "a" * 40
+    assert not downloads
+    assert not requests
 
 
 def test_online_configuration_dry_run():

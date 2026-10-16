@@ -20,10 +20,14 @@ Download once outside training; omit commands for inputs already present:
 hf download azeeer/eagle3-qwen3-8b-lora-bank-r32-packed-v1 \
   --local-dir ./data --repo-type dataset
 hf download azeeer/eagle3-qwen3-8b-trajectories-v1 \
+  releases/r0001/math/data.json releases/r0001/code/data.json \
+  releases/r0001/stem/data.json releases/r0001/chat/data.json \
+  --revision 058f01d1f0585e98327b2c190a65c796da04fdd4 \
+  --local-dir ./trajectories --repo-type dataset
+hf download azeeer/eagle3-qwen3-8b-trajectories-v1 \
   --revision 058f01d1f0585e98327b2c190a65c796da04fdd4 \
   --local-dir ./trajectories --repo-type dataset \
-  --include 'releases/r0001/*/data.json' \
-    'releases/r0001/*/*/train.parquet' \
+  --include 'releases/r0001/*/*/train.parquet' \
     'releases/r0001/*/*/validation.parquet'
 hf download Qwen/Qwen3-8B \
   --revision b968826d9c46dd6066d109eabc6255188de91218 \
@@ -32,6 +36,11 @@ hf download RedHatAI/Qwen3-8B-speculator.eagle3 \
   --revision 08610ffa01dd9f16731fe8f627b85905b6aa51c4 \
   --local-dir ./models/qwen3-8b-eagle3
 ```
+
+The four `data.json` files are required metadata, alongside the subset folders.
+If the trajectory directory already contains the Parquet files but training
+reports a missing `data.json`, run only the first trajectories command above:
+it downloads four small metadata files without downloading Parquet or activations.
 
 Start extraction in another terminal on the same machine, GPU, and filesystem:
 

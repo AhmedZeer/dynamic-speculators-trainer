@@ -1,6 +1,7 @@
 """Local packed bank and token trajectories; no Hub calls or archive extraction."""
 
 import json
+import shlex
 from dataclasses import dataclass
 
 import pyarrow.parquet as pq
@@ -44,14 +45,43 @@ class LocalInputs:
     identity: dict
 
 
+def trajectory_record_path(cfg, bank):
+    """Explain how to repair a parquet-only download without fetching in training."""
+    relative = f"releases/{bank.hub.release}/{bank.dataset.category}/data.json"
+    try:
+        return local_path(cfg.trajectories_path, relative)
+    except FileNotFoundError as exc:
+        command = shlex.join(
+            [
+                "hf",
+                "download",
+                bank.hub.trajectories_repo,
+                *[
+                    f"releases/{bank.hub.release}/{domain}/data.json"
+                    for domain in DOMAINS
+                ],
+                "--revision",
+                bank.hub.trajectories_revision,
+                "--local-dir",
+                str(cfg.trajectories_path.resolve()),
+                "--repo-type",
+                "dataset",
+            ]
+        )
+        raise FileNotFoundError(
+            f"Missing trajectory metadata: {relative}. The subset Parquet files "
+            "alone are insufficient: data.json records their order, membership, "
+            "and pinned model revisions. Download only the four metadata files "
+            f"(existing Parquet files are kept), then rerun training:\n{command}"
+        ) from exc
+
+
 def read_trajectories(cfg, banks):  # noqa: C901 -- local membership validation
     manifests, subsets, tables, sources = {}, {}, [], []
     offset = 0
     for domain in DOMAINS:
         bank = banks[domain]
-        record_path = local_path(
-            cfg.trajectories_path, f"releases/{bank.hub.release}/{domain}/data.json"
-        )
+        record_path = trajectory_record_path(cfg, bank)
         record = json.loads(record_path.read_text())
         manifest = record["manifest"]
         spec = manifest["cache_spec"]
