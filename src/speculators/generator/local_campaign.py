@@ -43,6 +43,7 @@ class LocalInputs:
     subsets: dict
     targets: dict
     identity: dict
+    ram_cache: object = None
 
 
 def trajectory_record_path(cfg, bank):

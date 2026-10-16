@@ -128,7 +128,9 @@ class CampaignCorpus(Corpus):
                     self.summary_misses += 1
             values.append(value)
             self.summary_memory[path] = value
-            if len(self.summary_memory) > SUMMARY_MEMORY_ENTRIES:
+            if len(self.summary_memory) > getattr(
+                self, "summary_memory_limit", SUMMARY_MEMORY_ENTRIES
+            ):
                 self.summary_memory.popitem(last=False)
         self.summary_seconds += time.perf_counter() - started
         return (

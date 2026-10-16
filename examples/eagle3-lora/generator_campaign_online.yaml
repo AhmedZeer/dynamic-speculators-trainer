@@ -39,8 +39,8 @@ pilot:
 wandb:
   enabled: true
   mode: online
-  pretraining_project: eagle3-bank-vs-direct
-  group: bank-vs-direct-online-v1
+  pretraining_project: eagle3-generator-ablations-v2
+  layout: sections
   projects:
     conditioning: eagle3-generator-conditioning
     heatmap: eagle3-generator-heatmap
@@ -50,6 +50,8 @@ data_path: ./data
 trajectories_path: ./trajectories
 bank_release: b0002
 online:
+  # Full CPU activation tensor budget; summaries and buffering need extra RAM.
+  ram_cache_gib: 64
   endpoint: http://127.0.0.1:8000/v1
   shared_dir: /tmp/speculators-online
   concurrency: 2

@@ -5,6 +5,12 @@ import json
 
 from speculators.bank.artifacts import digest, write_json
 from speculators.bank.progress import report
+from speculators.generator.tracking_layout import (
+    SECTIONS,
+    sectioned_metrics,
+    subset_table,
+    validation_values,
+)
 
 METADATA_FILES = (
     "resolved_experiment.json",
@@ -54,6 +60,7 @@ class ExperimentTracker:
     def __init__(self, cfg, job, output, identity):
         self.cfg, self.job, self.output, self.identity = cfg, job, output, identity
         self.run = self.module = None
+        self.new_destination = False
         stage = "heatmap" if job["kind"].startswith("heatmap") else job["kind"]
         self.project = (
             cfg.wandb.pretraining_project
@@ -79,6 +86,13 @@ class ExperimentTracker:
             return self
         self.module = wandb_module()
         self.output.mkdir(parents=True, exist_ok=True)
+        previous_path = self.output / "wandb.json"
+        previous = (
+            json.loads(previous_path.read_text()) if previous_path.is_file() else {}
+        )
+        self.new_destination = any(
+            previous.get(key) != value for key, value in self.destination.items()
+        )
         local = self.cfg.staging_dir / "wandb"
         local.mkdir(parents=True, exist_ok=True)
         settings = self.cfg.model_dump(mode="json")
@@ -105,9 +119,20 @@ class ExperimentTracker:
             kwargs["resume"] = "allow"
         self.run = self.module.init(**kwargs)
         self.run.define_metric("optimizer_step")
-        self.run.define_metric("train/*", step_metric="optimizer_step")
-        self.run.define_metric("cache/*", step_metric="optimizer_step")
-        self.run.define_metric("validation/*", step_metric="optimizer_step")
+        if self.cfg.wandb.layout == "sections":
+            for section in SECTIONS:
+                self.run.define_metric(section + "/*", step_metric="optimizer_step")
+            self.run.define_metric(
+                "diagnostics/*", step_metric="optimizer_step", hidden=True
+            )
+            self.run.define_metric(
+                "validation_scores/overall_agreement_by_training_seconds",
+                step_metric="training_performance/cumulative_update_seconds",
+            )
+        else:
+            self.run.define_metric("train/*", step_metric="optimizer_step")
+            self.run.define_metric("cache/*", step_metric="optimizer_step")
+            self.run.define_metric("validation/*", step_metric="optimizer_step")
         write_json(
             self.output / "tracking_config.json", self.cfg.wandb.model_dump(mode="json")
         )
@@ -144,13 +169,38 @@ class ExperimentTracker:
 
     def log(self, values):
         if self.run is not None:
+            if self.cfg.wandb.layout == "sections":
+                values = sectioned_metrics(values)
             self.run.log(values)
 
     def training(self, step, values, final=False):
         if step == 1 or step % self.cfg.wandb.log_interval == 0 or final:
             self.log({"optimizer_step": step, **values})
 
-    def validation(self, metrics, step, epoch=None):
+    def validation(self, metrics, step, epoch=None, training_seconds=None):
+        if self.cfg.wandb.layout == "sections":
+            if self.run is None:
+                return
+            values = validation_values(metrics, step)
+            if training_seconds is not None:
+                values.update(
+                    {
+                        "training_performance/cumulative_update_seconds": (
+                            training_seconds
+                        ),
+                        "validation_scores/overall_agreement_by_training_seconds": (
+                            metrics["score"]
+                        ),
+                    }
+                )
+            rows = subset_table(metrics, step)
+            if rows:
+                values["validation_details/subsets"] = self.module.Table(
+                    columns=["update", "subset", "context_size", "metric", "value"],
+                    data=rows,
+                )
+            self.log(values)
+            return
         values = {
             "optimizer_step": step,
             "validation/score_mean_full_acc_0": metrics["score"],
@@ -180,6 +230,30 @@ class ExperimentTracker:
     def result(self, result):
         if self.run is None:
             return
+        if self.cfg.wandb.layout == "sections":
+            self.run.summary.update(
+                {
+                    "run_summary/final_agreement": result["score"],
+                    "run_summary/best_agreement": max(
+                        r["score"] for r in result["history"]
+                    ),
+                    **{
+                        f"run_summary/{key}": result[key]
+                        for key in (
+                            "elapsed_seconds",
+                            "setup_seconds",
+                            "training_seconds",
+                            "validation_seconds",
+                            "data_wait_seconds",
+                            "trainable_parameters",
+                            "score_change",
+                        )
+                        if key in result
+                    },
+                }
+            )
+            if not self.cfg.wandb.upload_artifacts:
+                return
         self.run.summary.update(
             {
                 "final_score": result["score"],
@@ -256,6 +330,19 @@ def log_completed(cfg, corpus, job, output, identity, result):
     if tracker.already_finished():
         return
     with tracker:
+        timing_path = output / "timing.json"
+        timing = iter(
+            json.loads(timing_path.read_text())
+            if cfg.wandb.layout == "sections" and timing_path.is_file()
+            else []
+        )
+        if cfg.wandb.layout == "sections" and all(
+            "update" in r for r in result["history"]
+        ):
+            replay_campaign_history(tracker, result["history"], list(timing))
+            tracker.result(result)
+            return
+        pending = next(timing, None)
         for metrics in result["history"]:
             epoch = metrics.get("epoch")
             step = metrics.get("optimizer_step")
@@ -265,8 +352,48 @@ def log_completed(cfg, corpus, job, output, identity, result):
                     if epoch is None
                     else epoch_updates(cfg, corpus, cfg.conditioning_subset, epoch)
                 )
-            tracker.validation(metrics, step, epoch)
+            while pending is not None and pending["update"] <= step:
+                tracker.training(
+                    pending["update"],
+                    {k: v for k, v in pending.items() if k != "update"},
+                    final=pending["update"] == result["history"][-1].get("update"),
+                )
+                pending = next(timing, None)
+            tracker.validation(
+                metrics, step, epoch, training_seconds=metrics.get("training_seconds")
+            )
+            if cfg.wandb.layout == "sections" and "validation_seconds" in metrics:
+                tracker.log(
+                    {
+                        "optimizer_step": step,
+                        "validation/seconds": metrics["validation_seconds"],
+                        "validation/examples": metrics["validation_examples"],
+                    }
+                )
         tracker.result(result)
+
+
+def replay_campaign_history(tracker, history, timing):
+    """Replay recorded measurements in step order when moving to a new project."""
+    events = [(r["update"], 0, r) for r in timing]
+    events.extend((r["update"], 1, r) for r in history)
+    for step, validation, row in sorted(events, key=lambda event: event[:2]):
+        if not validation:
+            tracker.training(
+                step,
+                {k: v for k, v in row.items() if k != "update"},
+                final=step == timing[-1]["update"],
+            )
+            continue
+        tracker.validation(row, step, training_seconds=row.get("training_seconds"))
+        if "validation_seconds" in row:
+            tracker.log(
+                {
+                    "optimizer_step": step,
+                    "validation/seconds": row["validation_seconds"],
+                    "validation/examples": row["validation_examples"],
+                }
+            )
 
 
 def log_heatmap_summary(cfg, results, root):

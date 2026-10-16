@@ -6,7 +6,7 @@ from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
-from threading import Lock
+from threading import RLock
 
 import openai
 import torch
@@ -20,12 +20,44 @@ from speculators.data_generation.vllm_client import (
 )
 from speculators.generator.campaign_data import CampaignCorpus
 
-SUMMARY_LIMIT = 1024
 HIDDEN_STATE_NDIM = 3
 
 
+class ActivationRAM:
+    """Campaign-owned CPU cache, shared by sequential jobs on the same rows."""
+
+    def __init__(self, capacity_gib, validation_indices=()):
+        self.limit = int(capacity_gib * 2**30)
+        self.validation_indices = set(validation_indices)
+        self.lock = RLock()
+        self.full = OrderedDict()
+        self.summaries = OrderedDict()
+        self.conditioning = OrderedDict()
+        self.bytes = self.peak_bytes = self.evictions = 0
+
+    def put(self, index, payload):
+        size = sum(t.numel() * t.element_size() for t in payload.values())
+        with self.lock:
+            if size > self.limit or index in self.full:
+                return
+            while self.full and self.bytes + size > self.limit:
+                victim = next(
+                    (i for i in self.full if i not in self.validation_indices), None
+                )
+                if victim is None:
+                    if index not in self.validation_indices:
+                        return
+                    victim = next(iter(self.full))
+                old = self.full.pop(victim)
+                self.bytes -= sum(t.numel() * t.element_size() for t in old.values())
+                self.evictions += 1
+            self.full[index] = payload
+            self.bytes += size
+            self.peak_bytes = max(self.peak_bytes, self.bytes)
+
+
 class OnlineActivations:
-    def __init__(self, cfg, rows, bank, *, client=None):
+    def __init__(self, cfg, rows, bank, *, client=None, ram=None):
         self.cfg, self.rows, self.bank = cfg, rows, bank
         self.settings = cfg.online
         self.root = self.settings.shared_dir.resolve()
@@ -33,9 +65,10 @@ class OnlineActivations:
         self.output_root = cfg.output_root
         self.output_root.mkdir(parents=True, exist_ok=True)
         self.pool = ThreadPoolExecutor(max_workers=self.settings.concurrency)
-        self.lock = Lock()
+        self.ram = ram if ram is not None else ActivationRAM(cfg.online.ram_cache_gib)
+        self.lock = self.ram.lock
         self.futures = OrderedDict()
-        self.summaries = OrderedDict()
+        self.summaries = self.ram.summaries
         self.stats = dict.fromkeys(
             (
                 "requests",
@@ -47,6 +80,8 @@ class OnlineActivations:
                 "peak_temporary_bytes",
                 "temporary_bytes",
                 "buffer_hits",
+                "hits",
+                "misses",
             ),
             0,
         )
@@ -113,8 +148,8 @@ class OnlineActivations:
             with self.lock:
                 self.summaries[index] = vector
                 self.summaries.move_to_end(index)
-                while len(self.summaries) > SUMMARY_LIMIT:
-                    self.summaries.popitem(last=False)
+            if not summary:
+                self.ram.put(index, payload)
             self._add(
                 requests=1,
                 prompt_requests=int(summary),
@@ -136,6 +171,8 @@ class OnlineActivations:
         with self.lock:
             for ref in refs:
                 key = (ref["index"], ref["summary"])
+                if not key[1] and key[0] in self.ram.full:
+                    continue
                 if key in self.futures:
                     continue
                 if key[1] and (
@@ -177,12 +214,19 @@ class OnlineActivations:
                 discarded.result()
 
     def get_full(self, index):
+        with self.lock:
+            if index in self.ram.full and (index, False) not in self.futures:
+                self.stats["hits"] += 1
+                self.ram.full.move_to_end(index)
+                return self.ram.full[index]
+            self.stats["misses"] += 1
         key = (index, False)
         future = self._future(index, False)
         result = future.result()
         with self.lock:
             if self.futures.get(key) is future:
                 del self.futures[key]
+        self.ram.put(index, result)
         return result
 
     def get_summary(self, index):
@@ -213,8 +257,11 @@ class OnlineActivations:
             stats["buffered_examples"] = len(self.futures)
         return {
             **stats,
-            "cache_bytes": 0,
-            "peak_cache_bytes": stats["peak_temporary_bytes"],
+            "cache_bytes": self.ram.bytes,
+            "peak_cache_bytes": self.ram.peak_bytes,
+            "evictions": self.ram.evictions,
+            "hit_rate": stats["hits"] / max(1, stats["hits"] + stats["misses"]),
+            "summary_examples": len(self.summaries),
             "disk_free_bytes": shutil.disk_usage(self.output_root).free,
             "temporary_disk_free_bytes": shutil.disk_usage(self.root).free,
         }
@@ -262,7 +309,8 @@ class OnlineCorpus(CampaignCorpus):
         self.local = cfg.staging_dir / self.cache_key
         self.summary_root = cfg.staging_dir / "online-summaries"
         self.summary_root.mkdir(parents=True, exist_ok=True)
-        self.summary_memory = OrderedDict()
+        self.summary_memory = cache.ram.conditioning
+        self.summary_memory_limit = len(self.rows)
         self.summary_hits = self.summary_misses = 0
         self.summary_seconds = self.last_batch_data_seconds = 0.0
         self.summaries = None

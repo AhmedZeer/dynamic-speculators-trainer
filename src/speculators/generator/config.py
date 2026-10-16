@@ -75,6 +75,7 @@ class Heatmap(Settings):
 
 
 class WandbSettings(Settings):
+    layout: Literal["legacy", "sections"] = "legacy"
     pretraining_project: str = "eagle3-generator-pretraining"
     enabled: bool = False
     mode: Literal["online", "offline"] = "offline"

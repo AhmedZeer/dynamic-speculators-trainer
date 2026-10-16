@@ -29,6 +29,12 @@ COLORS = {
     4: ("#9b361e", "#efa087"),
 }
 ADAPTATION_ARMS = ("fresh_generator", "bank_2", "bank_1", "fresh_lora")
+ADAPTATION_COLORS = {
+    "fresh_generator": "#7c3a99",
+    "bank_2": "#17633b",
+    "bank_1": "#174a7e",
+    "fresh_lora": "#bd6014",
+}
 
 
 def subset_names(numbers):
@@ -93,6 +99,13 @@ def job_config(cfg, job, *, staging_dir=None):
         staging_dir=staging_dir or cfg.staging_dir,
     )
     values["wandb"] = cfg.wandb.model_copy(deep=True)
+    if cfg.wandb.layout == "sections":
+        values["wandb"].group = {
+            "pilot": "pilot",
+            "pretraining": "experiment-1",
+            "adaptation": "experiment-2",
+        }[job["stage"]]
+        return ExperimentConfig.model_validate(values)
     values["wandb"].group = f"{cfg.wandb.group or cfg.output_root.name}-{job['stage']}"
     if job["stage"] == "adaptation":
         values["wandb"].pretraining_project = (
@@ -171,13 +184,25 @@ def run_one(  # noqa: C901 -- shared online/offline run lifecycle
             load_local_inputs,
         )
         from speculators.generator.online_activations import (  # noqa: PLC0415
+            ActivationRAM,
             OnlineActivations,
             OnlineCorpus,
         )
 
         local_inputs = local_inputs or load_local_inputs(cfg)
         bank = local_inputs.banks["math"]
-        cache = OnlineActivations(cfg, local_inputs.rows, bank)
+        if local_inputs.ram_cache is None:
+            local_inputs.ram_cache = ActivationRAM(
+                cfg.online.ram_cache_gib,
+                [
+                    i
+                    for subset in local_inputs.subsets.values()
+                    for i in subset["validation_indices"]
+                ],
+            )
+        cache = OnlineActivations(
+            cfg, local_inputs.rows, bank, ram=local_inputs.ram_cache
+        )
     else:
         bank = BankConfig.load(local_cfg.bank_config)
         cache = CampaignCache(
@@ -432,7 +457,7 @@ def plot_comparisons(cfg, results, stage):
             [r["update"] for r in history],
             [r["score"] for r in history],
             label=job["label"],
-            color=job.get("color"),
+            color=job.get("color", ADAPTATION_COLORS.get(job["arm"])),
         )
         rows.extend(
             {
@@ -453,6 +478,25 @@ def plot_comparisons(cfg, results, stage):
     fig.savefig(root / "comparison.png", dpi=160)
     fig.savefig(root / "comparison.pdf")
     plt.close(fig)
+    fig, ax = plt.subplots(figsize=(9, 5))
+    for result in results:
+        recorded = [r for r in result["history"] if "training_seconds" in r]
+        job = result["job"]
+        ax.plot(
+            [r["training_seconds"] for r in recorded],
+            [r["score"] for r in recorded],
+            label=job["label"],
+            color=job.get("color", ADAPTATION_COLORS.get(job["arm"])),
+        )
+    ax.set(
+        xlabel="Measured cumulative training seconds",
+        ylabel="Offline agreement (full_acc_0), context 4",
+        ylim=(0, 1),
+    )
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(root / "comparison_by_time.png", dpi=160)
+    plt.close(fig)
     write_json(root / "comparison.json", rows)
     if cfg.wandb.enabled:
         job = {
@@ -471,6 +515,9 @@ def plot_comparisons(cfg, results, stage):
                 {
                     "comparison/curves": tracker.module.Image(
                         str(root / "comparison.png")
+                    ),
+                    "comparison/curves_by_training_seconds": tracker.module.Image(
+                        str(root / "comparison_by_time.png")
                     ),
                     "comparison/data": tracker.module.Table(
                         columns=["run", "update", "offline_agreement", "color"],

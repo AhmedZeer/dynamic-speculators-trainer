@@ -16,7 +16,7 @@ from speculators.bank.config import BankConfig
 from speculators.generator import campaign, online_activations
 from speculators.generator.campaign_config import CampaignConfig
 from speculators.generator.local_campaign import load_local_inputs
-from speculators.generator.online_activations import OnlineActivations
+from speculators.generator.online_activations import ActivationRAM, OnlineActivations
 from tests.unit.generator.test_campaign import tiny_campaign  # noqa: F401
 
 
@@ -246,3 +246,51 @@ def test_online_configuration_dry_run():
     result = campaign.run_campaign(cfg, dry_run=True)
     assert len(result["jobs"]) == 10
     assert cfg.online.buffered_examples == 8
+    assert cfg.online.ram_cache_gib == 64
+    assert cfg.wandb.pretraining_project == "eagle3-generator-ablations-v2"
+    assert {campaign.job_config(cfg, j).wandb.group for j in result["jobs"]} == {
+        "experiment-1",
+        "experiment-2",
+    }
+
+
+def test_ram_cache_enforces_bytes_and_prioritizes_validation():
+    payload = {
+        "token_ids": torch.ones(2, dtype=torch.int64),
+        "hidden_states": torch.zeros(2, 4, 8),
+    }
+    size = sum(t.numel() * t.element_size() for t in payload.values())
+    ram = ActivationRAM(2 * size / 2**30, validation_indices=[0, 4])
+    ram.put(0, payload)
+    ram.put(1, payload)
+    ram.put(2, payload)
+    assert list(ram.full) == [0, 2]
+    assert ram.bytes == 2 * size
+    ram.put(4, payload)
+    ram.put(5, payload)
+    assert list(ram.full) == [0, 4]
+    assert ram.peak_bytes <= ram.limit
+    assert ram.evictions == 2
+    disabled = ActivationRAM(0)
+    disabled.put(0, payload)
+    assert not disabled.full
+
+
+def test_ram_cache_reuses_full_states_across_jobs(online_campaign):
+    cfg, _, requests = online_campaign
+    inputs = load_local_inputs(cfg)
+    ram = ActivationRAM(1, [0])
+    first = OnlineActivations(cfg, inputs.rows, inputs.banks["math"], ram=ram)
+    try:
+        expected = first.get_full(0)
+        assert first.get_full(0) is expected
+    finally:
+        first.close()
+    second = OnlineActivations(cfg, inputs.rows, inputs.banks["math"], ram=ram)
+    try:
+        assert second.get_full(0) is expected
+        assert len(requests) == 1
+        assert second.snapshot()["hits"] == 1
+        assert second.get_summary(0).shape == (24,)
+    finally:
+        second.close()

@@ -97,11 +97,13 @@ file high-water mark, free disk, and checkpoint sizes. These also go to W&B.
 Extraction seconds sum concurrent requests, so can exceed elapsed wall time.
 
 Console validation progress prints completed contexts and measured elapsed seconds.
-Each validation pass also logs `validation/seconds`, cumulative validation seconds,
-and per-subset seconds to W&B. Training logs each reported update's wall seconds,
-cumulative training seconds, and `time/session_elapsed_seconds`. `result.json`
-and W&B summaries record `training_seconds`, `validation_seconds`, and
-`data_wait_seconds`. These training/validation totals include completed updates
+Each validation pass logs `validation_performance/pass_seconds`, cumulative
+validation seconds, and examples/s to W&B. Per-subset metrics and measured seconds
+are collected in one `validation_details/subsets` table. Training logs each
+reported update's wall seconds, cumulative training seconds, and
+`run_summary/session_elapsed_seconds`. `result.json`
+records `training_seconds`, `validation_seconds`, and `data_wait_seconds`; W&B
+summaries use the same names under `run_summary/`. These totals include completed updates
 and passes restored from checkpoints; `elapsed_seconds` measures only the current
 job invocation, including model loading, initial validation, tracker startup, and
 checkpoint writes, but excluding final reporting and process cleanup.
@@ -124,9 +126,35 @@ trajectories and reuse those states for prompt conditioning. Defaults are two
 concurrent extraction requests and eight buffered examples. At 8192 tokens,
 4 layers, and 4096 BF16 features, a full example is approximately 256 MiB;
 eight examples contain about 2 GiB of tensor payloads, plus loading/collation
-overhead. Shared activation files are deleted after buffered reading; full states
-are regenerated on subsequent visits. Models, local bank/trajectories, summaries,
+overhead. In addition, `online.ram_cache_gib: 64` retains up to 64 GiB of full
+CPU activation tensors across sequential jobs in one campaign process. Validation
+entries are prioritized; training entries use the remaining space with LRU eviction.
+Prompt summaries are retained independently, outside this full-activation budget.
+Shared files are still deleted after reading; cache misses regenerate full states.
+Restarting the CLI clears full activations in RAM, while disk prompt summaries
+remain reusable. Set `ram_cache_gib: 0` to disable the full-activation RAM cache.
+Allow extra RAM for summaries, the eight-example buffer, collation, models, and
+checkpoint serialization. Models, local bank/trajectories, summaries,
 checkpoints, and optimizer states need additional persistent disk space.
+
+The default W&B project is `eagle3-generator-ablations-v2`, with run groups
+`pilot`, `experiment-1`, and `experiment-2`. Metric prefixes create separate
+sections: `validation_scores`, `validation_losses`, `training_losses`,
+`training_performance`, `validation_performance`, `cache_performance`,
+`resources`, `optimization`, and `run_summary`. Memory/storage charts use GiB;
+durations use measured seconds. Conditional-accuracy diagnostics remain logged
+but are hidden from automatic panels. Add them manually when needed.
+The validation-detail table replaces per-subset scalar chart proliferation.
+Agreement is plotted against optimizer updates and measured cumulative training
+seconds. Aggregate comparison images retain dark bank/light direct colors by
+scale; adaptation arms have four distinct colors.
+
+Run the same `--stage all` command after pulling this change. The RAM-cache
+settings trigger a fresh pilot profile. Existing compatible completed training
+jobs are reused and their saved validation history is logged to the new project;
+interrupted jobs resume from checkpoints. These operational changes do not alter
+the training identity or require a new output directory. Legacy configurations
+retain their existing logging layout unless `wandb.layout: sections` is selected.
 
 Preserve `provenance/vllm` alongside the training provenance, configurations,
 data identities, patches, and checkpoint checksums when sharing results.

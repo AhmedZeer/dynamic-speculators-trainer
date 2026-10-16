@@ -21,7 +21,7 @@ from speculators.generator.model import (
     factor_loss,
     factor_parameters,
 )
-from speculators.generator.tracking import ExperimentTracker
+from speculators.generator.tracking import ExperimentTracker, replay_campaign_history
 from speculators.train.utils import normalize_counted_metrics
 
 
@@ -310,6 +310,8 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
         ProcessMonitor(runtime.device) as monitor,
         ExperimentTracker(cfg, job, output, identity) as tracker,
     ):
+        if progress and tracker.new_destination and cfg.wandb.layout == "sections":
+            replay_campaign_history(tracker, history, timing)
 
         def validate():
             synchronize(runtime)
@@ -321,14 +323,18 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
             row = {
                 "update": progress,
                 "validation_seconds": time.perf_counter() - validation_started,
+                "training_seconds": sum(t["train/update_seconds"] for t in timing),
                 **metrics,
             }
             history.append(row)
-            tracker.validation(metrics, progress)
+            tracker.validation(
+                metrics, progress, training_seconds=row["training_seconds"]
+            )
             tracker.log(
                 {
                     "optimizer_step": progress,
                     "validation/seconds": row["validation_seconds"],
+                    "validation/examples": metrics["validation_examples"],
                     "validation/cumulative_seconds": sum(
                         r["validation_seconds"] for r in history
                     ),
@@ -394,6 +400,13 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
                     / max(elapsed, 1e-9),
                     **{f"train/{k}": v for k, v in monitor.snapshot().items()},
                     **{f"cache/{k}": v for k, v in cache.items()},
+                    "cache/conditioning_hits": runtime.corpus.summary_hits,
+                    "cache/conditioning_misses": runtime.corpus.summary_misses,
+                    "cache/conditioning_hit_rate": runtime.corpus.summary_hits
+                    / max(
+                        1, runtime.corpus.summary_hits + runtime.corpus.summary_misses
+                    ),
+                    "cache/conditioning_seconds": runtime.corpus.summary_seconds,
                 }
             )
             if runtime.device.type == "cuda":

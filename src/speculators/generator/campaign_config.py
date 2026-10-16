@@ -37,6 +37,7 @@ class PilotSettings(Settings):
 
 
 class OnlineSettings(Settings):
+    ram_cache_gib: float = Field(default=64, ge=0)
     endpoint: str = "http://127.0.0.1:8000/v1"
     shared_dir: Path = Path("/tmp/speculators-online")  # noqa: S108
     concurrency: int = Field(default=2, ge=1)
