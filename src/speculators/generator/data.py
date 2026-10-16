@@ -1,5 +1,6 @@
 """Compact prompt summaries and bounded, buffered bank reads."""
 
+import json
 import random
 import time
 from collections import OrderedDict, deque
@@ -8,6 +9,7 @@ from pathlib import Path
 
 import torch
 from datasets import load_from_disk
+from safetensors import safe_open
 from safetensors.torch import load
 
 from speculators.bank.artifacts import digest, load_subset, write_json
@@ -368,8 +370,6 @@ def discover_snapshots(root, subset):
     for path in sorted(
         (root / "runs" / subset).glob("seed-*/snapshots/step-*/entry.json")
     ):
-        import json  # noqa: PLC0415
-
         entry = json.loads(path.read_text())
         adapter = path.parent / "adapter" / "adapter_model.safetensors"
         if not adapter.exists():
@@ -421,11 +421,19 @@ class FactorCache:
         self.size = 0
 
     def get(self, path):
-        if path in self.items:
-            self.items.move_to_end(path)
-            return self.items[path]
+        key = digest(path) if isinstance(path, dict) else path
+        if key in self.items:
+            self.items.move_to_end(key)
+            return self.items[key]
         with stage_progress(f"Reading bank adapter {path}", quiet=True):
-            state = load(Path(path).read_bytes())
+            if isinstance(path, dict):
+                with safe_open(path["file"], framework="pt", device="cpu") as tensors:
+                    state = {
+                        name: tensors.get_tensor(packed).clone()
+                        for name, packed in path["tensor_keys"].items()
+                    }
+            else:
+                state = load(Path(path).read_bytes())
         factors = {}
         for name, (in_features, out_features) in self.shapes.items():
             pair = []
@@ -451,6 +459,6 @@ class FactorCache:
                 self.size -= sum(
                     v.numel() * v.element_size() for p in old.values() for v in p
                 )
-            self.items[path] = factors
+            self.items[key] = factors
             self.size += size
         return factors

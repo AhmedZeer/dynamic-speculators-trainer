@@ -342,7 +342,7 @@ def tiny_campaign(tmp_path, monkeypatch):
 
     monkeypatch.setattr(campaign_cache, "_download_with_retries", download)
 
-    def factory(config, bank, *, corpus_factory):
+    def factory(config, bank, *, corpus_factory, model_paths=None):
         runtime = Runtime.__new__(Runtime)
         runtime.cfg, runtime.bank = config, bank
         runtime.device, runtime.dtype = torch.device("cpu"), torch.float32

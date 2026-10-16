@@ -2,6 +2,7 @@
 
 import re
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, model_validator
 
@@ -35,10 +36,27 @@ class PilotSettings(Settings):
         return self
 
 
+class OnlineSettings(Settings):
+    endpoint: str = "http://127.0.0.1:8000/v1"
+    shared_dir: Path = Path("/tmp/speculators-online")  # noqa: S108
+    concurrency: int = Field(default=2, ge=1)
+    buffered_examples: int = Field(default=8, ge=8)
+    request_timeout: float = Field(default=600, gt=0)
+    max_retries: int = Field(default=3, ge=0)
+    reserve_gib: float = Field(default=8, ge=0)
+    target_model_path: Path = Path("models/qwen3-8b")
+    drafter_model_path: Path = Path("models/qwen3-8b-eagle3")
+
+
 class CampaignConfig(ExperimentConfig):
     """The ten-job design; budgets may be reduced for a separate smoke campaign."""
 
     bank_revision: str = "2305403f0f3b560fafb6c6d261c370ab3a95759d"
+    activation_source: Literal["hub", "vllm"] = "hub"
+    data_path: Path | None = None
+    trajectories_path: Path | None = None
+    bank_release: str = "b0002"
+    online: OnlineSettings = Field(default_factory=OnlineSettings)
     input_root: Path = Path("output/generator-campaign-inputs")
     output_root: Path = Path("output/generator-campaign")
     staging_dir: Path = Path("/tmp/speculators-campaign")  # noqa: S108
@@ -63,6 +81,10 @@ class CampaignConfig(ExperimentConfig):
 
     @model_validator(mode="after")
     def campaign_contract(self):
+        if self.activation_source == "vllm" and (
+            self.data_path is None or self.trajectories_path is None
+        ):
+            raise ValueError("Online campaign requires data_path and trajectories_path")
         if not re.fullmatch(r"[0-9a-f]{40}", self.bank_revision):
             raise ValueError("Campaign requires a complete bank repository SHA")
         if len(self.additional_bank_configs) != len(DOMAINS) - 1:

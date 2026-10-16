@@ -118,6 +118,10 @@ def train_update(runtime, generator, optimizer, episodes, snapshots, update, obj
     examples = 0
     for episode, item in enumerate(episodes):
         cohort = item["indices"]
+        started = time.perf_counter()
+        if hasattr(runtime.corpus, "prepare_episode"):
+            runtime.corpus.prepare_episode(cohort, full=objective != "bank")
+        data_seconds += time.perf_counter() - started
         examples += len(cohort)
         # Stable augmentation/dropout RNG independent of snapshot sampling.
         torch.manual_seed(cfg.seed + update * 100003 + episode * 1009)
@@ -209,6 +213,11 @@ def source_weights(runtime, generator, job):
 
 
 def _prefetch(runtime, schedule, step, updates, lookahead, objective):
+    if hasattr(runtime.corpus, "prepare_episode"):
+        runtime.corpus.prepare_episode(
+            schedule.update(step)[0]["indices"], full=objective != "bank"
+        )
+        return
     indices = [
         i
         for number in range(step, min(updates, step + lookahead))
@@ -358,8 +367,10 @@ def run_training(runtime, job, output, identity, *, lookahead):  # noqa: C901 --
                 }
             )
             if runtime.device.type == "cuda":
+                free_bytes, total_bytes = torch.cuda.mem_get_info(runtime.device)
                 values.update(
                     {
+                        "train/gpu_device_used_bytes": total_bytes - free_bytes,
                         "train/gpu_peak_allocated_bytes": (
                             torch.cuda.max_memory_allocated(runtime.device)
                         ),

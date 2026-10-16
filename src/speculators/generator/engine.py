@@ -54,7 +54,7 @@ def set_learning_rate(optimizer, cfg, step):
 
 
 class Runtime:
-    def __init__(self, cfg, bank, *, corpus_factory=Corpus):
+    def __init__(self, cfg, bank, *, corpus_factory=Corpus, model_paths=None):
         self.cfg, self.bank = cfg, bank
         self.device = torch.device(cfg.device)
         if self.device.type == "cuda" and not torch.cuda.is_available():
@@ -66,10 +66,16 @@ class Runtime:
         paths = {}
         for role in ("target", "drafter"):
             with stage_progress(f"Resolving pinned {role} snapshot"):
-                paths[role] = snapshot_download(
-                    getattr(bank.models, role),
-                    revision=self.corpus.manifest["revisions"][f"{role}_sha"],
-                )
+                if model_paths is not None:
+                    local = Path(model_paths[role]).resolve()
+                    if not (local / "config.json").is_file():
+                        raise FileNotFoundError(f"Missing local {role} model: {local}")
+                    paths[role] = str(local)
+                else:
+                    paths[role] = snapshot_download(
+                        getattr(bank.models, role),
+                        revision=self.corpus.manifest["revisions"][f"{role}_sha"],
+                    )
         with stage_progress("Loading frozen EAGLE3 and verifier head/norm"):
             # Convert external drafter format before setting its attention backend.
             from speculators.convert.entrypoints import (  # noqa: PLC0415

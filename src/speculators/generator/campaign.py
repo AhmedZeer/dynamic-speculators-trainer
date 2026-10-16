@@ -151,20 +151,44 @@ def _source(cfg, job):
     }
 
 
-def run_one(
-    cfg, original_job, *, cache_root=None, staging_dir=None, download_settings=None
+def run_one(  # noqa: C901 -- shared online/offline run lifecycle
+    cfg,
+    original_job,
+    *,
+    cache_root=None,
+    staging_dir=None,
+    download_settings=None,
+    local_inputs=None,
 ):
     job = _source(cfg, original_job)
     local_cfg = job_config(cfg, job, staging_dir=staging_dir)
     output = cfg.output_root / job["stage"] / job.get("profile", "") / job["label"]
-    bank = BankConfig.load(local_cfg.bank_config)
-    cache = CampaignCache(
-        cache_root or cfg.staging_dir / "activation-files",
-        download_settings or cfg.downloads,
-    )
+    online = cfg.activation_source == "vllm"
+    if online:
+        from speculators.generator.local_campaign import (  # noqa: PLC0415
+            load_local_inputs,
+        )
+        from speculators.generator.online_activations import (  # noqa: PLC0415
+            OnlineActivations,
+            OnlineCorpus,
+        )
+
+        local_inputs = local_inputs or load_local_inputs(cfg)
+        bank = local_inputs.banks["math"]
+        cache = OnlineActivations(cfg, local_inputs.rows, bank)
+    else:
+        bank = BankConfig.load(local_cfg.bank_config)
+        cache = CampaignCache(
+            cache_root or cfg.staging_dir / "activation-files",
+            download_settings or cfg.downloads,
+        )
     runtime = None
     try:
-        corpus = CampaignCorpus(local_cfg, bank, cache)
+        corpus = (
+            OnlineCorpus(local_cfg, bank, cache, local_inputs)
+            if online
+            else CampaignCorpus(local_cfg, bank, cache)
+        )
         for name in job["subsets"]:
             if len(corpus.indices(name)) != cfg.expected_train_examples:
                 raise ValueError(f"Unexpected training membership size: {name}")
@@ -172,19 +196,38 @@ def run_one(
             if len(corpus.indices(name, True)) != cfg.expected_validation_examples:
                 raise ValueError(f"Unexpected validation membership size: {name}")
         if job["objective"] == "bank":
-            job["snapshots_by_subset"] = first_epoch_targets(corpus, job["subsets"])
+            job["snapshots_by_subset"] = (
+                {s: local_inputs.targets[s] for s in job["subsets"]}
+                if online
+                else first_epoch_targets(corpus, job["subsets"])
+            )
         identity = run_identity(local_cfg, bank, corpus, job)
         identity["campaign"] = {
             "bank_revision": cfg.bank_revision,
             "trajectory_revision": bank.hub.trajectories_revision,
             "episode_schedule_version": 1,
         }
+        if online:
+            identity["campaign"] = {
+                "packed_catalog_sha256": local_inputs.identity["packed_catalog_sha256"],
+                "activation_source": "vllm",
+                "episode_schedule_version": 1,
+            }
         if not begin_run(output, identity):
             result = json.loads((output / "result.json").read_text())
             log_completed(local_cfg, corpus, job, output, identity, result)
             return result
         write_json(output / "configuration.json", local_cfg.model_dump(mode="json"))
-        runtime = Runtime(local_cfg, bank, corpus_factory=lambda _cfg, _bank: corpus)
+        runtime_args = {}
+        if online:
+            cache.check_server()
+            runtime_args["model_paths"] = {
+                "target": cfg.online.target_model_path,
+                "drafter": cfg.online.drafter_model_path,
+            }
+        runtime = Runtime(
+            local_cfg, bank, corpus_factory=lambda _cfg, _bank: corpus, **runtime_args
+        )
         return run_training(
             runtime, job, output, identity, lookahead=cfg.downloads.lookahead_updates
         )
@@ -198,6 +241,18 @@ def run_one(
 
 def campaign_identity(cfg):
     values = cfg.model_dump(mode="json")
+    if cfg.activation_source == "hub":
+        for key in (
+            "activation_source",
+            "data_path",
+            "trajectories_path",
+            "bank_release",
+            "online",
+        ):
+            values.pop(key)
+    else:
+        values.pop("online")
+        values.pop("bank_revision")
     # Operational cache/concurrency/W&B settings may change after the pilot.
     for key in (
         "downloads",
@@ -215,6 +270,14 @@ def campaign_identity(cfg):
 
 
 def pilot_profile(cfg):
+    if cfg.activation_source == "vllm":
+        return digest(
+            {
+                "online": cfg.online.model_dump(mode="json"),
+                "updates": cfg.pilot.updates,
+                "version": 1,
+            }
+        )[:12]
     return digest(
         {
             "downloads": cfg.downloads.model_dump(exclude={"workers"}),
@@ -417,6 +480,12 @@ def plot_comparisons(cfg, results, stage):
 
 
 def run_campaign(cfg, stage="all", dry_run=False):  # noqa: C901 -- serial stage orchestration
+    if cfg.activation_source == "vllm":
+        from speculators.generator.online_campaign import (  # noqa: PLC0415
+            run_online_campaign,
+        )
+
+        return run_online_campaign(cfg, stage, dry_run)
     planned = jobs(cfg)
     manifest = {
         "version": 1,

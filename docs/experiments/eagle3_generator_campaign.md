@@ -1,5 +1,8 @@
 # Paired bank warmup and direct pretraining
 
+For the local packed-bank workflow with online vLLM activations on an A100
+80 GB, see [the online campaign runbook](eagle3_generator_campaign_online.md).
+
 This campaign runs six pretraining jobs and four joint adaptation jobs, serially
 on one A100 40 GB. It reads existing Hugging Face activations on demand. It does
 not launch vLLM, generate new trajectories, or measure decoding acceptance.

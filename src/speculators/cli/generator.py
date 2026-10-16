@@ -21,8 +21,13 @@ def campaign(
         str, typer.Option(help="prepare, pilot, pretraining, adaptation, or all")
     ] = "all",
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    data_path: Annotated[Path | None, typer.Option("--data-path")] = None,
+    trajectories_path: Annotated[
+        Path | None, typer.Option("--trajectories-path")
+    ] = None,
+    vllm_endpoint: Annotated[str | None, typer.Option("--vllm-endpoint")] = None,
 ):
-    """Run the paired bank/direct campaign and joint adaptation; no vLLM inference."""
+    """Run paired bank/direct training and joint adaptation with offline validation."""
     import json  # noqa: PLC0415
 
     from speculators.generator.campaign import run_campaign  # noqa: PLC0415
@@ -30,7 +35,14 @@ def campaign(
 
     if stage not in ("prepare", "pilot", "pretraining", "adaptation", "all"):
         raise typer.BadParameter("Unknown campaign stage")
-    result = run_campaign(CampaignConfig.load(config), stage, dry_run)
+    cfg = CampaignConfig.load(config)
+    if data_path is not None:
+        cfg.data_path = data_path
+    if trajectories_path is not None:
+        cfg.trajectories_path = trajectories_path
+    if vllm_endpoint is not None:
+        cfg.online.endpoint = vllm_endpoint
+    result = run_campaign(cfg, stage, dry_run)
     typer.echo(json.dumps(result, indent=2))
 
 
