@@ -17,6 +17,7 @@ from speculators.cli import app
 from speculators.generator import campaign, campaign_cache, campaign_train
 from speculators.generator.campaign_config import CampaignConfig, DownloadSettings
 from speculators.generator.campaign_data import CampaignCorpus, EpisodeSchedule
+from speculators.generator.campaign_resume import compatible_campaign
 from speculators.generator.data import FactorCache
 from speculators.generator.engine import Runtime
 from speculators.generator.model import install_adapters
@@ -454,6 +455,52 @@ def test_resume_matches_uninterrupted_training(tiny_campaign, monkeypatch):
             left["model"][name], right["model"][name], rtol=0, atol=0
         )
     assert resumed["score"] == uninterrupted["score"]
+
+
+def test_resume_after_intentional_update_budget_change(tiny_campaign, monkeypatch):
+    cfg, _ = tiny_campaign
+    cfg.optimization.pretraining_updates = 3
+    job = campaign.jobs(cfg)[0]
+    original = campaign_train.train_update
+
+    def interrupt(*args, **kwargs):
+        if args[5] == 1:
+            raise RuntimeError("simulated interruption")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(campaign_train, "train_update", interrupt)
+    with pytest.raises(RuntimeError, match="interruption"):
+        campaign.run_one(cfg, job)
+    output = cfg.output_root / "pretraining" / job["label"]
+    saved_identity = json.loads((output / "resolved_experiment.json").read_text())
+    before = torch.load(output / "checkpoint.pt", weights_only=True)
+    assert before["progress"] == 1
+    cfg.optimization.pretraining_updates = 2
+    monkeypatch.setattr(campaign_train, "train_update", original)
+    result = campaign.run_one(cfg, campaign.jobs(cfg)[0])
+    after = torch.load(output / "checkpoint.pt", weights_only=True)
+    assert result["completed_updates"] == 2
+    assert after["identity"] == before["identity"]
+    assert after["progress"] == 2
+    assert (
+        json.loads((output / "resolved_experiment.json").read_text()) == saved_identity
+    )
+    assert list((output / "provenance").glob("resume-*/configuration.json"))
+    # A training change beyond budgets still fails before checkpoint reuse.
+    cfg.optimization.lr *= 2
+    with pytest.raises(ValueError, match="configuration changed"):
+        campaign.run_one(cfg, campaign.jobs(cfg)[0])
+
+
+def test_campaign_compatibility_allows_only_budget_and_output_changes():
+    cfg = config()
+    previous = {"configuration": cfg.model_dump(mode="json")}
+    cfg.output_root = cfg.output_root / "moved"
+    cfg.optimization.pretraining_updates = 1500
+    cfg.adaptation_updates = 500
+    assert compatible_campaign(previous, cfg)
+    cfg.seed += 1
+    assert not compatible_campaign(previous, cfg)
 
 
 def test_pilot_profiles_worker_selection_and_failure_reports(

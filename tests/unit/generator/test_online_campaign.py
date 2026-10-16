@@ -254,6 +254,29 @@ def test_online_configuration_dry_run():
     }
 
 
+def test_existing_campaign_accepts_budget_change_and_keeps_pilot(online_campaign):
+    cfg, _, _ = online_campaign
+    campaign.run_campaign(cfg, "prepare")
+    previous_id = campaign.campaign_identity(cfg)
+    write_json(
+        cfg.output_root / "pilot/report.json",
+        {
+            "campaign_identity": previous_id,
+            "profile": campaign.pilot_profile(cfg),
+            "passed": True,
+        },
+    )
+    cfg.optimization.pretraining_updates = 1
+    campaign.run_campaign(cfg, "prepare")
+    report = json.loads((cfg.output_root / "pilot/report.json").read_text())
+    assert report["campaign_identity"] == campaign.campaign_identity(cfg)
+    assert report["passed"]
+    assert list((cfg.output_root / "provenance").glob("resume-*/campaign.json"))
+    cfg.optimization.lr *= 2
+    with pytest.raises(ValueError, match="Campaign or local data changed"):
+        campaign.run_campaign(cfg, "prepare")
+
+
 def test_ram_cache_enforces_bytes_and_prioritizes_validation():
     payload = {
         "token_ids": torch.ones(2, dtype=torch.int64),

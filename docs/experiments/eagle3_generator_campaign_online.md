@@ -88,7 +88,15 @@ checkpoints. Alternatively use `--stage pretraining`, then `--stage adaptation`.
 `--stage prepare` checks local inputs without contacting vLLM or allocating GPU
 memory. Missing files fail locally. `--vllm-endpoint` overrides the YAML endpoint;
 model paths, shared directory, concurrency, and buffer size are in `online`.
-Use a new `output_root` when changing experiment settings or local data identity.
+Update budgets and the output path may change while reusing compatible checkpoints.
+The configured update count is the total target, including already completed
+updates; it is not an additional budget. The runner preserves saved checkpoint
+identities and archives the effective configuration under `provenance/resume-*`.
+Completed jobs remain completed; changing a budget does not restart them. A
+checkpoint already beyond a reduced target is retained without rolling back
+updates. An output-path change uses checkpoints already present at that path;
+it does not search other folders or move checkpoints. Use a new `output_root`
+for changes to data, architecture, loss, learning rate, or other training settings.
 
 The pilot runs 100 updates for each of bank reconstruction, a fresh generator
 using `lk_hybrid`, and a fresh ordinary LoRA, including context-4 offline

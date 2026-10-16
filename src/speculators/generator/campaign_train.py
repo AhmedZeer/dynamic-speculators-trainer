@@ -447,6 +447,7 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
         cache_end = runtime.corpus.cache.snapshot()
         result = {
             "job": job,
+            "completed_updates": progress,
             "history": history,
             "score": history[-1]["score"],
             "metric": "offline agreement (full_acc_0), context size 4",

@@ -17,6 +17,7 @@ from speculators.generator.campaign_config import DOMAINS, SCALES, SNAPSHOTS_PER
 from speculators.generator.campaign_data import CampaignCorpus
 from speculators.generator.campaign_inputs import campaign_banks, prepare_inputs
 from speculators.generator.campaign_inventory import working_sets
+from speculators.generator.campaign_resume import resume_identity
 from speculators.generator.campaign_train import run_training
 from speculators.generator.config import ExperimentConfig
 from speculators.generator.data import discover_snapshots
@@ -240,6 +241,7 @@ def run_one(  # noqa: C901 -- shared online/offline run lifecycle
                 "activation_source": "vllm",
                 "episode_schedule_version": 1,
             }
+        identity = resume_identity(output, identity)
         if not begin_run(output, identity):
             result = json.loads((output / "result.json").read_text())
             log_completed(local_cfg, corpus, job, output, identity, result)

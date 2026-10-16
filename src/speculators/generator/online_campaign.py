@@ -1,6 +1,7 @@
 """Training-only campaign using local data and an external vLLM extractor."""
 
 import json
+import time
 
 from filelock import FileLock
 
@@ -13,6 +14,7 @@ from speculators.generator.campaign import (
     run_one,
     subset_names,
 )
+from speculators.generator.campaign_resume import compatible_campaign
 from speculators.generator.local_campaign import load_local_inputs
 
 
@@ -72,15 +74,34 @@ def run_online_campaign(cfg, stage, dry_run):  # noqa: C901 -- serial stages
         inputs = load_local_inputs(cfg)
         manifest["local_inputs"] = inputs.identity
         path = cfg.output_root / "campaign.json"
+        previous_identity = manifest["campaign_identity"]
         if path.exists():
             previous = json.loads(path.read_text())
-            if any(
-                previous.get(k) != manifest[k]
-                for k in ("campaign_identity", "local_inputs")
-            ):
+            previous_identity = previous.get("campaign_identity")
+            if previous.get("local_inputs") != manifest["local_inputs"]:
+                raise ValueError("Local data changed; choose a new output_root")
+            if previous_identity != manifest[
+                "campaign_identity"
+            ] and not compatible_campaign(previous, cfg):
                 raise ValueError(
                     "Campaign or local data changed; choose a new output_root"
                 )
+            if previous_identity != manifest["campaign_identity"]:
+                archive = cfg.output_root / "provenance" / f"resume-{time.time_ns()}"
+                write_json(archive / "campaign.json", previous)
+                pilot_path = cfg.output_root / "pilot" / "report.json"
+                if pilot_path.is_file():
+                    pilot_report = json.loads(pilot_path.read_text())
+                    if pilot_report.get(
+                        "campaign_identity"
+                    ) == previous_identity and pilot_report.get(
+                        "profile"
+                    ) == pilot_profile(cfg):
+                        write_json(archive / "pilot_report.json", pilot_report)
+                        pilot_report["campaign_identity"] = manifest[
+                            "campaign_identity"
+                        ]
+                        write_json(pilot_path, pilot_report)
         write_json(path, manifest)
         if stage == "prepare":
             return {**manifest, "trajectory_examples": len(inputs.rows)}
