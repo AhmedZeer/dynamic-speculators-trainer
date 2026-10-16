@@ -5,6 +5,10 @@ Safetensors directly and replays the saved prompt-and-response token IDs through
 an external vLLM extractor. It never downloads activation dumps or restores a
 PEFT directory tree. No speculative decoding benchmark is run.
 
+For the measured cache results, memory sizing, eviction policy, and instructions
+for reusing the cache in other workflows, see
+[Reusing online activations in CPU RAM](eagle3_activation_ram_cache.md).
+
 Install in the vLLM environment (and install Speculators in the trainer
 environment too, if separate):
 
