@@ -257,8 +257,9 @@ def test_online_configuration_dry_run():
     )
     result = campaign.run_campaign(cfg, dry_run=True)
     assert len(result["jobs"]) == 7
-    assert cfg.online.buffered_examples == 16
-    assert cfg.online.ram_cache_gib == 64
+    assert cfg.online.concurrency == 16
+    assert cfg.online.buffered_examples == 64
+    assert cfg.online.ram_cache_gib == 96
     assert cfg.wandb.pretraining_project == "eagle3-generator-ablations-v3"
     assert {campaign.job_config(cfg, j).wandb.group for j in result["jobs"]} == {
         "experiment-1",

@@ -53,7 +53,7 @@ CUDA_VISIBLE_DEVICES=0 python scripts/launch_vllm.py train ./models/qwen3-8b \
   --provenance-dir output/generator-direct-campaign-v3/provenance/vllm \
   -- --served-model-name Qwen/Qwen3-8B \
   --host 127.0.0.1 --port 8000 --dtype bfloat16 \
-  --max-model-len 8193 --max-num-batched-tokens 8193 --max-num-seqs 4 \
+  --max-model-len 8193 --max-num-batched-tokens 8193 --max-num-seqs 16 \
   --gpu-memory-utilization 0.40 --enforce-eager \
   --no-enable-prefix-caching --no-enable-chunked-prefill
 ```
@@ -167,23 +167,23 @@ learning-rate warmup updates; each optimizer update has four episodes and an 819
 microbatch token budget. The drafter and target remain frozen except for adapters.
 
 Direct training and validation request full saved trajectories and reuse those
-states for prompt conditioning. Defaults are four
-concurrent extraction requests and sixteen buffered examples. At 8192 tokens,
+states for prompt conditioning. Defaults are sixteen
+concurrent extraction requests and sixty-four buffered examples. At 8192 tokens,
 4 layers, and 4096 BF16 features, a full example is approximately 256 MiB;
-sixteen examples contain about 4 GiB of tensor payloads, plus loading/collation
-overhead. In addition, `online.ram_cache_gib: 64` retains up to 64 GiB of full
+sixty-four examples contain about 16 GiB of tensor payloads, plus loading/collation
+overhead. In addition, `online.ram_cache_gib: 96` retains up to 96 GiB of full
 CPU activation tensors across sequential jobs in one campaign process. Validation
 entries are prioritized; training entries use the remaining space with LRU eviction.
 Prompt summaries are retained independently, outside this full-activation budget.
 Shared files are still deleted after reading; cache misses regenerate full states.
 Restarting the CLI clears full activations in RAM, while disk prompt summaries
 remain reusable. Set `ram_cache_gib: 0` to disable the full-activation RAM cache.
-Allow extra RAM for summaries, the sixteen-example buffer, collation, models, and
+Allow extra RAM for summaries, the sixty-four-example buffer, collation, models, and
 checkpoint serialization. Models, local trajectories, summaries,
 checkpoints, and optimizer states need additional persistent disk space.
 
 Lookahead covers the current update and the next `online.lookahead_updates`
-updates (default 2). Only sixteen requests/results are queued at a time;
+updates (default 2). Only sixty-four requests/results are queued at a time;
 consuming a result refills the queue while the trainer computes. Episode
 transitions retain useful future requests. Sampling and optimizer-update order
 are unchanged. Validation/checkpoint boundaries drain or cancel pending requests;

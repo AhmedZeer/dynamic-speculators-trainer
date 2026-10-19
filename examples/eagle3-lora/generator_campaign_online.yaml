@@ -45,14 +45,14 @@ activation_source: vllm
 trajectories_path: ./trajectories
 online:
   # Full CPU activation tensor budget; summaries and buffering need extra RAM.
-  ram_cache_gib: 64
+  ram_cache_gib: 96
   summary_cache_dir: output/generator-summary-cache
   compiler_cache_dir: output/generator-compiler-cache
   lookahead_updates: 2
   endpoint: http://127.0.0.1:8000/v1
   shared_dir: /tmp/speculators-online
-  concurrency: 4
-  buffered_examples: 16
+  concurrency: 16
+  buffered_examples: 64
   target_model_path: models/qwen3-8b
   drafter_model_path: models/qwen3-8b-eagle3
   reserve_gib: 8
