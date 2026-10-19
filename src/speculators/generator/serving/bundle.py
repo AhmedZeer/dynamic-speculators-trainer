@@ -27,6 +27,7 @@ PROVENANCE = (
     "configuration.json",
     "wandb.json",
     "eval_command.txt",
+    "upload_manifest.json",
     "provenance",
 )
 
@@ -199,3 +200,14 @@ def export_run(cfg, run_dir, output, *, drafter_model_path=None):  # noqa: C901 
 def bundle_state(path):
     metadata = read_bundle(path)
     return metadata, load_file(str(Path(path) / "model.safetensors"), device="cpu")
+
+
+def archive_source(source, destination):
+    """Copy portable run metadata without copying weights or optimizer state."""
+    destination.mkdir(parents=True, exist_ok=True)
+    for name in ("bundle.json", *PROVENANCE):
+        path = source / name
+        if path.is_dir():
+            shutil.copytree(path, destination / name, dirs_exist_ok=True)
+        elif path.exists():
+            shutil.copy2(path, destination / name)

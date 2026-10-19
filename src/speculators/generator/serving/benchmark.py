@@ -19,7 +19,11 @@ from pydantic import Field, model_validator
 from speculators.bank.artifacts import digest, file_digest, load_subset, write_json
 from speculators.bank.config import BankConfig, Settings
 from speculators.bank.progress import report, stage_progress
-from speculators.generator.serving.bundle import PROVENANCE, VLLM_COMMIT, read_bundle
+from speculators.generator.serving.bundle import (
+    VLLM_COMMIT,
+    archive_source,
+    read_bundle,
+)
 from speculators.generator.serving.patch import PATCH_DIR, patch_sources
 from speculators.generator.tracking import wandb_module
 from speculators.provenance import (
@@ -414,16 +418,6 @@ def stage_bundle(source, destination):
         shutil.rmtree(pending)
         raise
     return destination
-
-
-def archive_source(source, destination):
-    destination.mkdir(parents=True, exist_ok=True)
-    for name in ("bundle.json", *PROVENANCE):
-        path = source / name
-        if path.is_dir():
-            shutil.copytree(path, destination / name, dirs_exist_ok=True)
-        elif path.exists():
-            shutil.copy2(path, destination / name)
 
 
 def benchmark(cfg, *, smoke=False):  # noqa: C901 -- serial arm orchestration and resume

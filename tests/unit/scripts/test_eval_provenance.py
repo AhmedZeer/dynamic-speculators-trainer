@@ -58,3 +58,27 @@ class TestSaveEvalProvenance:
         content = (tmp_path / "eval_command.txt").read_text()
         assert "old content" not in content
         assert "# Timestamp:" in content
+
+
+def test_generic_target_only_evaluation_does_not_require_acceptance(
+    tmp_path, monkeypatch
+):
+    from argparse import Namespace  # noqa: PLC0415
+
+    import evaluate  # noqa: PLC0415
+
+    monkeypatch.setattr(evaluate, "check_dependencies", lambda: None)
+    monkeypatch.setattr(
+        evaluate, "_run_subset", lambda *args, **kwargs: (None, None, None)
+    )
+    args = Namespace(
+        mode="throughput",
+        target="http://test/v1",
+        output_dir=str(tmp_path),
+        dataset="local.jsonl",
+        subsets="math",
+        data_column_mapper="prompt",
+        max_concurrency=1,
+    )
+    evaluate.run_benchmark(args)
+    assert (tmp_path / "eval_command.txt").is_file()

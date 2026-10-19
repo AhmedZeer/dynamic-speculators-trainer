@@ -277,6 +277,25 @@ def parse_args():
     )
     _add_shared_args(eval_parser)
 
+    serving = sub.add_parser(
+        "serve", help="Matched HTTP target/EAGLE3/generator/LoRA serving"
+    )
+    serving.add_argument(
+        "model", nargs="?", help="Pinned target ID; inferred from bundle"
+    )
+    serving.add_argument("--revision")
+    serving.add_argument("--drafter")
+    serving.add_argument("--drafter-revision")
+    serving.add_argument("--adapter-bundle", type=Path)
+    serving.add_argument("--served-model-name", default="speculators")
+    serving.add_argument("--host", default="127.0.0.1")
+    serving.add_argument("--port", type=int, default=8000)
+    serving.add_argument("--max-model-len", type=int, default=8192)
+    serving.add_argument("--spec-tokens", type=int, default=3)
+    serving.add_argument("--gpu-memory-utilization", type=float, default=0.85)
+    serving.add_argument("--seed", type=int, default=42)
+    _add_shared_args(serving)
+
     subcommands = set(sub.choices)
     argv = sys.argv[1:]
     if not argv or (argv[0] not in subcommands and not argv[0].startswith("-")):
@@ -541,7 +560,7 @@ def _build_eval_cmd(args, vllm_args):
     return cmd
 
 
-def main():
+def main():  # noqa: C901 -- explicit independent launch modes
     args, vllm_args = parse_args()
     if "--" in vllm_args:
         vllm_args.remove("--")
@@ -552,6 +571,10 @@ def main():
         cmd = _build_train_cmd(args, vllm_args)
     elif args.subcommand == "eval":
         cmd = _build_eval_cmd(args, vllm_args)
+    elif args.subcommand == "serve":
+        from speculators.generator.serving.server import build_server  # noqa: PLC0415
+
+        cmd = build_server(args, vllm_args)
     else:
         raise ValueError(f"Unknown subcommand: {args.subcommand}")
 
@@ -571,6 +594,26 @@ def main():
             skip_hash=args.no_hash_checkpoints,
             spec_model=getattr(args, "spec_model", None),
         )
+
+    if args.subcommand == "serve":
+        from speculators.bank.artifacts import write_json  # noqa: PLC0415
+        from speculators.generator.serving.patch import PATCH_DIR  # noqa: PLC0415
+
+        destination = Path(args.provenance_dir)
+        write_json(
+            destination / "server_environment.json",
+            {
+                "VLLM_USE_V2_MODEL_RUNNER": "0",
+                "SPECULATORS_SERVER_CONFIG": json.loads(
+                    os.environ["SPECULATORS_SERVER_CONFIG"]
+                ),
+            },
+        )
+        if args.adapter_bundle:
+            atomic_write(
+                destination / "vllm.patch",
+                (PATCH_DIR / "vllm-0.31.0-generator.patch").read_text(),
+            )
 
     if not args.dry_run:
         # Bound frontend CPU threads for data generation; eval keeps its settings.

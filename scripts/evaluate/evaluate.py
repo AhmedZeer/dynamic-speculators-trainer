@@ -281,8 +281,19 @@ def _run_subset(
     return acceptance_csv, perf_csv, max_tokens if is_sweep else None
 
 
-def run_benchmark(args: argparse.Namespace) -> None:
+def run_benchmark(args: argparse.Namespace) -> None:  # noqa: C901 -- route workload types
     check_dependencies()
+    if getattr(args, "validation_manifest", None):
+        import perf_utils  # noqa: PLC0415
+
+        from speculators.generator.serving.guidellm import (  # noqa: PLC0415
+            benchmark_endpoint,
+        )
+
+        if args.subsets == DEFAULT_SUBSETS:
+            args.subsets = "all"
+        benchmark_endpoint(args, perf_utils)
+        return
     is_sweep = args.mode == "sweep"
 
     metrics_url = args.target.rstrip("/").removesuffix("/v1") + "/metrics"
@@ -358,8 +369,7 @@ def run_benchmark(args: argparse.Namespace) -> None:
             all_max_tokens[label] = mt
 
     if acceptance_csv is None:
-        logger.error("No acceptance metrics collected from any subset")
-        sys.exit(1)
+        logger.info("No speculative counters; performance-only evaluation completed")
 
     if is_sweep and all_max_tokens:
         with (output_dir / "max_tokens.json").open("w") as f:
@@ -463,6 +473,39 @@ def main() -> None:
             "Required when --dataset is a speedbench/ spec."
         ),
     )
+    parser.add_argument(
+        "--validation-manifest",
+        type=Path,
+        help="Frozen validation manifest with strict correctness checks",
+    )
+    parser.add_argument(
+        "--correctness-report",
+        type=Path,
+        help="Successful check-endpoint report for this server/workload",
+    )
+    parser.add_argument(
+        "--server-provenance",
+        type=Path,
+        help="Directory written by launch_vllm.py serve --provenance-dir",
+    )
+    parser.add_argument(
+        "--warmups",
+        type=int,
+        default=3,
+        help="Warmup requests per validation category, excluded from counters",
+    )
+    parser.add_argument(
+        "--tokenizer-path",
+        type=Path,
+        help="Local target tokenizer; otherwise fetch pinned tokenizer files only",
+    )
+    parser.add_argument(
+        "--validation-grouping",
+        choices=["category", "subset"],
+        default="category",
+        help="Group frozen validation measurements by category or individual subset",
+    )
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     if args.output_dir is None:

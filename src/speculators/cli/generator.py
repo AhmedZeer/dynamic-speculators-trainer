@@ -165,6 +165,52 @@ def push_to_hub_command(
     typer.echo(json.dumps(result, indent=2))
 
 
+@app.command(name="export-validation")
+def export_validation_command(
+    config: ConfigOption,
+    output: Annotated[Path, typer.Option("--output")],
+    tokenizer_path: Annotated[Path | None, typer.Option("--tokenizer-path")] = None,
+    max_tokens: Annotated[int, typer.Option("--max-tokens", min=1)] = 256,
+):
+    """Freeze current campaign validation prompts for independent HTTP benchmarks."""
+    import json  # noqa: PLC0415
+
+    from speculators.generator.campaign_config import CampaignConfig  # noqa: PLC0415
+    from speculators.generator.serving.validation import (  # noqa: PLC0415
+        export_validation,
+    )
+
+    result = export_validation(
+        CampaignConfig.load(config),
+        output,
+        tokenizer_path=tokenizer_path,
+        max_tokens=max_tokens,
+    )
+    typer.echo(json.dumps(result, indent=2))
+
+
+@app.command(name="check-endpoint")
+def check_endpoint_command(
+    target: Annotated[str, typer.Option("--target")],
+    validation_manifest: Annotated[
+        Path, typer.Option("--validation-manifest", exists=True)
+    ],
+    output: Annotated[Path, typer.Option("--output")],
+    reference: Annotated[Path | None, typer.Option("--reference", exists=True)] = None,
+    limit: Annotated[int, typer.Option("--limit", min=0)] = 0,
+    seed: Annotated[int, typer.Option("--seed")] = 42,
+):
+    """Check decoding tokens and adapter cleanup against target-only results."""
+    import json  # noqa: PLC0415
+
+    from speculators.generator.serving.endpoint import check_endpoint  # noqa: PLC0415
+
+    result = check_endpoint(
+        target, validation_manifest, output, reference=reference, limit=limit, seed=seed
+    )
+    typer.echo(json.dumps(result, indent=2))
+
+
 @app.command(name="benchmark")
 def benchmark_command(
     config: ConfigOption,

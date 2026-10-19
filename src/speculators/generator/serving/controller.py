@@ -1,6 +1,8 @@
-"""Request-lifetime adapters; imported by the optional vLLM proposer hook."""
+"""Generated request adapters and permanent static LoRAs for the vLLM hook."""
 
+import json
 import logging
+import os
 import time
 from pathlib import Path
 
@@ -156,9 +158,27 @@ class DraftAdapterController:
                 )
                 for name in self.metadata["shapes"]
             }
+        serving = json.loads(os.environ.get("SPECULATORS_SERVER_CONFIG", "{}"))
+        self.permanent_static = (
+            self.generator is None
+            and serving.get("static_adapter_policy") == "merged_once"
+        )
+        self.setup_merge_seconds = 0.0
+        if self.permanent_static:
+            _, self.setup_merge_seconds = elapsed(
+                self.device, lambda: self.merger.apply(self.factors)
+            )
         self.active = None
         self.record = {}
         self.last_record = {}
+        self.totals = {
+            "prepared_requests": 0,
+            "completed_requests": 0,
+            "generator_invocations": 0,
+            "generator_seconds": 0.0,
+            "merge_seconds": 0.0,
+            "restore_seconds": 0.0,
+        }
 
     @torch.inference_mode()
     def prepare(self, request_id, prompt_length, positions, states):
@@ -191,7 +211,11 @@ class DraftAdapterController:
                 ),
             )
         try:
-            _, merge_seconds = elapsed(self.device, lambda: self.merger.apply(factors))
+            merge_seconds = 0.0
+            if not self.permanent_static:
+                _, merge_seconds = elapsed(
+                    self.device, lambda: self.merger.apply(factors)
+                )
         except BaseException:
             self.merger.restore()
             raise
@@ -205,6 +229,9 @@ class DraftAdapterController:
             "restore_seconds": 0.0,
             "deployment_context_size": 1,
         }
+        self.totals["prepared_requests"] += 1
+        for key in ("generator_invocations", "generator_seconds", "merge_seconds"):
+            self.totals[key] += self.record[key]
         logger.info(
             "Draft adapter ready: request=%s, generator=%.4fs, merge=%.4fs",
             request_id,
@@ -214,8 +241,12 @@ class DraftAdapterController:
 
     def finish(self, request_id):
         if self.active == request_id:
-            _, seconds = elapsed(self.device, self.merger.restore)
+            seconds = 0.0
+            if not self.permanent_static:
+                _, seconds = elapsed(self.device, self.merger.restore)
             self.record["restore_seconds"] = seconds
+            self.totals["completed_requests"] += 1
+            self.totals["restore_seconds"] += seconds
             self.last_record = dict(self.record)
             self.active = None
             self.record = {}
@@ -250,7 +281,7 @@ class DraftAdapterController:
     @torch.inference_mode()
     def profile(self):
         """Exercise temporary generation/merge memory inside vLLM's profiling run."""
-        if self.active is not None:
+        if self.active is not None or self.permanent_static:
             return
         factors = self.factors
         if self.generator is not None:

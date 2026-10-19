@@ -59,3 +59,10 @@ python scripts/launch_vllm.py \
   -- --data-parallel-size 2 --tensor-parallel-size 4 \
   --port 8000
 ```
+
+## Matched generator and LoRA HTTP serving
+
+The `serve` subcommand launches a standalone target-only, base EAGLE3, generator
+bundle, or ordinary-LoRA bundle server with matched serial settings. It requires
+`--provenance-dir`. See [the HTTP/GuideLLM runbook](../experiments/eagle3_generator_http.md)
+for pinned model/bundle launch commands and independent benchmarking.

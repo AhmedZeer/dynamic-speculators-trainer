@@ -265,3 +265,7 @@ hf download azeeer/eagle3-generator-direct-4k-v3 \
 
 Use `./bundles/direct-4k` as the appropriate entry in the benchmark YAML's
 `bundles` mapping. Publishing does not launch vLLM or run a decoding benchmark.
+
+For decoding evaluation of the published bundles, see [independent HTTP serving
+and GuideLLM evaluation](eagle3_generator_http.md). Server launch, validation
+export, correctness checks and HTTP measurement are separate commands.

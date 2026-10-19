@@ -557,6 +557,11 @@ def run_guidellm(
     output_path: Path,
     max_tokens: int,
     gen_kwargs: dict | None = None,
+    model: str | None = None,
+    request_format: str | None = None,
+    deterministic_seed: int | None = None,
+    command_path: Path | None = None,
+    tokenizer_path: str | None = None,
 ) -> None:
     # Building the backend as a JSON object to support nested gen_kwargs for guidellm.
     backend: dict[str, object] = {
@@ -564,6 +569,11 @@ def run_guidellm(
         "target": target,
         "max_tokens": max_tokens,
     }
+    if model is not None:
+        backend["model"] = model
+    if request_format is not None:
+        backend["request_format"] = request_format
+        backend["stream"] = True
     if gen_kwargs:
         backend["extras"] = {"body": gen_kwargs}
     cmd = ["guidellm", "run", "--backend", json.dumps(backend)]
@@ -587,4 +597,24 @@ def run_guidellm(
 
     cmd.extend(["--output", f"kind=json,path={output_path}"])
 
+    if tokenizer_path is not None:
+        cmd.extend(
+            [
+                "--tokenizer",
+                json.dumps({"kind": "huggingface_auto", "model": tokenizer_path}),
+            ]
+        )
+    if deterministic_seed is not None:
+        cmd.extend(
+            [
+                "--seed",
+                f"kind=static,value={deterministic_seed}",
+                "--data-loader",
+                "kind=pytorch,shuffle=false,num_workers=0",
+                "--constraint",
+                "kind=max_errors,count=1",
+            ]
+        )
+    if command_path is not None:
+        command_path.write_text(json.dumps(cmd, indent=2) + "\n")
     subprocess.run(cmd, check=True)  # noqa: S603

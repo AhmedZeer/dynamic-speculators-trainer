@@ -1,3 +1,5 @@
+> For the current campaign, use [independent HTTP servers and GuideLLM](eagle3_generator_http.md). The serial harness below is retained for historical experiments.
+
 # Conditional LoRA decoding in vLLM 0.31.0
 
 This prototype generates one rank-32 adapter per request after target prefill.
