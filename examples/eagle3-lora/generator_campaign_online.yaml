@@ -39,7 +39,7 @@ pilot:
 wandb:
   enabled: true
   mode: online
-  pretraining_project: eagle3-generator-ablations-v2
+  pretraining_project: eagle3-generator-ablations-v3
   layout: sections
   projects:
     conditioning: eagle3-generator-conditioning
