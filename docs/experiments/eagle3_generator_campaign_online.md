@@ -1,7 +1,6 @@
-# Local packed bank and online activations
+# Direct generator training with online activations
 
-Run from the repository root on one A100 80 GB. The trainer reads packed
-Safetensors directly and replays the saved prompt-and-response token IDs through
+Run from the repository root on one A100 80 GB. The trainer replays saved prompt-and-response token IDs through
 an external vLLM extractor. It never downloads activation dumps or restores a
 PEFT directory tree. No speculative decoding benchmark is run.
 
@@ -21,8 +20,6 @@ wandb login
 Download once outside training; omit commands for inputs already present:
 
 ```bash
-hf download azeeer/eagle3-qwen3-8b-lora-bank-r32-packed-v1 \
-  --local-dir ./data --repo-type dataset
 hf download azeeer/eagle3-qwen3-8b-trajectories-v1 \
   releases/r0001/math/data.json releases/r0001/code/data.json \
   releases/r0001/stem/data.json releases/r0001/chat/data.json \
@@ -53,7 +50,7 @@ CUDA_VISIBLE_DEVICES=0 python scripts/launch_vllm.py train ./models/qwen3-8b \
   --target-layer-ids 2 18 33 --include-last-layer \
   --hidden-states-backend file \
   --hidden-states-path /tmp/speculators-online \
-  --provenance-dir output/generator-campaign-online/provenance/vllm \
+  --provenance-dir output/generator-direct-campaign-v3/provenance/vllm \
   -- --served-model-name Qwen/Qwen3-8B \
   --host 127.0.0.1 --port 8000 --dtype bfloat16 \
   --max-model-len 8193 --max-num-batched-tokens 8193 --max-num-seqs 4 \
@@ -72,7 +69,7 @@ After the server is ready, run the pilot in another terminal:
 ```bash
 CUDA_VISIBLE_DEVICES=0 speculators generator campaign \
   --config examples/eagle3-lora/generator_campaign_online.yaml \
-  --data-path ./data --trajectories-path ./trajectories --stage pilot
+  --trajectories-path ./trajectories --stage pilot
 ```
 
 Then run the complete campaign:
@@ -80,7 +77,7 @@ Then run the complete campaign:
 ```bash
 CUDA_VISIBLE_DEVICES=0 speculators generator campaign \
   --config examples/eagle3-lora/generator_campaign_online.yaml \
-  --data-path ./data --trajectories-path ./trajectories --stage all
+  --trajectories-path ./trajectories --stage all
 ```
 
 Completed jobs, including the pilot, are reused; interrupted jobs resume from
@@ -98,11 +95,10 @@ updates. An output-path change uses checkpoints already present at that path;
 it does not search other folders or move checkpoints. Use a new `output_root`
 for changes to data, architecture, loss, learning rate, or other training settings.
 
-The pilot runs 100 updates for each of bank reconstruction, a fresh generator
-using `lk_hybrid`, and a fresh ordinary LoRA, including context-4 offline
-validation. Its first update exercises long trajectories from every category.
-It passes when all three jobs complete; the old activation-download wait-fraction
-threshold does not apply. Inspect `output/generator-campaign-online/pilot/report.json`
+The pilot runs 100 updates each for a fresh generator using `lk_hybrid` and a
+fresh ordinary LoRA, including context-4 offline validation. Its first update exercises long trajectories from every category.
+It passes when both jobs complete; the old activation-download wait-fraction
+threshold does not apply. Inspect `output/generator-direct-campaign-v3/pilot/report.json`
 and per-run `timing.json` for extraction requests/seconds/tokens, data wait, compute
 time, process RSS, GPU allocations, whole-device GPU memory, disk IO, temporary
 file high-water mark, free disk, and checkpoint sizes. These also go to W&B.
@@ -149,19 +145,29 @@ The effective path is printed and recorded in results. Retain the
 directory to reuse compatible artifacts; the first invocation can still pay
 compilation/autotuning costs.
 
-The existing design stays the same: six matched bank/direct pretraining jobs
-with 1/2/4 subsets per category (4K/8K/16K examples), the configured pretraining
-update budget, and identical
-episode sampling within each pair. Bank targets are the ten first-collection-epoch
-snapshots per subset. Four adaptation jobs compare a fresh generator, bank-2
-generator, bank-1 generator, and fresh ordinary LoRA, each trained jointly for
-1K updates on subsets 00002–00005 in all categories (16K examples). Training
-context sizes are 1–8; offline validation uses only context 4. Curves report
-`full_acc_0` offline agreement, not measured speculative decoding acceptance.
+The main campaign has seven runs, all using `lk_hybrid`:
 
-Bank reconstruction requests prompt states only, then caches small last-token
-conditioning vectors. Direct training and validation request full saved
-trajectories and reuse those states for prompt conditioning. Defaults are four
+- `scale-1-direct`, `scale-2-direct`, and `scale-4-direct` pretrain fresh generators
+  on 1/2/4 subsets per category (4K/8K/16K training examples), respectively.
+  The example configuration uses 1500 optimizer updates for each run.
+- `fresh_generator`, `direct_1`, `direct_2`, and `fresh_lora` each train for 1000
+  updates jointly on subsets 00002–00005 across math/code/stem/chat (16K examples).
+  `direct_1` and `direct_2` initialize from completed 4K and 8K direct pretraining
+  checkpoints; optimizer state starts fresh for adaptation. Their pretraining data
+  does not overlap the adaptation data. The 16K pretraining checkpoint is used only
+  for the scaling comparison because its data overlaps adaptation.
+
+Training context sizes are 1–8; offline validation uses only context 4. Curves
+report `full_acc_0` offline agreement, not speculative decoding acceptance.
+Model, activation and adapter settings live in `generator_training_recipe.yaml`.
+No bank download, catalog, saved LoRA snapshots, or reconstruction objective is used.
+The generated and ordinary adapters retain rank 32, alpha 64, and `o_proj`/`v_proj`
+targets. AdamW uses learning rate 1e-4, weight decay 0.01, clipping 0.85, and 100
+learning-rate warmup updates; each optimizer update has four episodes and an 8192
+microbatch token budget. The drafter and target remain frozen except for adapters.
+
+Direct training and validation request full saved trajectories and reuse those
+states for prompt conditioning. Defaults are four
 concurrent extraction requests and sixteen buffered examples. At 8192 tokens,
 4 layers, and 4096 BF16 features, a full example is approximately 256 MiB;
 sixteen examples contain about 4 GiB of tensor payloads, plus loading/collation
@@ -173,7 +179,7 @@ Shared files are still deleted after reading; cache misses regenerate full state
 Restarting the CLI clears full activations in RAM, while disk prompt summaries
 remain reusable. Set `ram_cache_gib: 0` to disable the full-activation RAM cache.
 Allow extra RAM for summaries, the sixteen-example buffer, collation, models, and
-checkpoint serialization. Models, local bank/trajectories, summaries,
+checkpoint serialization. Models, local trajectories, summaries,
 checkpoints, and optimizer states need additional persistent disk space.
 
 Lookahead covers the current update and the next `online.lookahead_updates`
@@ -192,15 +198,14 @@ durations use measured seconds. Conditional-accuracy diagnostics remain logged
 but are hidden from automatic panels. Add them manually when needed.
 The validation-detail table replaces per-subset scalar chart proliferation.
 Agreement is plotted against optimizer updates and measured cumulative training
-seconds. Aggregate comparison images retain dark bank/light direct colors by
-scale; adaptation arms have four distinct colors.
+seconds. Aggregate comparison images use distinct colors by scale; adaptation arms have
+four distinct colors.
 
-Run the same `--stage all` command after pulling this change. The RAM-cache
-settings trigger a fresh pilot profile. Existing compatible completed training
-jobs are reused and their saved validation history is logged to the new project;
-interrupted jobs resume from checkpoints. These operational changes do not alter
-the training identity or require a new output directory. Legacy configurations
-retain their existing logging layout unless `wandb.layout: sections` is selected.
+This design uses a new output root, `output/generator-direct-campaign-v3`, so
+previous bank campaigns/checkpoints remain untouched. It does not automatically
+import old runs. Existing persistent prompt-summary and compiler caches remain
+reusable because their identities do not depend on bank catalogs. Subsequent
+invocations resume compatible direct-only runs normally.
 
 Preserve `provenance/vllm` alongside the training provenance, configurations,
 data identities, patches, and checkpoint checksums when sharing results.

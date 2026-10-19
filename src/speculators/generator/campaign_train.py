@@ -1,7 +1,6 @@
-"""Update-based reconstruction and behavioral training on matched episodes."""
+"""Update-based behavioral training on saved token episodes."""
 
 import json
-import random
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -18,7 +17,6 @@ from speculators.generator.engine import clip_gradients, set_learning_rate
 from speculators.generator.model import (
     backward_factors,
     detached_factors,
-    factor_loss,
     factor_parameters,
 )
 from speculators.generator.tracking import ExperimentTracker, replay_campaign_history
@@ -110,12 +108,9 @@ def evaluate(runtime, subsets, generator):
     }
 
 
-def select_target(entries, seed, update, episode):
-    rng = random.Random(seed + 7000001 + update * 100003 + episode * 1009)
-    return rng.choice(entries)
-
-
-def train_update(runtime, generator, optimizer, episodes, snapshots, update, objective):
+def train_update(runtime, generator, optimizer, episodes, update, objective):
+    if objective != "direct":
+        raise ValueError("Campaign training supports only the direct objective")
     cfg = runtime.cfg
     runtime.drafter.train()
     if generator is not None:
@@ -130,10 +125,10 @@ def train_update(runtime, generator, optimizer, episodes, snapshots, update, obj
         cohort = item["indices"]
         started = time.perf_counter()
         if hasattr(runtime.corpus, "prepare_episode"):
-            runtime.corpus.prepare_episode(cohort, full=objective != "bank")
+            runtime.corpus.prepare_episode(cohort, full=True)
         data_seconds += time.perf_counter() - started
         examples += len(cohort)
-        # Stable augmentation/dropout RNG independent of snapshot sampling.
+        # Stable augmentation/dropout RNG for each scheduled episode.
         torch.manual_seed(cfg.seed + update * 100003 + episode * 1009)
         started = time.perf_counter()
         context = (
@@ -144,18 +139,6 @@ def train_update(runtime, generator, optimizer, episodes, snapshots, update, obj
         data_seconds += time.perf_counter() - started
         with compute_timer(runtime, events):
             factors = generator(*context) if generator is not None else None
-        if objective == "bank":
-            target = select_target(snapshots[item["subset"]], cfg.seed, update, episode)
-            started = time.perf_counter()
-            reference = runtime.cache.get(target["path"])
-            data_seconds += time.perf_counter() - started
-            with compute_timer(runtime, events):
-                loss = factor_loss(factors, reference)
-                if not torch.isfinite(loss):
-                    raise ValueError("Non-finite reconstruction loss")
-                (loss / len(episodes)).backward()
-            losses.append(loss.detach().item())
-            continue
         leaves = detached_factors(factors) if factors is not None else None
         total = sum(sum(runtime.corpus.rows[i]["loss_mask"][1:]) for i in cohort)
         if not total:
@@ -187,10 +170,7 @@ def train_update(runtime, generator, optimizer, episodes, snapshots, update, obj
         else sum(events)
     )
     return {
-        "train/reconstruction_l1" if objective == "bank" else "train/drafter_loss": sum(
-            losses
-        )
-        / len(losses),
+        "train/drafter_loss": sum(losses) / len(losses),
         "train/data_wait_seconds": data_seconds,
         "train/gpu_compute_seconds": compute_seconds,
         "train/response_tokens": response_tokens,
@@ -211,18 +191,18 @@ def source_weights(runtime, generator, job):
         or identity["bank_data"]["revisions"] != runtime.corpus.identity["revisions"]
         or identity["configuration"]["architecture"]
         != runtime.cfg.architecture.model_dump(mode="json")
-        or identity["job"].get("objective") != "bank"
+        or identity["job"].get("objective") != "direct"
     ):
-        raise ValueError("Incompatible bank-warmed source checkpoint")
+        raise ValueError("Incompatible direct-pretrained source checkpoint")
     if set(identity["job"]["subsets"]) & set(job["subsets"]):
-        raise ValueError("Adaptation overlaps the source warmup subsets")
+        raise ValueError("Adaptation overlaps the source pretraining subsets")
     if file_digest(source) != job["source_sha256"]:
         raise ValueError("Source checkpoint checksum changed")
     state = torch.load(source, map_location="cpu", weights_only=True)
     generator.load_state_dict(state["model"])
 
 
-def _prefetch(runtime, schedule, step, updates, lookahead, objective):
+def _prefetch(runtime, schedule, step, updates, lookahead, objective):  # noqa: ARG001
     if hasattr(runtime.corpus, "set_training_window"):
         runtime.corpus.set_training_window(
             [
@@ -236,7 +216,7 @@ def _prefetch(runtime, schedule, step, updates, lookahead, objective):
                 )
                 for episode in schedule.update(number)
             ],
-            full=objective != "bank",
+            full=True,
         )
         return
     indices = [
@@ -245,7 +225,7 @@ def _prefetch(runtime, schedule, step, updates, lookahead, objective):
         for episode in schedule.update(number)
         for i in episode["indices"]
     ]
-    refs = runtime.corpus.references(indices, full=objective != "bank")
+    refs = runtime.corpus.references(indices, full=True)
     runtime.corpus.cache.protect(refs)
     runtime.corpus.cache.prefetch(refs)
 
@@ -403,7 +383,6 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
                 generator,
                 optimizer,
                 schedule.update(update),
-                job.get("snapshots_by_subset", {}),
                 update,
                 job["objective"],
             )

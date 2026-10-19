@@ -39,8 +39,8 @@ def working_sets(cfg, planned):
             "files": len(refs),
             "fits_activation_cache": physical <= cfg.downloads.capacity_gib * 2**30,
             "note": (
-                "bank reconstruction retains only prompt summaries "
-                "after reading source files"
+                "Direct training retains full trajectories "
+                "within the configured cache budget"
             ),
         }
     return result

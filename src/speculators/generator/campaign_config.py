@@ -1,9 +1,10 @@
-"""Configuration for the paired pretraining and unseen adaptation campaign."""
+"""Configuration for direct pretraining and unseen adaptation."""
 
 import re
 from pathlib import Path
 from typing import Literal
 
+import yaml
 from pydantic import Field, model_validator
 
 from speculators.bank.config import Settings
@@ -11,7 +12,6 @@ from speculators.generator.config import Context, ExperimentConfig, Optimization
 
 DOMAINS = ("math", "code", "stem", "chat")
 SCALES = (1, 2, 4)
-SNAPSHOTS_PER_SUBSET = 10
 
 
 class DownloadSettings(Settings):
@@ -53,7 +53,9 @@ class OnlineSettings(Settings):
 
 
 class CampaignConfig(ExperimentConfig):
-    """The ten-job design; budgets may be reduced for a separate smoke campaign."""
+    """Three direct pretraining jobs and four unseen-data adaptation jobs."""
+
+    training_recipe: Path | None = None
 
     bank_revision: str = "2305403f0f3b560fafb6c6d261c370ab3a95759d"
     activation_source: Literal["hub", "vllm"] = "hub"
@@ -85,13 +87,16 @@ class CampaignConfig(ExperimentConfig):
 
     @model_validator(mode="after")
     def campaign_contract(self):
-        if self.activation_source == "vllm" and (
-            self.data_path is None or self.trajectories_path is None
+        if self.activation_source == "vllm" and self.trajectories_path is None:
+            raise ValueError("Online campaign requires trajectories_path")
+        if self.activation_source == "hub" and not re.fullmatch(
+            r"[0-9a-f]{40}", self.bank_revision
         ):
-            raise ValueError("Online campaign requires data_path and trajectories_path")
-        if not re.fullmatch(r"[0-9a-f]{40}", self.bank_revision):
             raise ValueError("Campaign requires a complete bank repository SHA")
-        if len(self.additional_bank_configs) != len(DOMAINS) - 1:
+        if (
+            self.training_recipe is None
+            and len(self.additional_bank_configs) != len(DOMAINS) - 1
+        ):
             raise ValueError("Campaign requires exactly four category bank configs")
         if self.condition != "last" or self.context.evaluation_sizes != [4]:
             raise ValueError("Campaign uses last conditioning and context-4 validation")
@@ -104,3 +109,16 @@ class CampaignConfig(ExperimentConfig):
         if self.pretraining_subsets is not None:
             raise ValueError("Campaign derives explicit subset membership per job")
         return self
+
+    @classmethod
+    def load(cls, path: Path):
+        values = yaml.safe_load(path.read_text())
+        if "training_recipe" not in values:
+            return super().load(path)
+        recipe = Path(values["training_recipe"])
+        if not recipe.is_absolute():
+            recipe = path.resolve().parent / recipe
+        values["training_recipe"] = recipe
+        # Shared runtime configuration still uses this internal recipe alias.
+        values["bank_config"] = recipe
+        return cls.model_validate(values)

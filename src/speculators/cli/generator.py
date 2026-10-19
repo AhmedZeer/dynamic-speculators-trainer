@@ -27,7 +27,7 @@ def campaign(
     ] = None,
     vllm_endpoint: Annotated[str | None, typer.Option("--vllm-endpoint")] = None,
 ):
-    """Run paired bank/direct training and joint adaptation with offline validation."""
+    """Run direct pretraining and joint adaptation with offline validation."""
     import json  # noqa: PLC0415
 
     from speculators.generator.campaign import run_campaign  # noqa: PLC0415

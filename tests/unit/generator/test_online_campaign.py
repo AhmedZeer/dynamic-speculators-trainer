@@ -169,10 +169,10 @@ def online_campaign(tiny_campaign, tmp_path, monkeypatch):  # noqa: F811
     return cfg, downloads, requests
 
 
-def test_local_online_ten_jobs_and_pilot(online_campaign):
+def test_local_online_seven_jobs_and_pilot(online_campaign):
     cfg, downloads, requests = online_campaign
     result = campaign.run_campaign(cfg, "all")
-    assert result["runs"] == 10
+    assert result["runs"] == 7
     assert not downloads
     assert requests
     assert any(len(r) == 2 for r in requests)
@@ -180,10 +180,10 @@ def test_local_online_ten_jobs_and_pilot(online_campaign):
     assert not list(cfg.online.shared_dir.iterdir())
     report = json.loads((cfg.output_root / "pilot/report.json").read_text())
     assert report["passed"]
-    assert len(report["results"]) == 3
+    assert len(report["results"]) == 2
     assert all(r["cache_end"]["temporary_bytes"] == 0 for r in report["results"])
     before = len(requests)
-    assert campaign.run_campaign(cfg, "all")["runs"] == 10
+    assert campaign.run_campaign(cfg, "all")["runs"] == 7
     assert len(requests) == before
 
 
@@ -256,7 +256,7 @@ def test_online_configuration_dry_run():
         Path("examples/eagle3-lora/generator_campaign_online.yaml")
     )
     result = campaign.run_campaign(cfg, dry_run=True)
-    assert len(result["jobs"]) == 10
+    assert len(result["jobs"]) == 7
     assert cfg.online.buffered_examples == 16
     assert cfg.online.ram_cache_gib == 64
     assert cfg.wandb.pretraining_project == "eagle3-generator-ablations-v3"
@@ -447,7 +447,7 @@ def test_online_lookahead_resume_matches_uninterrupted(online_campaign, monkeypa
     original = campaign_train.train_update
 
     def interrupt(*args, **kwargs):
-        if args[5] == 1:
+        if args[4] == 1:
             raise RuntimeError("simulated interruption")
         return original(*args, **kwargs)
 
@@ -513,3 +513,36 @@ def test_window_change_cancels_queued_requests_before_draining_workers(online_ca
         release.set()
         control.shutdown(wait=True)
         cache.close()
+
+
+def test_online_prepare_needs_no_bank_files(online_campaign):
+    import shutil  # noqa: PLC0415
+
+    cfg, downloads, requests = online_campaign
+    recipe_path = cfg.output_root.parent / "training-recipe.json"
+    recipe = BankConfig.load(cfg.bank_config)
+    write_json(recipe_path, recipe.model_dump(mode="json"))
+    cfg.training_recipe = recipe_path
+    for path in [cfg.bank_config, *cfg.additional_bank_configs]:
+        path.unlink()
+    cfg.additional_bank_configs = []
+    shutil.rmtree(cfg.data_path)
+    cfg.data_path = None
+    result = campaign.run_campaign(cfg, "prepare")
+    assert "packed_catalog_sha256" not in result["local_inputs"]
+    assert all(j["objective"] == "direct" for j in result["jobs"])
+    assert not downloads
+    assert not requests
+
+
+def test_adaptation_rejects_bank_source(online_campaign):
+    cfg, _, _ = online_campaign
+    pretraining = campaign.jobs(cfg)[0]
+    result = campaign.run_one(cfg, pretraining)
+    source = Path(result["checkpoint_path"]).parent / "resolved_experiment.json"
+    identity = json.loads(source.read_text())
+    identity["job"]["objective"] = "bank"
+    write_json(source, identity)
+    adaptation = next(j for j in campaign.jobs(cfg) if j["arm"] == "direct_1")
+    with pytest.raises(ValueError, match="requested direct campaign arm"):
+        campaign.run_one(cfg, adaptation)

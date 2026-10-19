@@ -1,4 +1,4 @@
-"""Local packed bank and token trajectories; no Hub calls or archive extraction."""
+"""Local token trajectories; no bank files, Hub calls, or archive extraction."""
 
 import json
 import shlex
@@ -8,7 +8,7 @@ import pyarrow.parquet as pq
 from datasets import Dataset, concatenate_datasets
 
 from speculators.bank.artifacts import file_digest, write_json
-from speculators.generator.campaign_config import DOMAINS, SNAPSHOTS_PER_SUBSET
+from speculators.generator.campaign_config import DOMAINS
 from speculators.generator.campaign_inputs import campaign_banks
 
 ORIGINAL_COLUMNS = {
@@ -41,7 +41,6 @@ class LocalInputs:
     manifests: dict
     rows: Dataset
     subsets: dict
-    targets: dict
     identity: dict
     ram_cache: object = None
 
@@ -168,69 +167,9 @@ def read_trajectories(cfg, banks):  # noqa: C901 -- local membership validation
     return manifests, subsets, concatenate_datasets(tables), sources
 
 
-def read_targets(cfg, manifests, banks):  # noqa: C901 -- packed format validation
-    root = cfg.data_path / "releases" / cfg.bank_release
-    catalog_path = local_path(root, "catalog.json")
-    catalog = json.loads(catalog_path.read_text())
-    if (
-        catalog.get("format") != "speculators-packed-lora-bank"
-        or catalog.get("version") != 1
-    ):
-        raise ValueError("Unsupported packed bank format")
-    if catalog["release"] != cfg.bank_release:
-        raise ValueError("Packed catalog release differs from configuration")
-    targets = {}
-    for run in catalog["runs"]:
-        manifest_path = local_path(root, f"{run['path']}/manifest.json")
-        if file_digest(manifest_path) != run["manifest_sha256"]:
-            raise ValueError(f"Packed manifest identity differs: {manifest_path}")
-        packed = json.loads(manifest_path.read_text())
-        identity = packed["source_identity"]
-        domain = identity["subset"]["id"].rsplit("-", 1)[0]
-        if domain not in banks:
-            raise ValueError(f"Unknown packed bank category: {domain}")
-        original = manifests[domain]
-        for key in ("prepared_fingerprint", "cache_fingerprint", "revisions"):
-            if identity[key] != original[key]:
-                raise ValueError(f"Packed bank and trajectories differ: {domain}/{key}")
-        subset = identity["subset"]["id"]
-        source_subset = next(s for s in original["subsets"] if s["id"] == subset)
-        if identity["subset"] != source_subset or identity["lora"] != banks[
-            domain
-        ].lora.model_dump(mode="json"):
-            raise ValueError(f"Packed membership or LoRA recipe differs: {subset}")
-        entries = targets.setdefault(subset, [])
-        first = next((e for e in packed["epochs"] if e["collection_epoch"] == 1), None)
-        if first is None or len(first["snapshots"]) != SNAPSHOTS_PER_SUBSET:
-            raise ValueError(f"Expected ten first-epoch snapshots: {subset}")
-        weights = local_path(manifest_path.parent, first["file"])
-        if weights.stat().st_size != first["bytes"]:
-            raise ValueError(f"Incomplete packed weights: {weights}")
-        for snapshot in first["snapshots"]:
-            entries.append(
-                {
-                    "seed": identity["seed"],
-                    "subset": subset,
-                    "collection_step": snapshot["entry"]["collection_step"],
-                    "entry": snapshot["entry"],
-                    "path": {
-                        "file": str(weights),
-                        "snapshot_id": snapshot["snapshot_id"],
-                        "tensor_keys": snapshot["tensor_keys"],
-                    },
-                }
-            )
-    for domain in DOMAINS:
-        for i in range(4):
-            if not targets.get(f"{domain}-{i:05d}"):
-                raise ValueError(f"Missing packed bank targets: {domain}-{i:05d}")
-    return targets, file_digest(catalog_path)
-
-
 def load_local_inputs(cfg):
     banks = campaign_banks(cfg)
     manifests, subsets, rows, sources = read_trajectories(cfg, banks)
-    targets, catalog_sha = read_targets(cfg, manifests, banks)
     primary = manifests[DOMAINS[0]]
     identity = {
         "version": 2,
@@ -238,9 +177,8 @@ def load_local_inputs(cfg):
         "cache_spec": primary["cache_spec"],
         "revisions": primary["revisions"],
         "sources": sources,
-        "packed_catalog_sha256": catalog_sha,
     }
-    # Record data identity once; epoch weights remain in the user's download.
+    # Record trajectory identity without consulting saved adapter artifacts.
     write_json(
         cfg.input_root / "local_inputs.json",
         {
@@ -254,4 +192,4 @@ def load_local_inputs(cfg):
             },
         },
     )
-    return LocalInputs(banks, manifests, rows, subsets, targets, identity)
+    return LocalInputs(banks, manifests, rows, subsets, identity)

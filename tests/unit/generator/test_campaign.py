@@ -36,24 +36,21 @@ def test_design_and_dry_run_have_exact_memberships_and_no_io(monkeypatch):
     )
     manifest = campaign.run_campaign(cfg, dry_run=True)
     jobs = manifest["jobs"]
-    assert len(jobs) == 10
-    assert [j["training_examples"] for j in jobs[:6]] == [
-        4000,
-        4000,
-        8000,
-        8000,
-        16000,
-        16000,
-    ]
-    for left, right in zip(jobs[:6:2], jobs[1:6:2], strict=True):
-        assert left["subsets"] == right["subsets"]
-        assert left["color"] != right["color"]
-        assert left["validation_subsets"] == right["validation_subsets"]
-    warmup = set(jobs[2]["subsets"])
-    for job in jobs[6:]:
+    assert len(jobs) == 7
+    assert [j["training_examples"] for j in jobs[:3]] == [4000, 8000, 16000]
+    assert all(j["objective"] == "direct" for j in jobs)
+    assert {j["arm"] for j in jobs[3:]} == {
+        "fresh_generator",
+        "direct_1",
+        "direct_2",
+        "fresh_lora",
+    }
+    for job in jobs[3:]:
         assert job["training_examples"] == 16000
         assert {int(s.rsplit("-", 1)[1]) for s in job["subsets"]} == {2, 3, 4, 5}
-        assert not warmup & set(job["subsets"])
+        if "source_job" in job:
+            source = next(j for j in jobs if j["label"] == job["source_job"])
+            assert not set(source["subsets"]) & set(job["subsets"])
         assert campaign.job_config(cfg, job).context.evaluation_sizes == [4]
     from typer.testing import CliRunner  # noqa: PLC0415
 
@@ -68,7 +65,7 @@ def test_design_and_dry_run_have_exact_memberships_and_no_io(monkeypatch):
         ],
     )
     assert result.exit_code == 0, result.output
-    assert len(json.loads(result.output)["jobs"]) == 10
+    assert len(json.loads(result.output)["jobs"]) == 7
 
 
 def reference(source, name):
@@ -396,10 +393,10 @@ def test_lazy_summaries_only_read_requested_examples(tiny_campaign):
         cache.close()
 
 
-def test_ten_jobs_train_resume_and_reject_changed_sources(tiny_campaign):
+def test_seven_jobs_train_resume_and_reject_changed_sources(tiny_campaign):
     cfg, calls = tiny_campaign
     results = [campaign.run_one(cfg, job) for job in campaign.jobs(cfg)]
-    assert len(results) == 10
+    assert len(results) == 7
     assert all(len(result["history"]) == 2 for result in results)
     assert all(set(result["history"][-1]["contexts"]) == {"4"} for result in results)
     for result in results:
@@ -422,7 +419,7 @@ def test_ten_jobs_train_resume_and_reject_changed_sources(tiny_campaign):
         assert path.is_file()
         assert (path.parent / "train_command.txt").is_file()
         assert (path.parent / "speculators.patch").is_file()
-    campaign.plot_comparisons(cfg, results[:6], "pretraining")
+    campaign.plot_comparisons(cfg, results[:3], "pretraining")
     assert (cfg.output_root / "pretraining" / "comparison.png").is_file()
 
 
@@ -431,14 +428,10 @@ def test_resume_matches_uninterrupted_training(tiny_campaign, monkeypatch):
     job = campaign.jobs(cfg)[1]
     original = campaign_train.train_update
 
-    def interrupt(
-        runtime, generator, optimizer, episodes, snapshots, update, objective
-    ):
+    def interrupt(runtime, generator, optimizer, episodes, update, objective):
         if update == 1:
             raise RuntimeError("simulated interruption")
-        return original(
-            runtime, generator, optimizer, episodes, snapshots, update, objective
-        )
+        return original(runtime, generator, optimizer, episodes, update, objective)
 
     monkeypatch.setattr(campaign_train, "train_update", interrupt)
     with pytest.raises(RuntimeError, match="interruption"):
@@ -464,7 +457,7 @@ def test_resume_after_intentional_update_budget_change(tiny_campaign, monkeypatc
     original = campaign_train.train_update
 
     def interrupt(*args, **kwargs):
-        if args[5] == 1:
+        if args[4] == 1:
             raise RuntimeError("simulated interruption")
         return original(*args, **kwargs)
 
@@ -522,9 +515,9 @@ def test_pilot_profiles_worker_selection_and_failure_reports(
     report = campaign.pilot(cfg)
     assert report["passed"]
     assert report["selected_download_workers"] == 8
-    assert len(seen) == 12
+    assert len(seen) == 8
     assert all(job["pilot"] for job in seen)
-    assert len(report["projected_training_seconds"]) == 10
+    assert len(report["projected_training_seconds"]) == 7
     assert report["working_sets"]["fresh_lora"]["training_full_activation_bytes"] > 0
     original_profile = campaign.pilot_profile(cfg)
     cfg.downloads.lookahead_updates += 1
@@ -541,66 +534,7 @@ def test_pilot_profiles_worker_selection_and_failure_reports(
     assert failed["error"] == "disk full"
 
 
-def test_published_targets_use_historical_first_epoch(tiny_campaign, monkeypatch):
-    from speculators.generator import campaign_inputs  # noqa: PLC0415
-
-    cfg, _ = tiny_campaign
-    bank = BankConfig.load(cfg.input_root / "bank_math.json")
-    manifest = json.loads((bank.output_root / "manifest.json").read_text())
-    manifest["cache_fingerprint"] = "cache"
-    for subset in manifest["subsets"]:
-        subset["training_seed"] = 42
-    remote = cfg.input_root.parent / "remote"
-    shutil.copytree(bank.output_root / "runs", remote / "runs")
-    records = {}
-    for subset in manifest["subsets"][:4]:
-        root = remote / "runs" / subset["id"] / "seed-42" / "snapshots"
-        second = root / "step-00000011"
-        (second / "adapter").mkdir(parents=True)
-        shutil.copyfile(
-            root / "step-00000001" / "adapter" / "adapter_model.safetensors",
-            second / "adapter" / "adapter_model.safetensors",
-        )
-        write_json(second / "entry.json", {"epoch": 2, "collection_step": 11})
-        files = {
-            str(path.relative_to(remote)): {
-                "bytes": path.stat().st_size,
-                "sha256": file_digest(path),
-            }
-            for path in root.rglob("*")
-            if path.is_file()
-        }
-        records[subset["id"]] = {
-            "identity": {
-                "prepared_fingerprint": manifest["prepared_fingerprint"],
-                "cache_fingerprint": manifest["cache_fingerprint"],
-                "revisions": manifest["revisions"],
-                "subset": subset,
-                "lora": bank.lora.model_dump(mode="json"),
-                "training": {"warmup_epochs": 1, "collect_epochs": 4},
-            },
-            "files": files,
-        }
-    monkeypatch.setattr(
-        campaign_inputs, "read_record", lambda b, s, seed, revision: (s, records[s])
-    )
-    downloaded = []
-
-    def fetch(ref, destination):
-        downloaded.append(ref["path"])
-        relative = ref["path"].split("/", 1)[1]
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(remote / relative, destination)
-
-    monkeypatch.setattr(campaign_inputs, "fetch", fetch)
-    campaign_inputs.restore_targets(cfg, bank, manifest)
-    assert not any("step-00000011/adapter" in p for p in downloaded)
-    assert any("step-00000011/entry.json" in p for p in downloaded)
-    source = json.loads((bank.output_root / "campaign_bank_sources.json").read_text())
-    assert all(record["training"]["collect_epochs"] == 4 for record in source)
-
-
-def test_wandb_training_and_shaded_comparison(tiny_campaign, monkeypatch):
+def test_wandb_training_and_scale_comparison(tiny_campaign, monkeypatch):
     import sys  # noqa: PLC0415
     from types import SimpleNamespace  # noqa: PLC0415
 
@@ -631,7 +565,7 @@ def test_wandb_training_and_shaded_comparison(tiny_campaign, monkeypatch):
     assert all(r.kwargs["group"].endswith("-pretraining") for r in runs)
     chart = runs[-1].logs[-1]
     rows = chart["comparison/data"]["data"]
-    assert {row[3] for row in rows} == set(campaign.COLORS[1])
+    assert {row[3] for row in rows} == {campaign.COLORS[scale] for scale in (1, 2)}
     assert "comparison/curves" in chart
     assert any(
         "validation/category_math/offline_agreement" in log for log in runs[0].logs

@@ -5,7 +5,6 @@ import json
 import os
 import shutil
 import time
-from pathlib import Path
 
 import torch
 from filelock import FileLock
@@ -14,27 +13,26 @@ from speculators.bank.artifacts import digest, file_digest, write_json
 from speculators.bank.config import BankConfig
 from speculators.bank.progress import report
 from speculators.generator.campaign_cache import CampaignCache
-from speculators.generator.campaign_config import DOMAINS, SCALES, SNAPSHOTS_PER_SUBSET
+from speculators.generator.campaign_config import DOMAINS, SCALES
 from speculators.generator.campaign_data import CampaignCorpus
 from speculators.generator.campaign_inputs import campaign_banks, prepare_inputs
 from speculators.generator.campaign_inventory import working_sets
 from speculators.generator.campaign_resume import resume_identity
 from speculators.generator.campaign_train import run_training
 from speculators.generator.config import ExperimentConfig
-from speculators.generator.data import discover_snapshots
 from speculators.generator.engine import Runtime, begin_run, run_identity
 from speculators.generator.tracking import ExperimentTracker, log_completed
 
 COLORS = {
-    1: ("#174a7e", "#79b6e3"),
-    2: ("#17633b", "#83c89b"),
-    4: ("#9b361e", "#efa087"),
+    1: "#174a7e",
+    2: "#17633b",
+    4: "#9b361e",
 }
-ADAPTATION_ARMS = ("fresh_generator", "bank_2", "bank_1", "fresh_lora")
+ADAPTATION_ARMS = ("fresh_generator", "direct_2", "direct_1", "fresh_lora")
 ADAPTATION_COLORS = {
     "fresh_generator": "#7c3a99",
-    "bank_2": "#17633b",
-    "bank_1": "#174a7e",
+    "direct_2": "#17633b",
+    "direct_1": "#174a7e",
     "fresh_lora": "#bd6014",
 }
 
@@ -46,25 +44,22 @@ def subset_names(numbers):
 def jobs(cfg):
     planned = []
     for scale in SCALES:
-        for objective in ("bank", "direct"):
-            planned.append(
-                {
-                    "kind": "pretraining",
-                    "stage": "pretraining",
-                    "condition": "last",
-                    "label": f"scale-{scale}-{objective}",
-                    "arm": objective,
-                    "objective": objective,
-                    "scale": scale,
-                    "subsets": subset_names(range(scale)),
-                    "validation_subsets": subset_names([0]),
-                    "updates": cfg.optimization.pretraining_updates,
-                    "training_examples": len(DOMAINS)
-                    * scale
-                    * cfg.expected_train_examples,
-                    "color": COLORS[scale][objective == "direct"],
-                }
-            )
+        planned.append(
+            {
+                "kind": "pretraining",
+                "stage": "pretraining",
+                "condition": "last",
+                "label": f"scale-{scale}-direct",
+                "arm": "direct",
+                "objective": "direct",
+                "scale": scale,
+                "subsets": subset_names(range(scale)),
+                "validation_subsets": subset_names([0]),
+                "updates": cfg.optimization.pretraining_updates,
+                "training_examples": len(DOMAINS) * scale * cfg.expected_train_examples,
+                "color": COLORS[scale],
+            }
+        )
     for arm in ADAPTATION_ARMS:
         job = {
             "kind": "pretraining",
@@ -78,8 +73,8 @@ def jobs(cfg):
             "updates": cfg.adaptation_updates,
             "training_examples": len(DOMAINS) * 4 * cfg.expected_train_examples,
         }
-        if arm in ("bank_1", "bank_2"):
-            job["source_job"] = f"scale-{arm[-1]}-bank"
+        if arm in ("direct_1", "direct_2"):
+            job["source_job"] = f"scale-{arm[-1]}-direct"
         planned.append(job)
     return planned
 
@@ -116,36 +111,15 @@ def job_config(cfg, job, *, staging_dir=None):
     return ExperimentConfig.model_validate(values)
 
 
-def first_epoch_targets(corpus, selected):
-    result = {}
-    for subset in selected:
-        records = json.loads(
-            (corpus.bank_roots[subset] / "campaign_bank_sources.json").read_text()
-        )
-        record = next(r for r in records if r["subset"] == subset)
-        first = record["training"]["warmup_epochs"]
-        entries = [
-            e
-            for e in discover_snapshots(corpus.bank_roots[subset], subset)
-            if e["entry"]["epoch"] == first
-        ]
-        if len(entries) != SNAPSHOTS_PER_SUBSET:
-            raise ValueError(f"Expected ten first-epoch snapshots for {subset}")
-        for entry in entries:
-            expected = entry["entry"].get("adapter_sha256")
-            if expected is not None and file_digest(Path(entry["path"])) != expected:
-                raise ValueError(f"Bank adapter checksum changed: {entry['path']}")
-        result[subset] = entries
-    return result
-
-
 def _source(cfg, job):
     if "source_job" not in job:
         return job
     source = cfg.output_root / "pretraining" / job["source_job"] / "checkpoint.pt"
     result_path = source.parent / "result.json"
     if not result_path.is_file():
-        raise ValueError(f"Complete bank warmup before adaptation: {result_path}")
+        raise ValueError(
+            f"Complete direct pretraining before adaptation: {result_path}"
+        )
     result = json.loads(result_path.read_text())
     source_identity = json.loads(
         (source.parent / "resolved_experiment.json").read_text()
@@ -153,9 +127,9 @@ def _source(cfg, job):
     expected = subset_names(range(int(job["arm"][-1])))
     if (
         result["job"]["subsets"] != expected
-        or source_identity["job"]["objective"] != "bank"
+        or source_identity["job"]["objective"] != "direct"
     ):
-        raise ValueError("Warmup source is not the requested campaign arm")
+        raise ValueError("Pretraining source is not the requested direct campaign arm")
     checksum = file_digest(source)
     if checksum != result["checkpoint_sha256"]:
         raise ValueError("Completed source checkpoint checksum changed")
@@ -224,12 +198,6 @@ def run_one(  # noqa: C901 -- shared online/offline run lifecycle
         for name in job["validation_subsets"]:
             if len(corpus.indices(name, True)) != cfg.expected_validation_examples:
                 raise ValueError(f"Unexpected validation membership size: {name}")
-        if job["objective"] == "bank":
-            job["snapshots_by_subset"] = (
-                {s: local_inputs.targets[s] for s in job["subsets"]}
-                if online
-                else first_epoch_targets(corpus, job["subsets"])
-            )
         identity = run_identity(local_cfg, bank, corpus, job)
         identity["campaign"] = {
             "bank_revision": cfg.bank_revision,
@@ -238,7 +206,7 @@ def run_one(  # noqa: C901 -- shared online/offline run lifecycle
         }
         if online:
             identity["campaign"] = {
-                "packed_catalog_sha256": local_inputs.identity["packed_catalog_sha256"],
+                "trajectory_sources": local_inputs.identity["sources"],
                 "activation_source": "vllm",
                 "episode_schedule_version": 1,
             }
@@ -321,7 +289,7 @@ def pilot_profile(cfg):
             {
                 "online": cfg.online.model_dump(mode="json"),
                 "updates": cfg.pilot.updates,
-                "version": 1,
+                "version": 2,
             }
         )[:12]
     return digest(
@@ -361,7 +329,6 @@ def _pilot(cfg):
     profile = pilot_profile(cfg)
     for workers in cfg.pilot.worker_counts:
         for arm, objective in (
-            ("bank", "bank"),
             ("direct", "direct"),
             ("fresh_lora", "direct"),
         ):

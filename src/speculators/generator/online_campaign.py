@@ -29,14 +29,14 @@ def online_pilot(cfg, inputs):
     }
     path = cfg.output_root / "pilot" / "report.json"
     try:
-        for arm in ("bank", "direct", "fresh_lora"):
+        for arm in ("direct", "fresh_lora"):
             job = {
                 "kind": "pretraining",
                 "stage": "pilot",
                 "condition": "last",
                 "label": f"online-{arm}",
                 "arm": arm,
-                "objective": "bank" if arm == "bank" else "direct",
+                "objective": "direct",
                 "subsets": subset_names([0]),
                 "validation_subsets": subset_names([0]),
                 "updates": cfg.pilot.updates,

@@ -1,3 +1,5 @@
+> The active campaign is now direct-only. See [the current seven-run setup](eagle3_generator_campaign_online.md). Bank comparisons below describe the retired design.
+
 # Paired bank warmup and direct pretraining
 
 For the local packed-bank workflow with online vLLM activations on an A100

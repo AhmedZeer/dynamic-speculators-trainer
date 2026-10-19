@@ -1,11 +1,7 @@
-# Local packed bank + saved tokens; external vLLM extracts activations.
-bank_config: bank_math_cloud.yaml
-additional_bank_configs:
-- bank_code_cloud.yaml
-- bank_stem_cloud.yaml
-- bank_chat_cloud.yaml
+# Saved token trajectories; external vLLM extracts activations. No bank inputs.
+training_recipe: generator_training_recipe.yaml
 input_root: output/generator-campaign-online-inputs
-output_root: output/generator-campaign-online-v2
+output_root: output/generator-direct-campaign-v3
 staging_dir: /tmp/speculators-campaign-online
 condition: last
 seed: 42
@@ -46,9 +42,7 @@ wandb:
     heatmap: eagle3-generator-heatmap
     adaptation: eagle3-generator-adaptation
 activation_source: vllm
-data_path: ./data
 trajectories_path: ./trajectories
-bank_release: b0002
 online:
   # Full CPU activation tensor budget; summaries and buffering need extra RAM.
   ram_cache_gib: 64
