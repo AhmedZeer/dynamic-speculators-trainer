@@ -1,5 +1,8 @@
 # Direct generator training with online activations
 
+Measured findings are tracked in the [experiment results registry](results/README.md),
+starting with [the fixed-budget data scaling comparison](results/GEN-001-direct-data-scaling.md).
+
 Run from the repository root on one A100 80 GB. The trainer replays saved prompt-and-response token IDs through
 an external vLLM extractor. It never downloads activation dumps or restores a
 PEFT directory tree. No speculative decoding benchmark is run.
