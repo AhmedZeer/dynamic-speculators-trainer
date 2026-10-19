@@ -2,6 +2,7 @@
 
 import gc
 import json
+import os
 import shutil
 import time
 from pathlib import Path
@@ -250,6 +251,15 @@ def run_one(  # noqa: C901 -- shared online/offline run lifecycle
         runtime_args = {}
         if online:
             cache.check_server()
+            if cfg.online.compiler_cache_dir is not None:
+                compiler_cache = cfg.online.compiler_cache_dir.expanduser().resolve()
+                compiler_cache.mkdir(parents=True, exist_ok=True)
+                # Torch may populate its /tmp default during package import.
+                # Apply the configured persistent location before model execution.
+                os.environ["TORCHINDUCTOR_CACHE_DIR"] = str(compiler_cache)
+                os.environ["TRITON_CACHE_DIR"] = str(compiler_cache / "triton")
+            compiler_cache = os.environ.get("TORCHINDUCTOR_CACHE_DIR")
+            report(f"Compiler cache: {compiler_cache or 'PyTorch default'}")
             runtime_args["model_paths"] = {
                 "target": cfg.online.target_model_path,
                 "drafter": cfg.online.drafter_model_path,
@@ -257,6 +267,8 @@ def run_one(  # noqa: C901 -- shared online/offline run lifecycle
         runtime = Runtime(
             local_cfg, bank, corpus_factory=lambda _cfg, _bank: corpus, **runtime_args
         )
+        if online:
+            runtime.compiler_cache_dir = compiler_cache
         return run_training(
             runtime,
             job,

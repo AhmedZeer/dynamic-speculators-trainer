@@ -223,9 +223,20 @@ def source_weights(runtime, generator, job):
 
 
 def _prefetch(runtime, schedule, step, updates, lookahead, objective):
-    if hasattr(runtime.corpus, "prepare_episode"):
-        runtime.corpus.prepare_episode(
-            schedule.update(step)[0]["indices"], full=objective != "bank"
+    if hasattr(runtime.corpus, "set_training_window"):
+        runtime.corpus.set_training_window(
+            [
+                episode["indices"]
+                for number in range(
+                    step,
+                    min(
+                        updates,
+                        step + runtime.corpus.cache.settings.lookahead_updates + 1,
+                    ),
+                )
+                for episode in schedule.update(number)
+            ],
+            full=objective != "bank",
         )
         return
     indices = [
@@ -312,6 +323,25 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
     ):
         if progress and tracker.new_destination and cfg.wandb.layout == "sections":
             replay_campaign_history(tracker, history, timing)
+        preparation = {"seconds": 0.0}
+        if generator is not None and hasattr(runtime.corpus, "prepare_summaries"):
+            report(f"{job['label']}: preparing persistent prompt summaries")
+            preparation = runtime.corpus.prepare_summaries(
+                job["subsets"] + job["validation_subsets"]
+            )
+            tracker.log(
+                {
+                    "optimizer_step": progress,
+                    **{
+                        f"preparation_performance/{k}": v
+                        for k, v in preparation.items()
+                    },
+                }
+            )
+            report(
+                f"{job['label']}: prompt summaries ready; "
+                f"wall={preparation['seconds']:.2f}s"
+            )
 
         def validate():
             synchronize(runtime)
@@ -448,6 +478,9 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
         result = {
             "job": job,
             "completed_updates": progress,
+            "preparation_seconds": preparation["seconds"],
+            "preparation": preparation,
+            "compiler_cache_dir": getattr(runtime, "compiler_cache_dir", None),
             "history": history,
             "score": history[-1]["score"],
             "metric": "offline agreement (full_acc_0), context size 4",

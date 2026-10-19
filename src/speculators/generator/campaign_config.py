@@ -37,11 +37,14 @@ class PilotSettings(Settings):
 
 
 class OnlineSettings(Settings):
+    summary_cache_dir: Path = Path("output/generator-summary-cache")
+    compiler_cache_dir: Path | None = Path("output/generator-compiler-cache")
+    lookahead_updates: int = Field(default=2, ge=0)
     ram_cache_gib: float = Field(default=64, ge=0)
     endpoint: str = "http://127.0.0.1:8000/v1"
     shared_dir: Path = Path("/tmp/speculators-online")  # noqa: S108
-    concurrency: int = Field(default=2, ge=1)
-    buffered_examples: int = Field(default=8, ge=8)
+    concurrency: int = Field(default=4, ge=1)
+    buffered_examples: int = Field(default=16, ge=8)
     request_timeout: float = Field(default=600, gt=0)
     max_retries: int = Field(default=3, ge=0)
     reserve_gib: float = Field(default=8, ge=0)

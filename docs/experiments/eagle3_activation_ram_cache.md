@@ -42,6 +42,8 @@ The shared RAM-cache implementation was introduced in
 Keep each run's resolved configuration, `train_command.txt`, patches, checkpoint
 checksums, and the server's `provenance/vllm` directory when reproducing or sharing
 measurements. The figures above are transcribed from the supplied console logs.
+They predate persistent summary matrices and cross-update lookahead described
+below; GPU speedups for those additions have not yet been measured.
 
 ## What is cached
 
@@ -51,7 +53,7 @@ There are three distinct stores:
 | --- | --- | --- |
 | Full activations | CPU `token_ids` and `hidden_states` tensors for complete trajectories | Byte-bounded, validation preferred, LRU within each priority |
 | Prompt summaries | Last prompt-token features used to condition the generator | All encountered summaries retained in RAM for the campaign |
-| Disk summaries | Small conditioning vectors under `staging_dir/online-summaries` | Reusable after process restart |
+| Persistent summaries | Per-subset matrices under `online.summary_cache_dir` | Reusable after process restart and project rename |
 
 On a full-activation miss, vLLM replays the original saved token IDs, including
 the response. The trainer waits for the shared-file lock, loads the Safetensors
@@ -61,7 +63,8 @@ also supplies its prompt summary. A cache hit skips the extraction and file IO.
 
 Bank reconstruction needs only prompt summaries. When a summary is missing,
 only prompt tokens are sent to vLLM; the full prompt tensor is discarded after
-the last-token vector is saved. Training noise is applied during batch creation,
+the last-token vector is saved. Generator arms now prepare all selected subset
+summaries before training, then gather directly from RAM. Training noise is applied during batch creation,
 after reading cached frozen-target states, so the cache does not freeze noise.
 
 ## Configuration and memory sizing
@@ -73,8 +76,11 @@ are:
 ```yaml
 online:
   ram_cache_gib: 64
-  concurrency: 2
-  buffered_examples: 8
+  summary_cache_dir: output/generator-summary-cache
+  compiler_cache_dir: output/generator-compiler-cache
+  lookahead_updates: 2
+  concurrency: 4
+  buffered_examples: 16
   shared_dir: /tmp/speculators-online
 ```
 
@@ -124,7 +130,24 @@ speculators generator campaign \
 
 Separate CLI invocations do not share RAM. Checkpoint resume restores training
 state, not full activations; a restarted process repopulates those on demand.
-Disk prompt summaries survive while the staging directory remains available.
+Summary matrices survive under `output/generator-summary-cache`; copy that folder
+when moving checkpoints to another machine. Old per-example `.pt` files under
+`staging_dir/online-summaries` can be imported, but the staging directory is no
+longer the primary summary store. Each complete subset shard is written
+atomically and validated on load. Unfinished shards are rebuilt after a restart.
+
+Preparation generates only missing summaries in bounded batches and is timed
+under `preparation_performance` and `run_summary/preparation_seconds`. It includes
+every row in the job's selected subsets, including a pilot's full subsets.
+Persisted cache identities include data, model IDs/revisions, layers, dtype,
+and conditioning mode; project names and generator weights are excluded.
+Training uses direct RAM lookups with precomputed prompt lengths.
+
+The request queue follows the deterministic episode schedule through the next
+two updates, refilling as results are consumed. Both queued and completed
+unconsumed futures count against the sixteen-example buffer. Episode changes
+retain requests still inside this window. Full activations remain bounded by
+the separate RAM budget, and training order is unchanged.
 
 ## Reusing the implementation
 
@@ -152,9 +175,11 @@ enforces source identities before constructing its shared inputs; `ActivationRAM
 itself does not validate identities for arbitrary callers. Treat returned
 payloads as read-only; perform augmentation on separate batch tensors.
 
-Disk summary keys include pinned model revisions, layer IDs, prompt tokens,
-prompt boundary, and conditioning mode. They do not depend on the current
-generator weights, which change during training.
+Persistent shard identities include source data and frozen-model settings;
+stored row indices, prompt lengths, vector shapes, dtype, and finiteness are
+checked before use. Legacy per-example keys include pinned model revisions,
+layers, prompt tokens, prompt boundary, and conditioning mode. Neither store
+depends on the current generator weights, which change during training.
 
 ## Reading the measurements
 

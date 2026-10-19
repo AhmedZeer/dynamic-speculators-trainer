@@ -123,8 +123,35 @@ checkpoint writes, but excluding final reporting and process cleanup.
 routine. All durations are measured with a monotonic clock, with CUDA synchronized at phase
 boundaries; no remaining-time estimate is substituted for a measurement.
 
+Before initial validation/training, generator arms prepare prompt summaries for
+all training and validation rows in the job's selected subsets. The pilot also
+prepares whole selected subsets rather than only the examples sampled in 100
+updates. Progress and `preparation_performance/seconds` show this first-use work.
+`result.json` records `preparation_seconds` and counts of generated, imported,
+loaded, and in-memory examples. W&B includes `run_summary/preparation_seconds`.
+This cost is included in session wall time, separate from optimizer-update and
+validation time. Ordinary-LoRA arms do not need this preparation.
+
+Per-subset summary matrices are saved under `online.summary_cache_dir` (default
+`output/generator-summary-cache`). Their identity includes source data, frozen
+model revisions/IDs, layers, dtype, and conditioning mode. Complete shards
+survive restarts and W&B project changes; old `/tmp` per-example summary files
+are imported when available. Keep this directory alongside checkpoints when
+moving machines. An interrupted shard is rebuilt; completed shards are reused.
+Training gathers vectors directly from RAM without repeated prompt hashing or
+Arrow-row reads.
+
+Compiler artifacts use `online.compiler_cache_dir` (default
+`output/generator-compiler-cache`), with Triton artifacts in its `triton` folder.
+The configured path overrides PyTorch's import-time temporary default. Set
+`compiler_cache_dir: null` to leave existing environment/default settings alone.
+The effective path is printed and recorded in results. Retain the
+directory to reuse compatible artifacts; the first invocation can still pay
+compilation/autotuning costs.
+
 The existing design stays the same: six matched bank/direct pretraining jobs
-with 1/2/4 subsets per category (4K/8K/16K examples), 10K updates, and identical
+with 1/2/4 subsets per category (4K/8K/16K examples), the configured pretraining
+update budget, and identical
 episode sampling within each pair. Bank targets are the ten first-collection-epoch
 snapshots per subset. Four adaptation jobs compare a fresh generator, bank-2
 generator, bank-1 generator, and fresh ordinary LoRA, each trained jointly for
@@ -134,10 +161,10 @@ context sizes are 1–8; offline validation uses only context 4. Curves report
 
 Bank reconstruction requests prompt states only, then caches small last-token
 conditioning vectors. Direct training and validation request full saved
-trajectories and reuse those states for prompt conditioning. Defaults are two
-concurrent extraction requests and eight buffered examples. At 8192 tokens,
+trajectories and reuse those states for prompt conditioning. Defaults are four
+concurrent extraction requests and sixteen buffered examples. At 8192 tokens,
 4 layers, and 4096 BF16 features, a full example is approximately 256 MiB;
-eight examples contain about 2 GiB of tensor payloads, plus loading/collation
+sixteen examples contain about 4 GiB of tensor payloads, plus loading/collation
 overhead. In addition, `online.ram_cache_gib: 64` retains up to 64 GiB of full
 CPU activation tensors across sequential jobs in one campaign process. Validation
 entries are prioritized; training entries use the remaining space with LRU eviction.
@@ -145,14 +172,21 @@ Prompt summaries are retained independently, outside this full-activation budget
 Shared files are still deleted after reading; cache misses regenerate full states.
 Restarting the CLI clears full activations in RAM, while disk prompt summaries
 remain reusable. Set `ram_cache_gib: 0` to disable the full-activation RAM cache.
-Allow extra RAM for summaries, the eight-example buffer, collation, models, and
+Allow extra RAM for summaries, the sixteen-example buffer, collation, models, and
 checkpoint serialization. Models, local bank/trajectories, summaries,
 checkpoints, and optimizer states need additional persistent disk space.
 
-The default W&B project is `eagle3-generator-ablations-v2`, with run groups
+Lookahead covers the current update and the next `online.lookahead_updates`
+updates (default 2). Only sixteen requests/results are queued at a time;
+consuming a result refills the queue while the trainer computes. Episode
+transitions retain useful future requests. Sampling and optimizer-update order
+are unchanged. Validation/checkpoint boundaries drain or cancel pending requests;
+completed activations remain available through the RAM cache.
+
+The default W&B project is `eagle3-generator-ablations-v3`, with run groups
 `pilot`, `experiment-1`, and `experiment-2`. Metric prefixes create separate
 sections: `validation_scores`, `validation_losses`, `training_losses`,
-`training_performance`, `validation_performance`, `cache_performance`,
+`training_performance`, `validation_performance`, `preparation_performance`, `cache_performance`,
 `resources`, `optimization`, and `run_summary`. Memory/storage charts use GiB;
 durations use measured seconds. Conditional-accuracy diagnostics remain logged
 but are hidden from automatic panels. Add them manually when needed.

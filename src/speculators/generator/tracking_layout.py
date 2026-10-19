@@ -6,6 +6,7 @@ SECTIONS = (
     "training_losses",
     "training_performance",
     "validation_performance",
+    "preparation_performance",
     "cache_performance",
     "resources",
     "optimization",

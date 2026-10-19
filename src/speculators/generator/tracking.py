@@ -242,6 +242,8 @@ class ExperimentTracker:
                         for key in (
                             "elapsed_seconds",
                             "setup_seconds",
+                            "preparation_seconds",
+                            "compiler_cache_dir",
                             "training_seconds",
                             "validation_seconds",
                             "data_wait_seconds",

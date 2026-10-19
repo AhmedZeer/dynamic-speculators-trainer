@@ -19,6 +19,7 @@ from speculators.data_generation.vllm_client import (
     wait_for_lock,
 )
 from speculators.generator.campaign_data import CampaignCorpus
+from speculators.generator.persistent_summaries import PersistentSummaries
 
 HIDDEN_STATE_NDIM = 3
 
@@ -33,6 +34,7 @@ class ActivationRAM:
         self.full = OrderedDict()
         self.summaries = OrderedDict()
         self.conditioning = OrderedDict()
+        self.summary_store = None
         self.bytes = self.peak_bytes = self.evictions = 0
 
     def put(self, index, payload):
@@ -68,6 +70,8 @@ class OnlineActivations:
         self.ram = ram if ram is not None else ActivationRAM(cfg.online.ram_cache_gib)
         self.lock = self.ram.lock
         self.futures = OrderedDict()
+        self.window = []
+        self.consumed = set()
         self.summaries = self.ram.summaries
         self.stats = dict.fromkeys(
             (
@@ -146,7 +150,7 @@ class OnlineActivations:
             boundary = row["prompt_length"]
             vector = states[boundary - 1, :-1].flatten().float().clone()
             with self.lock:
-                self.summaries[index] = vector
+                self.summaries.setdefault(index, vector)
                 self.summaries.move_to_end(index)
             if not summary:
                 self.ram.put(index, payload)
@@ -169,19 +173,25 @@ class OnlineActivations:
         # Never enqueue the entire lookahead: a bounded number of futures also
         # bounds already-decoded CPU tensors waiting for training to consume them.
         with self.lock:
-            for ref in refs:
-                key = (ref["index"], ref["summary"])
-                if not key[1] and key[0] in self.ram.full:
-                    continue
-                if key in self.futures:
-                    continue
-                if key[1] and (
-                    key[0] in self.summaries or (key[0], False) in self.futures
-                ):
-                    continue
-                if len(self.futures) >= self.settings.buffered_examples:
-                    break
-                self.futures[key] = self.pool.submit(self._generate, *key)
+            self.window = list(
+                dict.fromkeys(
+                    self.window + [(ref["index"], ref["summary"]) for ref in refs]
+                )
+            )
+            self._refill()
+
+    def _refill(self):
+        """Caller holds the lock. Queue only the bounded front of the lookahead."""
+        for key in self.window:
+            if key in self.consumed or key in self.futures:
+                continue
+            if not key[1] and key[0] in self.ram.full:
+                continue
+            if key[1] and (key[0] in self.summaries or (key[0], False) in self.futures):
+                continue
+            if len(self.futures) >= self.settings.buffered_examples:
+                break
+            self.futures[key] = self.pool.submit(self._generate, *key)
 
     def protect(self, refs):
         # Consumed results are removed below. Retain only the requested window;
@@ -189,14 +199,18 @@ class OnlineActivations:
         wanted = {(r["index"], r["summary"]) for r in refs}
         discarded = []
         with self.lock:
+            self.window = list(dict.fromkeys((r["index"], r["summary"]) for r in refs))
+            self.consumed.clear()
             for key in list(self.futures):
                 future = self.futures[key]
                 if key not in wanted:
                     discarded.append(future)
                     del self.futures[key]
-        for future in discarded:
-            if not future.cancel():
-                future.result()
+        # Cancel every queued request before waiting on active workers, so those
+        # workers cannot start obsolete queued work while we drain them.
+        running = [future for future in discarded if not future.cancel()]
+        for future in running:
+            future.result()
 
     def _future(self, index, summary):
         key = (index, summary)
@@ -209,7 +223,8 @@ class OnlineActivations:
                     future = self.pool.submit(self._generate, *key)
                     self.futures[key] = future
                     return future
-                _, discarded = self.futures.popitem(last=False)
+                # Demand takes precedence over the farthest speculative request.
+                _, discarded = self.futures.popitem(last=True)
             if not discarded.cancel():
                 discarded.result()
 
@@ -218,6 +233,8 @@ class OnlineActivations:
             if index in self.ram.full and (index, False) not in self.futures:
                 self.stats["hits"] += 1
                 self.ram.full.move_to_end(index)
+                self.consumed.add((index, False))
+                self._refill()
                 return self.ram.full[index]
             self.stats["misses"] += 1
         key = (index, False)
@@ -226,12 +243,15 @@ class OnlineActivations:
         with self.lock:
             if self.futures.get(key) is future:
                 del self.futures[key]
+            self.consumed.add(key)
+            self._refill()
         self.ram.put(index, result)
         return result
 
     def get_summary(self, index):
         with self.lock:
-            if index in self.summaries:
+            pending = self.futures.get((index, True))
+            if index in self.summaries and pending is None:
                 self.summaries.move_to_end(index)
                 return self.summaries[index]
             full = self.futures.get((index, False))
@@ -249,6 +269,8 @@ class OnlineActivations:
         with self.lock:
             if self.futures.get(key) is future:
                 del self.futures[key]
+            self.consumed.add(key)
+            self._refill()
         return result
 
     def snapshot(self):
@@ -278,6 +300,7 @@ class OnlineActivations:
     def close(self):
         self.pool.shutdown(wait=True, cancel_futures=True)
         self.futures.clear()
+        self.window.clear()
         self.client.close()
 
 
@@ -316,14 +339,52 @@ class OnlineCorpus(CampaignCorpus):
         self.summaries = None
         self.transfer = OnlineTransfer(cache)
         self.activations = self.transfer
+        if cache.ram.summary_store is None:
+            cache.ram.summary_store = PersistentSummaries(cache.cfg, bank, inputs)
+        self.summary_store = cache.ram.summary_store
+        self.training_window = []
 
     def prepare(self, model):
         super().prepare(model)
         self.cache.hidden_width = model.fc.weight.shape[1] // (
             len(self.bank.hidden_states.layer_ids) - 1
         )
+        self.summary_width = model.fc.weight.shape[1]
+
+    def prepare_summaries(self, names):
+        return self.summary_store.prepare(names, self.cache, self.summary_width)
+
+    def context(self, indices, condition, device):
+        if condition != "last":
+            raise ValueError("Online campaign requires last conditioning")
+        started = time.perf_counter()
+        with self.cache.lock:
+            values = [self.cache.summaries.get(index) for index in indices]
+        if any(value is None for value in values):
+            return super().context(indices, condition, device)
+        result = (
+            torch.stack(values).to(device),
+            self.summary_store.lengths[indices].to(device),
+        )
+        self.summary_hits += len(indices)
+        self.summary_seconds += time.perf_counter() - started
+        return result
+
+    def set_training_window(self, episodes, *, full):
+        self.training_window = list(episodes)
+        self._window_refs(full)
+
+    def _window_refs(self, full):
+        indices = [i for episode in self.training_window for i in episode]
+        refs = self.references(indices, full=full)
+        self.cache.protect(refs)
+        self.cache.prefetch(refs)
 
     def prepare_episode(self, indices, *, full):
+        if self.training_window and self.training_window[0] == indices:
+            self._window_refs(full)
+            self.training_window.pop(0)
+            return
         refs = self.references(indices, full=full)
         self.cache.protect(refs)
         self.cache.prefetch(refs)
@@ -345,7 +406,10 @@ class OnlineCorpus(CampaignCorpus):
         for index in dict.fromkeys(indices):
             if full:
                 refs.append({"index": index, "summary": False})
-            elif not self.summary_path(index).is_file():
+            elif (
+                index not in self.cache.summaries
+                and not self.summary_path(index).is_file()
+            ):
                 refs.append({"index": index, "summary": True})
         return refs
 
