@@ -13,7 +13,7 @@ import torch
 from speculators.bank.artifacts import write_json
 from speculators.generator.serving import endpoint, server, validation
 from speculators.generator.serving.controller import DraftAdapterController
-from speculators.generator.serving.http import AdapterMiddleware
+from speculators.generator.serving.http import AdapterMiddleware, AdapterWorkerExtension
 from tests.unit.generator.test_campaign import tiny_campaign  # noqa: F401
 from tests.unit.generator.test_online_campaign import online_campaign  # noqa: F401
 from tests.unit.generator.test_serving import draft, write_bundle
@@ -105,6 +105,9 @@ def test_server_builds_matched_independent_command(tmp_path, monkeypatch, kind):
     assert "--no-enable-prefix-caching" in command
     assert "--no-enable-chunked-prefill" in command
     assert "--middleware" in command
+    assert (
+        command[command.index("--worker-extension-cls") + 1] == server.WORKER_EXTENSION
+    )
     configuration = json.loads((tmp_path / "server/server.json").read_text())
     assert configuration["kind"] == kind
     if kind == "target_only":
@@ -115,6 +118,36 @@ def test_server_builds_matched_independent_command(tmp_path, monkeypatch, kind):
         assert ("draft_adapter_path" in speculative) == (
             kind in ("generator", "static_lora")
         )
+
+
+def test_status_uses_serializable_named_worker_rpc(monkeypatch):
+    monkeypatch.setenv("SPECULATORS_SERVER_CONFIG", '{"kind": "target_only"}')
+    worker = SimpleNamespace(model_runner=SimpleNamespace())
+    messages = []
+
+    class Client:
+        async def collective_rpc(self, method, args=()):
+            assert method == "speculators_status"
+            json.dumps([method, args])
+            return [getattr(AdapterWorkerExtension, method)(worker, *args)]
+
+    async def app(*_):
+        pytest.fail("Status must be handled by the middleware")
+
+    async def send(message):
+        messages.append(message)
+
+    scope = {
+        "type": "http",
+        "path": "/speculators/status",
+        "app": SimpleNamespace(state=SimpleNamespace(engine_client=Client())),
+    }
+    asyncio.run(AdapterMiddleware(app)(scope, None, send))
+    assert messages[0]["status"] == 200
+    payload = json.loads(messages[1]["body"])
+    assert payload["configuration"]["kind"] == "target_only"
+    assert payload["workers"][0]["adapter_controller_present"] is False
+    assert payload["workers"][0]["adapter_totals"] == {}
 
 
 def test_serve_parser_is_separate_from_legacy_modes(monkeypatch, tmp_path):
@@ -171,9 +204,12 @@ def test_http_restores_before_completion_and_on_abort(  # noqa: C901 -- lifecycl
     events = []
 
     class Client:
-        async def collective_rpc(self, function, args=()):
+        async def collective_rpc(self, method, args=()):
+            # The real vLLM API rejects callable objects during serialization.
+            assert isinstance(method, str)
+            json.dumps([method, args])
             events.append("cleanup")
-            return [function(worker, *args)]
+            return [getattr(AdapterWorkerExtension, method)(worker, *args)]
 
     async def app(scope, receive, send):
         request_id = dict(scope["headers"])[b"x-request-id"].decode()

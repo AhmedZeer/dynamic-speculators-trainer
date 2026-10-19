@@ -15,6 +15,15 @@ activation downloads are needed.
 
 ## Environment and validation workload
 
+The serving launcher registers `AdapterWorkerExtension` with vLLM. Status and
+request cleanup use named worker RPC methods, so insecure pickle serialization
+is unnecessary. If an older server reports `Object of type ... function ... is
+not serializable` on `/speculators/status`, update the checkout and restart the
+server using the updated launcher. Use a new `--provenance-dir` (for example,
+`output/http-servers/target-rpc-fix`) because the code and launch configuration
+changed, then rerun `check-endpoint`. Updating only the client cannot fix an
+already running server.
+
 Run commands from the repository root. Use the existing vLLM 0.31.0 environment:
 
 ```bash

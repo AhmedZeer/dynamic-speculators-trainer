@@ -53,6 +53,16 @@ def finish_http_request(worker, response_id):
     return {}
 
 
+class AdapterWorkerExtension:
+    """Named GPU-worker RPC methods; no serialized Python callables required."""
+
+    def speculators_status(self):
+        return worker_status(self)
+
+    def speculators_finish_http_request(self, response_id):
+        return finish_http_request(self, response_id)
+
+
 class AdapterMiddleware:
     """Restore on HTTP completion/disconnect without coupling clients to vLLM RPC."""
 
@@ -64,7 +74,7 @@ class AdapterMiddleware:
             return await self.app(scope, receive, send)
         client = scope["app"].state.engine_client
         if scope["path"] == "/speculators/status":
-            workers = await client.collective_rpc(worker_status)
+            workers = await client.collective_rpc("speculators_status")
             payload = json.dumps(
                 {
                     "configuration": json.loads(
@@ -111,7 +121,9 @@ class AdapterMiddleware:
             # direct asyncio task cancellation while the worker restores weights.
             with anyio.CancelScope(shield=True):
                 task = asyncio.create_task(
-                    client.collective_rpc(finish_http_request, args=(response_id,))
+                    client.collective_rpc(
+                        "speculators_finish_http_request", args=(response_id,)
+                    )
                 )
                 try:
                     await asyncio.shield(task)

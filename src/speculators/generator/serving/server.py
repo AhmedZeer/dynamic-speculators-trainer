@@ -19,6 +19,7 @@ from speculators.generator.serving.patch import PATCH_DIR, patch_sources
 from speculators.provenance import atomic_write, find_package_repo, git_diff, git_sha
 
 MIN_CONTEXT = 2
+WORKER_EXTENSION = "speculators.generator.serving.http.AdapterWorkerExtension"
 
 
 def pinned_model(model, revision, *, local_only=False):
@@ -99,6 +100,7 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
         "speculators_patch_identity": digest(source_patch),
         "api_server_count": 1,
         "renderer_num_workers": 1,
+        "worker_extension_cls": WORKER_EXTENSION,
         "version": 1,
         "kind": kind,
         "static_adapter_policy": "merged_once" if kind == "static_lora" else None,
@@ -168,6 +170,8 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
         "1",
         "--middleware",
         "speculators.generator.serving.http.AdapterMiddleware",
+        "--worker-extension-cls",
+        WORKER_EXTENSION,
     ]
     if args.spec_model:
         speculative = {
