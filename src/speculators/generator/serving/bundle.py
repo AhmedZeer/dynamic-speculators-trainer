@@ -23,6 +23,10 @@ PROVENANCE = (
     "speculators.patch",
     "result.json",
     "metrics.json",
+    "timing.json",
+    "configuration.json",
+    "wandb.json",
+    "eval_command.txt",
     "provenance",
 )
 
@@ -56,7 +60,7 @@ def load_generator(metadata, state):
     return generator.eval().requires_grad_(False)
 
 
-def export_run(cfg, run_dir, output):  # noqa: C901 -- validate and atomically export a run
+def export_run(cfg, run_dir, output, *, drafter_model_path=None):  # noqa: C901 -- validate and atomically export a run
     run_dir, output = Path(run_dir), Path(output)
     if output.exists():
         raise FileExistsError(f"Choose a new inference bundle directory: {output}")
@@ -66,31 +70,40 @@ def export_run(cfg, run_dir, output):  # noqa: C901 -- validate and atomically e
     for name in ("train_command.txt", "speculators.patch"):
         if not (run_dir / name).is_file():
             raise FileNotFoundError(f"Missing training provenance: {run_dir / name}")
-    bank = BankConfig.load(cfg.bank_config)
-    manifest = json.loads((bank.output_root / "manifest.json").read_text())
-    if (
-        identity["bank_data"]["prepared_fingerprint"]
-        != manifest["prepared_fingerprint"]
-    ):
-        raise ValueError("Run and bank data identities differ")
-    if identity["bank_data"]["revisions"] != manifest["revisions"]:
-        raise ValueError("Run and bank model revisions differ")
-    if identity["lora"] != bank.lora.model_dump(mode="json"):
-        raise ValueError("Run and bank LoRA configurations differ")
+    manifest = identity["bank_data"]
+    if "cache_spec" not in manifest:
+        if cfg is None:
+            raise ValueError(
+                "Legacy run requires --config to locate its model metadata"
+            )
+        bank = BankConfig.load(cfg.bank_config)
+        manifest = json.loads((bank.output_root / "manifest.json").read_text())
+        if (
+            identity["bank_data"]["prepared_fingerprint"]
+            != manifest["prepared_fingerprint"]
+        ):
+            raise ValueError("Run and bank data identities differ")
+        if identity["bank_data"]["revisions"] != manifest["revisions"]:
+            raise ValueError("Run and bank model revisions differ")
+        if identity["lora"] != bank.lora.model_dump(mode="json"):
+            raise ValueError("Run and bank LoRA configurations differ")
     model_ids = manifest["cache_spec"]["models"]
     models = {
         role: {"id": model_ids[role], "revision": manifest["revisions"][f"{role}_sha"]}
         for role in ("target", "drafter")
     }
-    source_config = json.loads(
-        Path(
+    config_path = (
+        Path(drafter_model_path) / "config.json"
+        if drafter_model_path is not None
+        else Path(
             hf_hub_download(
                 models["drafter"]["id"],
                 "config.json",
                 revision=models["drafter"]["revision"],
             )
-        ).read_text()
+        )
     )
+    source_config = json.loads(config_path.read_text())
     if source_config.get("quantization_config"):
         raise ValueError("The merge prototype requires an unquantized drafter")
     job = identity["job"]
@@ -103,6 +116,8 @@ def export_run(cfg, run_dir, output):  # noqa: C901 -- validate and atomically e
         raise ValueError("The serial runtime supports only last conditioning")
     checkpoint = run_dir / "checkpoint.pt"
     payload = torch.load(checkpoint, map_location="cpu", weights_only=True)
+    if payload.get("identity") is not None and payload["identity"] != digest(identity):
+        raise ValueError("Checkpoint and resolved experiment identities differ")
     state = payload["model"]
     rank = identity["lora"]["rank"]
     shapes = {}

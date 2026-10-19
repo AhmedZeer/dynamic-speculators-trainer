@@ -130,6 +130,41 @@ def export_command(
     typer.echo(f"Exported {value['kind']} to {output}")
 
 
+@app.command(name="push-to-hub")
+def push_to_hub_command(
+    run_dir: Annotated[Path, typer.Option("--run-dir", exists=True, file_okay=False)],
+    repo_id: Annotated[str, typer.Option("--repo-id")],
+    config: Annotated[Path | None, typer.Option("--config", exists=True)] = None,
+    drafter_model_path: Annotated[
+        Path | None, typer.Option("--drafter-model-path", exists=True, file_okay=False)
+    ] = None,
+    provenance_dir: Annotated[
+        Path | None, typer.Option("--provenance-dir", exists=True, file_okay=False)
+    ] = None,
+    private: Annotated[bool, typer.Option("--private")] = False,
+    include_training_checkpoint: Annotated[
+        bool, typer.Option("--include-training-checkpoint")
+    ] = False,
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+):
+    """Upload a completed run's inference weights and provenance to a model repo."""
+    import json  # noqa: PLC0415
+
+    from speculators.generator.publish import push_run  # noqa: PLC0415
+
+    result = push_run(
+        run_dir,
+        repo_id,
+        cfg=ExperimentConfig.load(config) if config is not None else None,
+        drafter_model_path=drafter_model_path,
+        provenance_dir=provenance_dir,
+        private=private,
+        include_training_checkpoint=include_training_checkpoint,
+        dry_run=dry_run,
+    )
+    typer.echo(json.dumps(result, indent=2))
+
+
 @app.command(name="benchmark")
 def benchmark_command(
     config: ConfigOption,

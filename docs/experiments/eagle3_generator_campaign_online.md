@@ -209,3 +209,59 @@ invocations resume compatible direct-only runs normally.
 
 Preserve `provenance/vllm` alongside the training provenance, configurations,
 data identities, patches, and checkpoint checksums when sharing results.
+
+## Publish completed runs for later benchmarking
+
+Training saves checkpoints locally; publishing is an explicit command. Authenticate
+once with `hf auth login`, then choose a separate model repo for each experiment:
+
+```bash
+speculators generator push-to-hub \
+  --run-dir output/generator-direct-campaign-v3/pretraining/scale-1-direct \
+  --repo-id azeeer/eagle3-generator-direct-4k-v3 \
+  --drafter-model-path ./models/qwen3-8b-eagle3
+
+speculators generator push-to-hub \
+  --run-dir output/generator-direct-campaign-v3/adaptation/direct_2 \
+  --repo-id azeeer/eagle3-generator-adapt-direct-8k-v3 \
+  --drafter-model-path ./models/qwen3-8b-eagle3
+```
+
+Repeat with `scale-2-direct`, `scale-4-direct`, `fresh_generator`, `direct_1`, or
+`fresh_lora` and the desired repo ID. The same command supports ordinary LoRA runs.
+Add `--private` to create a private repo, or `--dry-run` to validate/export and
+list files/bytes without contacting the Hub for an upload. With the local drafter
+path supplied, dry-run needs no Hub connection. Omit that path to retrieve only
+the pinned drafter `config.json` from the Hub.
+
+The command exports `model.safetensors` and `bundle.json` in the existing
+benchmark bundle format. It includes training commands/patches, resolved identity,
+metrics, timing, configuration, available attempt provenance, checksums, and a
+model card. It does not upload activation caches, trajectories, or frozen base
+model weights. Model IDs/revisions and generator architecture are stored in the
+bundle. These are Speculators bundles, not standalone Transformers models.
+
+Optimizer state is omitted by default. Add `--include-training-checkpoint` to
+also upload the original `checkpoint.pt` for training recovery. Uploads validate
+the completed checkpoint checksum and resolved experiment identity before creating
+a repo. Completed runs require `result.json`; live/incomplete checkpoints cannot
+be published by this command.
+
+The command finds `provenance/vllm` in the run directory or its ancestors, or
+vLLM provenance files saved directly in those directories. If
+extraction provenance was saved elsewhere, pass `--provenance-dir PATH` containing
+`vllm_command.txt`, `vllm.patch`, and `checkpoint_sha256.txt`. Online runs require
+these artifacts so the extraction settings and model weights remain reproducible.
+The extraction command, patch, checkpoint checksums, and any colocated
+`eval_command.txt` are copied without copying unrelated files from that directory.
+
+Download a published bundle for benchmarking, pinning the commit SHA printed by
+the upload command:
+
+```bash
+hf download azeeer/eagle3-generator-direct-4k-v3 \
+  --revision COMMIT_SHA --local-dir ./bundles/direct-4k
+```
+
+Use `./bundles/direct-4k` as the appropriate entry in the benchmark YAML's
+`bundles` mapping. Publishing does not launch vLLM or run a decoding benchmark.
