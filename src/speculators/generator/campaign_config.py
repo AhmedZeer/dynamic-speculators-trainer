@@ -53,7 +53,7 @@ class OnlineSettings(Settings):
 
 
 class CampaignConfig(ExperimentConfig):
-    """Three direct pretraining jobs and four unseen-data adaptation jobs."""
+    """Three direct pretraining jobs and one ordinary-LoRA baseline."""
 
     training_recipe: Path | None = None
 

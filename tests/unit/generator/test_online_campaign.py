@@ -169,10 +169,10 @@ def online_campaign(tiny_campaign, tmp_path, monkeypatch):  # noqa: F811
     return cfg, downloads, requests
 
 
-def test_local_online_seven_jobs_and_pilot(online_campaign):
+def test_local_online_four_jobs_and_pilot(online_campaign):
     cfg, downloads, requests = online_campaign
     result = campaign.run_campaign(cfg, "all")
-    assert result["runs"] == 7
+    assert result["runs"] == 4
     assert not downloads
     assert requests
     assert any(len(r) == 2 for r in requests)
@@ -182,9 +182,24 @@ def test_local_online_seven_jobs_and_pilot(online_campaign):
     assert report["passed"]
     assert len(report["results"]) == 2
     assert all(r["cache_end"]["temporary_bytes"] == 0 for r in report["results"])
+    # Existing seven-arm campaigns can resume without touching retired artifacts.
+    manifest_path = cfg.output_root / "campaign.json"
+    manifest = json.loads(manifest_path.read_text())
+    retired = ("direct_1", "direct_2", "fresh_generator")
+    for arm in retired:
+        manifest["jobs"].append({"label": arm, "stage": "adaptation"})
+        artifact = cfg.output_root / "adaptation" / arm / "retained.txt"
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        artifact.write_text("existing artifact")
+    write_json(manifest_path, manifest)
     before = len(requests)
-    assert campaign.run_campaign(cfg, "all")["runs"] == 7
+    assert campaign.run_campaign(cfg, "all")["runs"] == 4
     assert len(requests) == before
+    assert len(json.loads(manifest_path.read_text())["jobs"]) == 4
+    for arm in retired:
+        assert (cfg.output_root / "adaptation" / arm / "retained.txt").read_text() == (
+            "existing artifact"
+        )
 
 
 def test_online_full_prefetch_supplies_summary_without_second_request(online_campaign):
@@ -256,7 +271,7 @@ def test_online_configuration_dry_run():
         Path("examples/eagle3-lora/generator_campaign_online.yaml")
     )
     result = campaign.run_campaign(cfg, dry_run=True)
-    assert len(result["jobs"]) == 7
+    assert len(result["jobs"]) == 4
     assert cfg.online.concurrency == 16
     assert cfg.online.buffered_examples == 64
     assert cfg.online.ram_cache_gib == 96
@@ -544,6 +559,12 @@ def test_adaptation_rejects_bank_source(online_campaign):
     identity = json.loads(source.read_text())
     identity["job"]["objective"] = "bank"
     write_json(source, identity)
-    adaptation = next(j for j in campaign.jobs(cfg) if j["arm"] == "direct_1")
+    # Source validation remains available for historical/custom adaptation jobs.
+    adaptation = {
+        **campaign.jobs(cfg)[-1],
+        "arm": "direct_1",
+        "label": "direct_1",
+        "source_job": "scale-1-direct",
+    }
     with pytest.raises(ValueError, match="requested direct campaign arm"):
         campaign.run_one(cfg, adaptation)

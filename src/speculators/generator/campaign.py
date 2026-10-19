@@ -28,11 +28,8 @@ COLORS = {
     2: "#17633b",
     4: "#9b361e",
 }
-ADAPTATION_ARMS = ("fresh_generator", "direct_2", "direct_1", "fresh_lora")
+ADAPTATION_ARMS = ("fresh_lora",)
 ADAPTATION_COLORS = {
-    "fresh_generator": "#7c3a99",
-    "direct_2": "#17633b",
-    "direct_1": "#174a7e",
     "fresh_lora": "#bd6014",
 }
 
@@ -73,8 +70,6 @@ def jobs(cfg):
             "updates": cfg.adaptation_updates,
             "training_examples": len(DOMAINS) * 4 * cfg.expected_train_examples,
         }
-        if arm in ("direct_1", "direct_2"):
-            job["source_job"] = f"scale-{arm[-1]}-direct"
         planned.append(job)
     return planned
 

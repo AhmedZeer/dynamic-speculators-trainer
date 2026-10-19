@@ -145,17 +145,17 @@ The effective path is printed and recorded in results. Retain the
 directory to reuse compatible artifacts; the first invocation can still pay
 compilation/autotuning costs.
 
-The main campaign has seven runs, all using `lk_hybrid`:
+The main campaign has four runs, all using `lk_hybrid`:
 
 - `scale-1-direct`, `scale-2-direct`, and `scale-4-direct` pretrain fresh generators
   on 1/2/4 subsets per category (4K/8K/16K training examples), respectively.
   The example configuration uses 1500 optimizer updates for each run.
-- `fresh_generator`, `direct_1`, `direct_2`, and `fresh_lora` each train for 1000
-  updates jointly on subsets 00002–00005 across math/code/stem/chat (16K examples).
-  `direct_1` and `direct_2` initialize from completed 4K and 8K direct pretraining
-  checkpoints; optimizer state starts fresh for adaptation. Their pretraining data
-  does not overlap the adaptation data. The 16K pretraining checkpoint is used only
-  for the scaling comparison because its data overlaps adaptation.
+- `fresh_lora` trains a fresh ordinary LoRA for 1000 updates jointly on subsets
+  00002–00005 across math/code/stem/chat (16K examples).
+
+The `fresh_generator`, `direct_1`, and `direct_2` adaptation arms are no longer
+scheduled. Existing artifacts from those runs remain on disk; the campaign does
+not delete them. The scaling runs retain their existing data and update budgets.
 
 Training context sizes are 1–8; offline validation uses only context 4. Curves
 report `full_acc_0` offline agreement, not speculative decoding acceptance.
@@ -198,8 +198,8 @@ durations use measured seconds. Conditional-accuracy diagnostics remain logged
 but are hidden from automatic panels. Add them manually when needed.
 The validation-detail table replaces per-subset scalar chart proliferation.
 Agreement is plotted against optimizer updates and measured cumulative training
-seconds. Aggregate comparison images use distinct colors by scale; adaptation arms have
-four distinct colors.
+seconds. Aggregate comparison images use distinct colors by scale; the ordinary-LoRA baseline has
+its own color.
 
 This design uses a new output root, `output/generator-direct-campaign-v3`, so
 previous bank campaigns/checkpoints remain untouched. It does not automatically
@@ -222,13 +222,13 @@ speculators generator push-to-hub \
   --drafter-model-path ./models/qwen3-8b-eagle3
 
 speculators generator push-to-hub \
-  --run-dir output/generator-direct-campaign-v3/adaptation/direct_2 \
-  --repo-id azeeer/eagle3-generator-adapt-direct-8k-v3 \
+  --run-dir output/generator-direct-campaign-v3/adaptation/fresh_lora \
+  --repo-id azeeer/eagle3-fresh-lora-v3 \
   --drafter-model-path ./models/qwen3-8b-eagle3
 ```
 
-Repeat with `scale-2-direct`, `scale-4-direct`, `fresh_generator`, `direct_1`, or
-`fresh_lora` and the desired repo ID. The same command supports ordinary LoRA runs.
+Repeat with `scale-2-direct`, `scale-4-direct`, or `fresh_lora` and the desired
+repo ID. The same command supports ordinary LoRA runs.
 Add `--private` to create a private repo, or `--dry-run` to validate/export and
 list files/bytes without contacting the Hub for an upload. With the local drafter
 path supplied, dry-run needs no Hub connection. Omit that path to retrieve only

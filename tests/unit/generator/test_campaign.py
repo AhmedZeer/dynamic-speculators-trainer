@@ -36,21 +36,14 @@ def test_design_and_dry_run_have_exact_memberships_and_no_io(monkeypatch):
     )
     manifest = campaign.run_campaign(cfg, dry_run=True)
     jobs = manifest["jobs"]
-    assert len(jobs) == 7
+    assert len(jobs) == 4
     assert [j["training_examples"] for j in jobs[:3]] == [4000, 8000, 16000]
     assert all(j["objective"] == "direct" for j in jobs)
-    assert {j["arm"] for j in jobs[3:]} == {
-        "fresh_generator",
-        "direct_1",
-        "direct_2",
-        "fresh_lora",
-    }
+    assert {j["arm"] for j in jobs[3:]} == {"fresh_lora"}
     for job in jobs[3:]:
         assert job["training_examples"] == 16000
         assert {int(s.rsplit("-", 1)[1]) for s in job["subsets"]} == {2, 3, 4, 5}
-        if "source_job" in job:
-            source = next(j for j in jobs if j["label"] == job["source_job"])
-            assert not set(source["subsets"]) & set(job["subsets"])
+        assert "source_job" not in job
         assert campaign.job_config(cfg, job).context.evaluation_sizes == [4]
     from typer.testing import CliRunner  # noqa: PLC0415
 
@@ -65,7 +58,7 @@ def test_design_and_dry_run_have_exact_memberships_and_no_io(monkeypatch):
         ],
     )
     assert result.exit_code == 0, result.output
-    assert len(json.loads(result.output)["jobs"]) == 7
+    assert len(json.loads(result.output)["jobs"]) == 4
 
 
 def reference(source, name):
@@ -393,10 +386,10 @@ def test_lazy_summaries_only_read_requested_examples(tiny_campaign):
         cache.close()
 
 
-def test_seven_jobs_train_resume_and_reject_changed_sources(tiny_campaign):
+def test_four_jobs_train_resume_and_reject_changed_sources(tiny_campaign):
     cfg, calls = tiny_campaign
     results = [campaign.run_one(cfg, job) for job in campaign.jobs(cfg)]
-    assert len(results) == 7
+    assert len(results) == 4
     assert all(len(result["history"]) == 2 for result in results)
     assert all(set(result["history"][-1]["contexts"]) == {"4"} for result in results)
     for result in results:
@@ -517,7 +510,7 @@ def test_pilot_profiles_worker_selection_and_failure_reports(
     assert report["selected_download_workers"] == 8
     assert len(seen) == 8
     assert all(job["pilot"] for job in seen)
-    assert len(report["projected_training_seconds"]) == 7
+    assert len(report["projected_training_seconds"]) == 4
     assert report["working_sets"]["fresh_lora"]["training_full_activation_bytes"] > 0
     original_profile = campaign.pilot_profile(cfg)
     cfg.downloads.lookahead_updates += 1
