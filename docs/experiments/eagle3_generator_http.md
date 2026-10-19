@@ -38,7 +38,7 @@ starting servers; existing processes must be restarted after patch changes.
 The launcher checks the pinned vLLM version and patch state rather than modifying
 an installed library automatically.
 
-Export the existing validation split once:
+Export the existing Nemotron validation split once:
 
 ```bash
 speculators generator export-validation \
@@ -48,7 +48,32 @@ speculators generator export-validation \
   --max-tokens 256
 ```
 
-This selects the union of the retained runs' validation subsets: `00000` and
+For a smaller workload, choose domains and cap examples **per domain**:
+
+```bash
+speculators generator export-validation \
+  --config examples/eagle3-lora/generator_campaign_online.yaml \
+  --output output/generator-http-validation-50 \
+  --tokenizer-path ./models/qwen3-8b \
+  --categories math,code,stem,chat --max-samples 50 --seed 42
+```
+
+This exports 200 examples total. New manifest groups and result labels are
+`nemo-math`, `nemo-code`, `nemo-stem`, and `nemo-chat`; each row also identifies
+the dataset as `nemotron`. `--categories` accepts these prefixed names, short
+domain names, or `all` (the default). `--max-samples 0` uses all available rows
+(the default). Samples are seeded and interleaved across validation subsets so
+a small cap does not select only the first subset. The cap applies to each
+domain, not each subset; it uses all rows when fewer than the cap are available.
+Selection settings are recorded in the checksummed manifest.
+
+Use the new manifest path for both correctness checks and GuideLLM, and create
+new correctness reports for it. Existing manifests remain readable. GuideLLM's
+`--subsets math,code` selector also accepts `nemo-math,nemo-code`, including when
+reading older manifests with short group names. Exporting never overwrites an
+existing directory.
+
+The uncapped export selects the union of the retained runs' validation subsets: `00000` and
 `00002`–`00005` for math/code/stem/chat. With the example config this is 2,000
 prompts (500 per category). Only validation Parquet files and metadata are read;
 training Parquet files, banks, and hidden states are not read. The export records

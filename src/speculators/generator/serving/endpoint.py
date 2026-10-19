@@ -10,7 +10,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from speculators.bank.artifacts import digest, file_digest, write_json
-from speculators.generator.serving.validation import load_validation
+from speculators.generator.serving.validation import load_validation, nemotron_domain
 from speculators.provenance import (
     atomic_write,
     find_package_repo,
@@ -109,6 +109,16 @@ def selected_rows(groups, limit=0, categories=None):
     if limit < 0:
         raise ValueError("Request limit must be nonnegative; zero selects all rows")
     names = categories or list(groups)
+    # Accept domain shorthand for new exports and prefixed names for old ones.
+    resolved = []
+    for requested in names:
+        name = requested
+        if name not in groups:
+            domain = nemotron_domain(name)
+            name = f"nemo-{domain}" if f"nemo-{domain}" in groups else domain
+        if name not in resolved:
+            resolved.append(name)
+    names = resolved
     if set(names) - groups.keys():
         raise ValueError("Unknown validation categories")
     return {

@@ -171,6 +171,17 @@ def export_validation_command(
     output: Annotated[Path, typer.Option("--output")],
     tokenizer_path: Annotated[Path | None, typer.Option("--tokenizer-path")] = None,
     max_tokens: Annotated[int, typer.Option("--max-tokens", min=1)] = 256,
+    max_samples: Annotated[
+        int,
+        typer.Option(
+            "--max-samples", min=0, help="Maximum rows per domain; 0 uses all."
+        ),
+    ] = 0,
+    categories: Annotated[
+        str,
+        typer.Option("--categories", help="Comma-separated Nemotron domains or all."),
+    ] = "all",
+    seed: Annotated[int, typer.Option("--seed")] = 42,
 ):
     """Freeze current campaign validation prompts for independent HTTP benchmarks."""
     import json  # noqa: PLC0415
@@ -185,6 +196,11 @@ def export_validation_command(
         output,
         tokenizer_path=tokenizer_path,
         max_tokens=max_tokens,
+        max_samples=max_samples,
+        categories=None
+        if categories == "all"
+        else [s.strip() for s in categories.split(",")],
+        seed=seed,
     )
     typer.echo(json.dumps(result, indent=2))
 

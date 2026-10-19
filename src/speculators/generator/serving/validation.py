@@ -1,6 +1,7 @@
 """Freeze existing validation rows for HTTP correctness checks and GuideLLM."""
 
 import json
+import random
 import shutil
 from pathlib import Path
 
@@ -14,19 +15,62 @@ from speculators.generator.campaign_inputs import campaign_banks
 from speculators.generator.local_campaign import local_path, trajectory_record_path
 
 
+def nemotron_domain(name):
+    """Accept short domain selectors and explicit Nemotron group names."""
+    for prefix in ("nemo-", "nem-"):
+        if name.startswith(prefix):
+            name = name[len(prefix) :]
+            break
+    if name not in DOMAINS:
+        raise ValueError(f"Unknown Nemotron category: {name}")
+    return name
+
+
+def sample_domain(rows, max_samples, seed):
+    """Interleave seeded subset samples so small limits cover multiple subsets."""
+    rng = random.Random(seed)
+    buckets = {}
+    for row in rows:
+        buckets.setdefault(row["subset"], []).append(row)
+    for bucket in buckets.values():
+        rng.shuffle(bucket)
+    ordered = []
+    for index in range(max(map(len, buckets.values()), default=0)):
+        for name in sorted(buckets):
+            if index < len(buckets[name]):
+                ordered.append(buckets[name][index])
+    return ordered[:max_samples] if max_samples else ordered
+
+
 def export_validation(  # noqa: C901 -- validate frozen dataset membership
-    cfg, output, *, tokenizer_path=None, max_tokens=256, subsets=None
+    cfg,
+    output,
+    *,
+    tokenizer_path=None,
+    max_tokens=256,
+    subsets=None,
+    categories=None,
+    max_samples=0,
+    seed=42,
 ):
     output = Path(output)
     if output.exists():
         raise FileExistsError(f"Choose a new validation export directory: {output}")
     if max_tokens < 1:
         raise ValueError("max_tokens must be positive")
+    if max_samples < 0:
+        raise ValueError("max_samples must be nonnegative; zero selects all rows")
+    domains = (
+        {nemotron_domain(name) for name in categories} if categories else set(DOMAINS)
+    )
     selected = sorted(
         set(
             subsets or [name for job in jobs(cfg) for name in job["validation_subsets"]]
         )
     )
+    selected = [name for name in selected if name.rsplit("-", 1)[0] in domains]
+    if not selected:
+        raise ValueError("No validation subsets selected")
     recipes = campaign_banks(cfg)
     tokenizer_path = tokenizer_path or cfg.online.target_model_path
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
@@ -105,6 +149,7 @@ def export_validation(  # noqa: C901 -- validate frozen dataset membership
                         "row_id": key,
                         "subset": name,
                         "category": domain,
+                        "dataset": "nemotron",
                         "prompt": text,
                         "prompt_token_ids": tokens,
                         "prompt_tokens_count": boundary,
@@ -123,11 +168,13 @@ def export_validation(  # noqa: C901 -- validate frozen dataset membership
             rows = [row for row in records if row["category"] == domain]
             if not rows:
                 continue
-            path = pending / f"{domain}.jsonl"
+            rows = sample_domain(rows, max_samples, seed)
+            group = f"nemo-{domain}"
+            path = pending / f"{group}.jsonl"
             path.write_text(
                 "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
             )
-            groups[domain] = {
+            groups[group] = {
                 "file": path.name,
                 "sha256": file_digest(path),
                 "rows": len(rows),
@@ -138,6 +185,13 @@ def export_validation(  # noqa: C901 -- validate frozen dataset membership
             "subsets": selected,
             "sources": sources,
             "max_tokens": max_tokens,
+            "dataset": "nemotron",
+            "selection": {
+                "categories": [d for d in DOMAINS if d in domains],
+                "max_samples_per_category": max_samples,
+                "seed": seed,
+                "method": "seeded_subset_round_robin",
+            },
             "groups": groups,
         }
         write_json(
@@ -147,7 +201,11 @@ def export_validation(  # noqa: C901 -- validate frozen dataset membership
     except BaseException:
         shutil.rmtree(pending)
         raise
-    return {"directory": str(output), "examples": len(records), "groups": groups}
+    return {
+        "directory": str(output),
+        "examples": sum(g["rows"] for g in groups.values()),
+        "groups": groups,
+    }
 
 
 def load_validation(path):

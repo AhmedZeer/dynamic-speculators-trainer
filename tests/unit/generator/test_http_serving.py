@@ -50,15 +50,44 @@ def frozen_validation(online_campaign, tmp_path, monkeypatch):  # noqa: F811
 def test_validation_preserves_membership_tokens_and_detects_changes(frozen_validation):
     manifest, groups = validation.load_validation(frozen_validation)
     assert len(manifest["subsets"]) == 20
-    assert set(groups) == {"math", "code", "stem", "chat"}
+    assert set(groups) == {"nemo-math", "nemo-code", "nemo-stem", "nemo-chat"}
     assert all(len(rows) == 20 for rows in groups.values())
     for rows in groups.values():
         assert all(row["prompt_token_ids"] == [1, 2] for row in rows)
         assert all(row["output_tokens_count"] == 4 for row in rows)
-    path = frozen_validation.parent / "math.jsonl"
+    path = frozen_validation.parent / "nemo-math.jsonl"
     path.write_text(path.read_text() + "\n")
     with pytest.raises(ValueError, match="checksum"):
         validation.load_validation(frozen_validation)
+
+
+def test_validation_limits_and_domain_aliases(
+    frozen_validation,
+    online_campaign,  # noqa: F811
+    tmp_path,
+):
+    cfg, _, _ = online_campaign
+    result = validation.export_validation(
+        cfg, tmp_path / "small", categories=["math", "nemo-code"], max_samples=7
+    )
+    assert result["examples"] == 14
+    manifest, groups = validation.load_validation(tmp_path / "small/manifest.json")
+    assert set(groups) == {"nemo-math", "nemo-code"}
+    assert all(len(rows) == 7 for rows in groups.values())
+    assert all(len({r["subset"] for r in rows}) == 5 for rows in groups.values())
+    assert manifest["dataset"] == "nemotron"
+    assert manifest["selection"]["max_samples_per_category"] == 7
+    assert set(endpoint.selected_rows(groups, categories=["math"])) == {"nemo-math"}
+    again = tmp_path / "again"
+    validation.export_validation(cfg, again, categories=["math", "code"], max_samples=7)
+    assert validation.load_validation(again / "manifest.json")[1] == groups
+    assert endpoint.selected_rows({"math": [1]}, categories=["nemo-math"]) == {
+        "math": [1]
+    }
+    with pytest.raises(ValueError, match="Unknown Nemotron"):
+        validation.export_validation(cfg, tmp_path / "bad", categories=["unknown"])
+    with pytest.raises(ValueError, match="nonnegative"):
+        validation.export_validation(cfg, tmp_path / "negative", max_samples=-1)
 
 
 @pytest.mark.parametrize(
