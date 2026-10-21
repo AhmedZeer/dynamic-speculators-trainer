@@ -23,7 +23,7 @@ hf auth login
 speculators generator train-full-data \
   --config examples/eagle3-lora/generator_campaign_online.yaml \
   --output-root output/generator-all24k-10epochs \
-  --epochs 10 --save-every-epochs 2 \
+  --epochs 10 --hub-upload-interval 1000 \
   --hub-repo azeeer/eagle3-generator-all24k-10ep-v1 \
   --vllm-provenance-dir output/generator-direct-campaign-v3/provenance/vllm
 ```
@@ -33,6 +33,14 @@ Use the provenance directory of the extraction server actually running. Add
 checked before training. To inspect the data membership, actual number of
 examples, optimizer updates and epoch boundaries without contacting the Hub or
 running model inference, add `--dry-run`. It still reads local trajectory inputs.
+
+`hub_upload_interval: 1000` in the online YAML supplies the default; the CLI
+option overrides it. Existing commands containing `--save-every-epochs 2` are
+still accepted for notebook compatibility, but that legacy argument no longer
+controls uploads. Replace it with `--hub-upload-interval 1000` for clarity.
+An upload-cadence change is compatible with the existing model/optimizer
+checkpoint, and its effective job is archived in resume provenance. Existing
+`epoch-*` Hub folders remain available; new snapshots use `step-*` names.
 
 The config supplies architecture, optimizer, learning-rate warmup, episode sizes,
 activation service, cache settings, and W&B project. The total optimizer-update
@@ -44,14 +52,14 @@ seen divided by training pool size.
 
 For seed 42, context sizes 1–8, four episodes/update, and 24 subsets of 1,000
 training examples, the 10-epoch plan is **13,369 optimizer updates**. Hub saves
-occur at updates 2,676, 5,349, 8,015, 10,681, and 13,369. The command computes
+occur every 1,000 updates and at the final update, 13,369. The command computes
 these boundaries from the actual local inputs; do not reuse these numbers for
 a different dataset or schedule.
 
 Context-4 validation runs initially, every **500 optimizer updates**, and at the
 final update, using the existing held-out `00000` validation rows in each domain.
 The YAML setting is `optimization.pretraining_validation_interval: 500` and is
-independent of the two-epoch Hub upload cadence. Checkpoint metadata includes
+independent of the 1,000-step Hub upload cadence. Checkpoint metadata includes
 the latest scheduled validation; uploads do not trigger additional validation.
 It does not run a vLLM inference benchmark. Local recovery checkpoints follow the config's
 optimizer-step checkpoint interval; these intermediate recovery saves are not
@@ -66,22 +74,22 @@ boundaries are not retroactively evaluated using later model weights.
 
 ## Remote checkpoints
 
-At epochs 2, 4, 6, 8, and 10 the training loop saves a checkpoint, then waits for
+Every 1,000 optimizer updates, and at the final update, training saves a checkpoint and waits for
 a successful Hub commit before proceeding. Each snapshot is a separate folder:
 
 ```text
 azeeer/eagle3-generator-all24k-10ep-v1/
-  epoch-0002/
-  epoch-0004/
-  epoch-0006/
-  epoch-0008/
-  epoch-0010/
+  step-00001000/
+  step-00002000/
+  ...
+  step-00013000/
+  step-00013369/
 ```
 
 Each folder contains `bundle.json`, `model.safetensors`, full `checkpoint.pt`
 (including optimizer, progress and RNG state), training configuration and
 identity, metrics/timing, commands, available patches and extraction provenance,
-and checksums. Its `result.json` explicitly describes an `epoch_snapshot` and
+and checksums. Its `result.json` explicitly describes a `training_snapshot` and
 records completed epochs/updates; it is not the final whole-run completion marker.
 The folder can be passed to `launch_vllm.py serve --adapter-bundle` later.
 
@@ -98,25 +106,25 @@ Download only the desired snapshot rather than every multi-GB optimizer state:
 
 ```bash
 hf download azeeer/eagle3-generator-all24k-10ep-v1 \
-  --include 'epoch-0010/*' --local-dir ./bundles/generator-all24k
+  --include 'step-00013369/*' --local-dir ./bundles/generator-all24k
 ```
 
 Add `--revision COMMIT_SHA` to pin the commit recorded by the upload. The serving
-bundle directory is `./bundles/generator-all24k/epoch-0010`. For inference-only
-downloads, request just `epoch-0010/bundle.json`, `epoch-0010/model.safetensors`,
+bundle directory is `./bundles/generator-all24k/step-00013369`. For inference-only
+downloads, request just `step-00013369/bundle.json`, `step-00013369/model.safetensors`,
 and desired provenance files explicitly; the optimizer checkpoint is not needed
 by the server.
 
-For recovery after losing local storage, download the last uploaded epoch
-(for example `epoch-0008`) and copy the raw training files into the original run
+For recovery after losing local storage, download the last uploaded step
+(for example `step-00008000`) and copy the raw training files into the original run
 directory. **Do not copy the snapshot's `result.json` into the active run**:
 the existing runner uses that filename as a whole-run completion marker.
 
 ```bash
 hf download azeeer/eagle3-generator-all24k-10ep-v1 \
-  --include 'epoch-0008/*' --local-dir ./recovered
+  --include 'step-00008000/*' --local-dir ./recovered
 mkdir -p output/generator-all24k-10epochs/pretraining/all-data-10epochs
-cp -a ./recovered/epoch-0008/{checkpoint.pt,resolved_experiment.json,configuration.json,train_command.txt,speculators.patch,metrics.json,timing.json} \
+cp -a ./recovered/step-00008000/{checkpoint.pt,resolved_experiment.json,configuration.json,train_command.txt,speculators.patch,metrics.json,timing.json} \
   output/generator-all24k-10epochs/pretraining/all-data-10epochs/
 ```
 

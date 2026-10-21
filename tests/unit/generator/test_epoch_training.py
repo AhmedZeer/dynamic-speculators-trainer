@@ -47,6 +47,7 @@ def test_hub_failure_resumes_boundary_and_uploads_portable_checkpoints(
     cfg, _, _ = online_campaign
     cfg.context.min_examples = cfg.context.max_examples = 4
     cfg.optimization.pretraining_validation_interval = 1000
+    cfg.hub_upload_interval = 10
     root = tmp_path / "epoch-run"
     provenance = tmp_path / "vllm"
     provenance.mkdir()
@@ -107,7 +108,7 @@ def test_hub_failure_resumes_boundary_and_uploads_portable_checkpoints(
         )
     run = root / "pretraining/all-data-4epochs"
     failed = torch.load(run / "checkpoint.pt", weights_only=True)
-    assert failed["progress"] == plan["epoch_ends"][1]
+    assert failed["progress"] == 10
     saved_identity = failed["identity"]
     assert [row["update"] for row in failed["history"]] == [0]
     cfg.optimization.pretraining_validation_interval = 2
@@ -120,13 +121,33 @@ def test_hub_failure_resumes_boundary_and_uploads_portable_checkpoints(
     assert list((run / "provenance").glob("validation-change-*/configuration.json"))
     assert [row["update"] for row in result["history"]] == [
         0,
-        *range(plan["epoch_ends"][1], plan["updates"] + 1, 2),
+        *range(10, plan["updates"] + 1, 2),
     ]
-    assert uploaded == list(
-        zip(["epoch-0002", "epoch-0004"], plan["epoch_ends"][1::2], strict=True)
-    )
+    assert uploaded == [(f"step-{step:08d}", step) for step in [10, 20, 30, 40, 48]]
     ledger = json.loads((run / "hub_checkpoints.json").read_text())
-    assert set(ledger) == {"epoch-0002", "epoch-0004"}
+    assert set(ledger) == {f"step-{step:08d}" for step in [10, 20, 30, 40, 48]}
     timing = json.loads((run / "timing.json").read_text())
     assert timing[-1]["train/examples_seen"] == 768
     assert timing[-1]["train/epoch"] == 4
+
+
+def test_epoch_upload_identity_migrates_to_step_uploads(tmp_path):
+    from copy import deepcopy  # noqa: PLC0415
+
+    from speculators.generator.campaign_resume import resume_identity  # noqa: PLC0415
+
+    saved = {
+        "configuration": {
+            "output_root": str(tmp_path),
+            "optimization": {"pretraining_updates": 13369, "lr": 0.0001},
+        },
+        "job": {"updates": 13369, "epochs": 10, "save_every_epochs": 2},
+    }
+    (tmp_path / "resolved_experiment.json").write_text(json.dumps(saved))
+    current = deepcopy(saved)
+    current["job"].pop("save_every_epochs")
+    current["job"]["hub_upload_interval"] = 1000
+    assert resume_identity(tmp_path, current) == saved
+    assert list((tmp_path / "provenance").glob("resume-*/configuration.json"))
+    current["configuration"]["optimization"]["lr"] *= 2
+    assert resume_identity(tmp_path, current) == current

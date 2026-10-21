@@ -251,7 +251,7 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
     if epoch_schedule:
         from speculators.generator.epoch_training import (  # noqa: PLC0415
             EpochSchedule,
-            backup_epoch,
+            backup_checkpoint,
         )
 
         schedule = EpochSchedule(cfg, runtime.corpus, job["subsets"], job["epochs"])
@@ -278,11 +278,11 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
         del saved
 
     def backup_if_due():
-        if not epoch_schedule or progress not in schedule.epoch_ends:
+        if not epoch_schedule or not progress:
             return
         epoch = schedule.completed_epochs(progress)
-        if epoch % job["save_every_epochs"] == 0 or epoch == job["epochs"]:
-            backup_epoch(output, job, identity, epoch, progress)
+        if progress % job["hub_upload_interval"] == 0 or progress == job["updates"]:
+            backup_checkpoint(output, job, identity, epoch, progress)
 
     # Retry an interrupted boundary upload before doing any further training.
     if progress:
@@ -470,13 +470,8 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
                     f"session_elapsed={time.perf_counter() - started:.2f}s; "
                     f"cache={cache['cache_bytes'] / 2**30:.2f} GiB"
                 )
-            epoch_checkpoint = (
-                epoch_schedule
-                and progress in schedule.epoch_ends
-                and (
-                    schedule.completed_epochs(progress) % job["save_every_epochs"] == 0
-                    or progress == job["updates"]
-                )
+            hub_checkpoint = epoch_schedule and (
+                progress % job["hub_upload_interval"] == 0 or progress == job["updates"]
             )
             validation_due = (
                 progress % cfg.optimization.pretraining_validation_interval == 0
@@ -485,7 +480,7 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
                 validate()
             if (
                 progress % cfg.optimization.checkpoint_interval == 0
-                or epoch_checkpoint
+                or hub_checkpoint
                 or progress == job["updates"]
             ):
                 save()

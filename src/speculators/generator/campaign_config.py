@@ -67,6 +67,7 @@ class CampaignConfig(ExperimentConfig):
     output_root: Path = Path("output/generator-campaign")
     staging_dir: Path = Path("/tmp/speculators-campaign")  # noqa: S108
     adaptation_updates: int = Field(default=1000, ge=1)
+    hub_upload_interval: int = Field(default=1000, ge=1)
     experiment_subsets: list[str] | None = Field(
         default_factory=lambda: [f"{d}-{i:05d}" for d in DOMAINS for i in range(6)]
     )

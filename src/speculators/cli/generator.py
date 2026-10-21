@@ -74,7 +74,17 @@ def train_full_data_command(  # noqa: PLR0917
     hub_repo: Annotated[str, typer.Option("--hub-repo")],
     provenance_dir: Annotated[Path, typer.Option("--vllm-provenance-dir")],
     epochs: Annotated[int, typer.Option("--epochs", min=1)] = 10,
-    save_every_epochs: Annotated[int, typer.Option("--save-every-epochs", min=1)] = 2,
+    save_every_epochs: Annotated[
+        int, typer.Option("--save-every-epochs", min=1, hidden=True)
+    ] = 2,
+    hub_upload_interval: Annotated[
+        int | None,
+        typer.Option(
+            "--hub-upload-interval",
+            min=1,
+            help="Optimizer steps between Hub backups; default from config",
+        ),
+    ] = None,
     private: Annotated[bool, typer.Option("--private")] = False,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
 ):
@@ -91,6 +101,7 @@ def train_full_data_command(  # noqa: PLR0917
         provenance_dir,
         epochs=epochs,
         save_every_epochs=save_every_epochs,
+        hub_upload_interval=hub_upload_interval,
         private=private,
         dry_run=dry_run,
     )

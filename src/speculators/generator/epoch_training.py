@@ -52,18 +52,18 @@ class EpochSchedule:
         return bisect.bisect_right(self.epoch_ends, progress)
 
 
-def backup_epoch(output, job, identity, epoch, progress):
+def backup_checkpoint(output, job, identity, epoch, progress):
     """Commit a resumable checkpoint and inference bundle before continuing."""
     output = Path(output)
     checkpoint = output / "checkpoint.pt"
     sha = file_digest(checkpoint)
     ledger_path = output / "hub_checkpoints.json"
     ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {}
-    key = f"epoch-{epoch:04d}"
+    key = f"step-{progress:08d}"
     if ledger.get(key, {}).get("checkpoint_sha256") == sha:
         return
     report(f"{job['label']}: uploading {key} to {job['hub_repo']}")
-    with tempfile.TemporaryDirectory(prefix="epoch-backup-", dir=output) as temporary:
+    with tempfile.TemporaryDirectory(prefix="step-backup-", dir=output) as temporary:
         folder = Path(temporary) / "run"
         folder.mkdir()
         for name in PROVENANCE:
@@ -83,7 +83,7 @@ def backup_epoch(output, job, identity, epoch, progress):
         write_json(
             folder / "result.json",
             {
-                "status": "epoch_snapshot",
+                "status": "training_snapshot",
                 "job": job,
                 "completed_epochs": epoch,
                 "completed_updates": progress,
@@ -111,6 +111,7 @@ def train_full_data(
     *,
     epochs=10,
     save_every_epochs=2,
+    hub_upload_interval=None,
     private=False,
     dry_run=False,
 ):
@@ -121,6 +122,11 @@ def train_full_data(
         raise ValueError("Full-data training requires the online activation config")
     if epochs < 1 or save_every_epochs < 1:
         raise ValueError("Epoch counts must be positive")
+    interval = (
+        cfg.hub_upload_interval if hub_upload_interval is None else hub_upload_interval
+    )
+    if interval < 1:
+        raise ValueError("Hub upload interval must be positive")
     validate_repo_id(repo_id)
     inputs = load_local_inputs(cfg)
     subsets = sorted(inputs.subsets)
@@ -139,7 +145,9 @@ def train_full_data(
         "updates": len(schedule.updates),
         "epochs": epochs,
         "epoch_ends": schedule.epoch_ends,
-        "save_every_epochs": save_every_epochs,
+        # save_every_epochs remains accepted for old notebook commands;
+        # uploads now follow optimizer steps independently of epoch boundaries.
+        "hub_upload_interval": interval,
         "epoch_schedule_version": 1,
         "hub_repo": repo_id,
         "vllm_provenance_dir": str(Path(provenance_dir).resolve()),

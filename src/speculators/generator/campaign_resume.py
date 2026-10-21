@@ -35,6 +35,11 @@ def resume_identity(output, current):
         "configuration"
     ]["optimization"]["pretraining_updates"]
     adjusted["job"]["updates"] = current["job"]["updates"]
+    for key in ("hub_upload_interval", "save_every_epochs"):
+        if key in current["job"]:
+            adjusted["job"][key] = current["job"][key]
+        else:
+            adjusted["job"].pop(key, None)
     if adjusted != current:
         # Let begin_run report an incompatible experiment normally.
         return current
@@ -43,7 +48,10 @@ def resume_identity(output, current):
         {
             "checkpoint_identity": digest(saved),
             "effective_identity": current,
-            "note": "Budget/output path changed; saved checkpoint identity retained.",
+            "note": (
+                "Budget/output path/upload cadence changed; "
+                "saved checkpoint identity retained."
+            ),
         },
     )
     report(

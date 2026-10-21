@@ -30,6 +30,7 @@ optimization:
   log_interval: 10
   token_budget: 8192
 adaptation_updates: 1000
+hub_upload_interval: 1000
 pilot:
   updates: 100
 wandb:
