@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "record_id": "2026-10-21-nemomath50-scale-1-direct-v2",
+  "received_date": "2026-10-21",
+  "execution_date": null,
+  "execution_timezone": null,
+  "run_label": "scale-1-direct-v2",
+  "dataset": "nemotron",
+  "group": "nemo-math",
+  "strategy": "throughput",
+  "evidence": {
+    "source": "user_supplied_guidellm_console_output",
+    "console_file": "console.txt",
+    "reported_native_json_path": "/content/drive/MyDrive/dyn-spec-bench-v1/http-benchmarks/nemomath50/scale-1-direct-v2/nemo-math/guidellm.json",
+    "native_json_supplied": false,
+    "precision": "rounded_console_values",
+    "status": "preliminary",
+    "run_label_source": "reported_native_json_path"
+  },
+  "provenance": {
+    "hardware": null,
+    "checkpoint_sha256": null,
+    "code_revision": null,
+    "vllm_version": null,
+    "guidellm_version": null,
+    "validation_identity": null,
+    "seed": null,
+    "server_configuration": null,
+    "command": null,
+    "patches": null
+  },
+  "correctness": {
+    "status": "not_established_for_this_measurement",
+    "report_supplied": false,
+    "output_mismatch_override": null,
+    "related_investigation": "GEN-002",
+    "note": "Exact-output investigation deferred; this console log does not establish lossless decoding."
+  },
+  "summary": {
+    "start_clock_time": "07:36:09",
+    "end_clock_time": "07:39:00",
+    "duration_seconds": 170.9,
+    "guidellm_warmup_seconds": 0.0,
+    "guidellm_cooldown_seconds": 0.0,
+    "completed_input_tokens": 4930.0,
+    "incomplete_input_tokens": 0.0,
+    "errored_input_tokens": 0.0,
+    "completed_output_tokens": 12800.0,
+    "incomplete_output_tokens": 0.0,
+    "errored_output_tokens": 0.0
+  },
+  "text_metrics_completed_requests": {
+    "input_tokens": {"per_request_median": 91.0, "per_request_p95": 164.0, "per_second_median": 28.2, "per_second_mean": 29.4},
+    "input_words": {"per_request_median": 46.0, "per_request_p95": 86.0, "per_second_median": 13.2, "per_second_mean": 15.1},
+    "input_characters": {"per_request_median": 302.0, "per_request_p95": 479.0, "per_second_median": 92.3, "per_second_mean": 99.9},
+    "output_tokens": {"per_request_median": 256.0, "per_request_p95": 256.0, "per_second_median": 75.0, "per_second_mean": 76.4},
+    "output_words": {"per_request_median": 141.0, "per_request_p95": 184.0, "per_second_median": 41.3, "per_second_mean": 42.1},
+    "output_characters": {"per_request_median": 694.0, "per_request_p95": 923.0, "per_second_median": 203.6, "per_second_mean": 210.6}
+  },
+  "request_token_statistics_completed_requests": {
+    "input_tokens": {"median": 91.0, "p95": 164.0},
+    "output_tokens": {"median": 256.0, "p95": 256.0},
+    "total_tokens": {"median": 347.0, "p95": 420.0},
+    "stream_iterations": {"median": 89.0, "p95": 109.0},
+    "output_tokens_per_stream_iteration": {"median": 2.9, "p95": 3.3}
+  },
+  "request_latency_completed_requests": {
+    "request_latency_seconds": {"median": 3.3, "p95": 4.1},
+    "time_to_first_token_ms": {"median": 48.1, "p95": 52.2},
+    "time_to_first_output_token_ms": {"median": 48.1, "p95": 52.2},
+    "inter_token_latency_ms": {"median": 12.9, "p95": 15.8},
+    "time_per_output_token_ms": {"median": 13.0, "p95": 16.0}
+  },
+  "server_throughput_all_requests": {
+    "concurrency_median": 1.0,
+    "concurrency_mean": 1.0,
+    "requests_per_second_mean": 0.3,
+    "input_tokens_per_second_mean": 29.4,
+    "output_tokens_per_second_mean": 74.9,
+    "total_tokens_per_second_mean": 103.8
+  },
+  "derived": {
+    "completed_requests_inferred": 50,
+    "completed_requests_basis": "12800 completed output tokens / 256 tokens per request; inferred, request count not explicitly printed",
+    "output_tokens_per_summary_second": 74.89760093622002,
+    "output_tokens_per_summary_second_basis": "12800 / 170.9; derived from rounded console duration"
+  },
+  "acceptance_metrics": null,
+  "adapter_overhead_metrics": null,
+  "speedup": null,
+  "notes": [
+    "No comparable baseline timing supplied with this record; speedup is not calculated.",
+    "Console warmup duration is GuideLLM's own warmup; any evaluator HTTP warmup requests are not documented by this log.",
+    "Streaming iterations are transport observations, not a measurement of accepted draft length."
+  ]
+}

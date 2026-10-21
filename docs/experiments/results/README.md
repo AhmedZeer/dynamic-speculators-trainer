@@ -16,6 +16,9 @@ decision explicitly. Distinguish offline agreement from measured speculative
 acceptance and serving throughput. Record unavailable measurements as unavailable,
 rather than estimating precise values from plots.
 
+Generation logs and normalized timing measurements are kept in the
+[generation benchmark archive](benchmarks/README.md), with one directory per run.
+
 For reproducibility, link run IDs, exact configuration snapshots, code revision,
 checkpoint hashes, and training/evaluation/serving provenance when available.
 If these are unavailable, mark the record preliminary and list what is missing.
