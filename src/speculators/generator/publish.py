@@ -49,6 +49,7 @@ def push_run(
     provenance_dir=None,
     private=False,
     include_training_checkpoint=False,
+    path_in_repo=None,
     dry_run=False,
 ):
     """Build and validate locally before creating or updating a model repo."""
@@ -109,7 +110,8 @@ def push_run(
             if path.is_file()
         }
         write_json(
-            folder / "upload_manifest.json", {"repo_id": repo_id, "files": files}
+            folder / "upload_manifest.json",
+            {"repo_id": repo_id, "path_in_repo": path_in_repo, "files": files},
         )
         report = {
             "repo_id": repo_id,
@@ -119,16 +121,20 @@ def push_run(
             "bytes": sum(item["bytes"] for item in files.values())
             + (folder / "upload_manifest.json").stat().st_size,
         }
+        if path_in_repo:
+            report["path_in_repo"] = path_in_repo
         if not dry_run:
             api = HfApi()
             api.create_repo(
                 repo_id=repo_id, repo_type="model", private=private, exist_ok=True
             )
+            upload_options = {"path_in_repo": path_in_repo} if path_in_repo else {}
             commit = api.upload_folder(
                 repo_id=repo_id,
                 repo_type="model",
                 folder_path=folder,
                 commit_message=f"Publish {label} inference bundle and provenance",
+                **upload_options,
             )
             report.update(commit_sha=commit.oid, commit_url=commit.commit_url)
         return report

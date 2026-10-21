@@ -247,9 +247,20 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
         parameters, lr=cfg.optimization.lr, weight_decay=cfg.optimization.weight_decay
     )
     checkpoint = output / "checkpoint.pt"
-    schedule = EpisodeSchedule(
-        cfg, runtime.corpus, job["subsets"], long_first=job.get("pilot", False)
-    )
+    epoch_schedule = "epochs" in job
+    if epoch_schedule:
+        from speculators.generator.epoch_training import (  # noqa: PLC0415
+            EpochSchedule,
+            backup_epoch,
+        )
+
+        schedule = EpochSchedule(cfg, runtime.corpus, job["subsets"], job["epochs"])
+        if schedule.epoch_ends != job["epoch_ends"]:
+            raise ValueError("Epoch schedule differs from the saved training plan")
+    else:
+        schedule = EpisodeSchedule(
+            cfg, runtime.corpus, job["subsets"], long_first=job.get("pilot", False)
+        )
     history, timing, progress = [], [], 0
     if checkpoint.exists():
         saved = torch.load(checkpoint, map_location="cpu", weights_only=True)
@@ -265,6 +276,17 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
         if runtime.device.type == "cuda":
             torch.cuda.set_rng_state_all(saved["cuda_rng"])
         del saved
+
+    def backup_if_due():
+        if not epoch_schedule or progress not in schedule.epoch_ends:
+            return
+        epoch = schedule.completed_epochs(progress)
+        if epoch % job["save_every_epochs"] == 0 or epoch == job["epochs"]:
+            backup_epoch(output, job, identity, epoch, progress)
+
+    # Retry an interrupted boundary upload before doing any further training.
+    if progress:
+        backup_if_due()
 
     def save():
         checkpoint_bytes = sum(p.numel() for p in parameters) * 16 + 1024**2
@@ -431,6 +453,8 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
                         ),
                     }
                 )
+            if epoch_schedule:
+                values["train/epoch"] = examples_seen / job["training_examples"]
             timing.append({"update": progress, **values})
             tracker.training(progress, values, final=progress == job["updates"])
             if progress == 1 or progress % cfg.optimization.log_interval == 0:
@@ -442,17 +466,29 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
                     f"session_elapsed={time.perf_counter() - started:.2f}s; "
                     f"cache={cache['cache_bytes'] / 2**30:.2f} GiB"
                 )
-            if (
-                progress % cfg.optimization.pretraining_validation_interval == 0
-                or progress == job["updates"]
-            ):
+            epoch_checkpoint = (
+                epoch_schedule
+                and progress in schedule.epoch_ends
+                and (
+                    schedule.completed_epochs(progress) % job["save_every_epochs"] == 0
+                    or progress == job["updates"]
+                )
+            )
+            validation_due = (
+                epoch_checkpoint
+                if epoch_schedule
+                else (progress % cfg.optimization.pretraining_validation_interval == 0)
+            )
+            if validation_due or progress == job["updates"]:
                 validate()
             if (
                 progress % cfg.optimization.checkpoint_interval == 0
+                or epoch_checkpoint
                 or progress == job["updates"]
             ):
                 save()
                 write_json(output / "timing.json", timing)
+                backup_if_due()
         cache_end = runtime.corpus.cache.snapshot()
         result = {
             "job": job,
@@ -478,6 +514,11 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
             "summary_hits": runtime.corpus.summary_hits,
             "summary_misses": runtime.corpus.summary_misses,
         }
+        if epoch_schedule:
+            result["completed_epochs"] = schedule.completed_epochs(progress)
+            result["hub_checkpoints"] = json.loads(
+                (output / "hub_checkpoints.json").read_text()
+            )
         if job["stage"] == "adaptation":
             result["score_change"] = result["score"] - history[0]["score"]
         write_json(output / "result.json", result)

@@ -67,6 +67,36 @@ def train_lora_baseline_command(
     typer.echo(json.dumps(result, indent=2))
 
 
+@app.command(name="train-full-data")
+def train_full_data_command(  # noqa: PLR0917
+    config: ConfigOption,
+    output_root: Annotated[Path, typer.Option("--output-root")],
+    hub_repo: Annotated[str, typer.Option("--hub-repo")],
+    provenance_dir: Annotated[Path, typer.Option("--vllm-provenance-dir")],
+    epochs: Annotated[int, typer.Option("--epochs", min=1)] = 10,
+    save_every_epochs: Annotated[int, typer.Option("--save-every-epochs", min=1)] = 2,
+    private: Annotated[bool, typer.Option("--private")] = False,
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+):
+    """Train the generator on every local subset, with exact epochs and Hub backups."""
+    import json  # noqa: PLC0415
+
+    from speculators.generator.campaign_config import CampaignConfig  # noqa: PLC0415
+    from speculators.generator.epoch_training import train_full_data  # noqa: PLC0415
+
+    result = train_full_data(
+        CampaignConfig.load(config),
+        output_root,
+        hub_repo,
+        provenance_dir,
+        epochs=epochs,
+        save_every_epochs=save_every_epochs,
+        private=private,
+        dry_run=dry_run,
+    )
+    typer.echo(json.dumps(result, indent=2))
+
+
 class ConditionName(str, Enum):
     last = "last"
     last_mean = "last_mean"
