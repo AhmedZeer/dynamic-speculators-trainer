@@ -108,9 +108,16 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
     if args.max_concurrency < 1 or (status is not None and args.max_concurrency != 1):
         raise ValueError("Matched Speculators servers require --max-concurrency 1")
     correctness = json.loads(Path(args.correctness_report).read_text())
-    if correctness["validation_identity"] != manifest["identity"] or correctness[
-        "status"
-    ] not in ("reference", "matched"):
+    allow_mismatch = getattr(args, "allow_output_mismatch", False)
+    accepted = correctness["status"] in ("reference", "matched")
+    overridden = (
+        allow_mismatch
+        and correctness["status"] == "unverified"
+        and bool(correctness.get("mismatches"))
+    )
+    if correctness["validation_identity"] != manifest["identity"] or not (
+        accepted or overridden
+    ):
         raise ValueError(
             "Correctness report is unverified or belongs to different validation data"
         )
@@ -160,6 +167,9 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
         "warmups": args.warmups,
         "sweep_size": args.sweep_rate,
         "correctness_sha256": file_digest(Path(args.correctness_report)),
+        "correctness_status": correctness["status"],
+        "output_mismatch_override": overridden,
+        "mismatched_prompts": len(correctness.get("mismatches", [])),
         "tokenizer_path": tokenizer_path,
     }
     write_json(output / "benchmark_identity.json", identity)
@@ -248,8 +258,18 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
         if kind == "target_only":
             acceptance = None
         summaries = native_summary(native_output, len(rows))
-        performance.extend({"subset": category, **row} for row in summaries)
+        performance.extend(
+            {
+                "subset": category,
+                "correctness_status": correctness["status"],
+                "output_mismatch_override": overridden,
+                **row,
+            }
+            for row in summaries
+        )
         all_results[category] = {
+            "correctness_status": correctness["status"],
+            "output_mismatch_override": overridden,
             "performance": summaries,
             "acceptance": acceptance,
             "acceptance_scope": "aggregate across all sweep points in this invocation",
@@ -284,6 +304,12 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
                 writer.writeheader()
                 writer.writerows(rows)
     write_json(
-        output / "results.json", {"identity": digest(identity), "groups": all_results}
+        output / "results.json",
+        {
+            "identity": digest(identity),
+            "correctness_status": correctness["status"],
+            "output_mismatch_override": overridden,
+            "groups": all_results,
+        },
     )
     return all_results

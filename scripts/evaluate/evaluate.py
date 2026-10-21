@@ -484,6 +484,11 @@ def main() -> None:
         help="Successful check-endpoint report for this server/workload",
     )
     parser.add_argument(
+        "--allow-output-mismatch",
+        action="store_true",
+        help="Allow failed token equality for exploratory timing; retain evidence",
+    )
+    parser.add_argument(
         "--server-provenance",
         type=Path,
         help="Directory written by launch_vllm.py serve --provenance-dir",

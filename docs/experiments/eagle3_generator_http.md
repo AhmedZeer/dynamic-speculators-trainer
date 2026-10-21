@@ -15,6 +15,69 @@ activation downloads are needed.
 
 ## Environment and validation workload
 
+### Exploratory timing while token equality is unresolved
+
+[GEN-002](results/GEN-002-http-token-equality.md) records the failed exact-output
+checks, including variation between target-only repeats. The experiment owner
+has deferred diagnosis. To measure performance now, pass
+`--allow-output-mismatch` with the existing failed correctness report for the
+connected server. This overrides only token equality. It still requires the
+same manifest, seed, prompt coverage, and server/checkpoint configuration.
+The failed report is copied into the benchmark directory; JSON and performance
+CSV outputs explicitly retain `correctness_status=unverified` and the override.
+Strict checking remains the default. This mode does not establish lossless decoding.
+
+For each server, start it with the launch commands below, create its correctness
+report, then benchmark it before stopping it. If a report already describes the
+same connected server and workload, it can be reused. A changed code revision or
+launch configuration requires a new report and provenance directory. A failed
+`check-endpoint` writes the report before exiting with the disagreement error.
+
+Example for a generator server, using a 50-prompt-per-domain export (or a
+math-only export with the same directory name):
+
+```bash
+python scripts/evaluate/evaluate.py throughput \
+  --target http://127.0.0.1:8000/v1 \
+  --validation-manifest output/generator-http-validation-50/manifest.json \
+  --correctness-report output/http-checks/scale-1-direct.json \
+  --allow-output-mismatch \
+  --server-provenance output/http-servers/scale-1-direct \
+  --tokenizer-path ./models/qwen3-8b \
+  --max-concurrency 1 --max-requests 0 --warmups 3 \
+  --output-dir output/http-benchmarks/scale-1-direct
+```
+
+Run the same workload for target-only and EAGLE3 base, changing report,
+provenance, and output paths to their corresponding run directories. The
+target-only reference report needs no override. Keep the same manifest, seed,
+warmups, concurrency, generation cap, and domain selection for all arms. Warmups
+are excluded from the measured acceptance and adapter counters. Server-side
+generator and merge overhead remains inside measured request latency.
+
+After all three measurements exist:
+
+```bash
+python scripts/evaluate/compare_http.py \
+  --baseline output/http-benchmarks/target \
+  --candidate output/http-benchmarks/scale-1-direct \
+  --output output/http-benchmarks/generator-vs-target.csv
+python scripts/evaluate/compare_http.py \
+  --baseline output/http-benchmarks/eagle3-base \
+  --candidate output/http-benchmarks/scale-1-direct \
+  --output output/http-benchmarks/generator-vs-eagle3.csv
+```
+
+Each CSV reports per-group throughput speedup (candidate output tokens/s divided
+by baseline output tokens/s), median request-latency speedup (baseline divided
+by candidate), generated token counts, and correctness labels. A value above
+1 indicates a measured speed benefit. Token counts may differ if EOS occurs;
+latency ratios then also reflect different output lengths. No aggregate across
+different domains is substituted for per-group measurements. The script checks
+saved workload hashes and matched benchmark settings, but cannot confirm
+hardware equivalence; keep hardware/runtime conditions consistent and retain
+the server provenance. Repeat measurements if the difference is small.
+
 The serving launcher registers `AdapterWorkerExtension` with vLLM. Status and
 request cleanup use named worker RPC methods, so insecure pickle serialization
 is unnecessary. If an older server reports `Object of type ... function ... is

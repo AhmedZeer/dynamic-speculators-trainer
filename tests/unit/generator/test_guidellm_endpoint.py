@@ -182,8 +182,9 @@ def http_server(request):  # noqa: C901 -- small mock protocol implementation
 
 
 @pytest.mark.parametrize("http_server", [4, 2], indirect=True)
-def test_real_guidellm_against_independent_endpoint(
-    workload, http_server, tmp_path, perf_utils, monkeypatch
+@pytest.mark.parametrize("allow_mismatch", [False, True])
+def test_real_guidellm_against_independent_endpoint(  # noqa: PLR0917
+    workload, http_server, tmp_path, perf_utils, monkeypatch, allow_mismatch
 ):
     if importlib.util.find_spec("guidellm") is None:
         pytest.skip(
@@ -208,7 +209,15 @@ def test_real_guidellm_against_independent_endpoint(
         sweep_rate=2,
         server_provenance=None,
         tokenizer_path=tokenizer_path,
+        allow_output_mismatch=False,
     )
+    if allow_mismatch:
+        failed = json.loads(reference.read_text())
+        failed.update(status="unverified", mismatches=[next(iter(failed["rows"]))])
+        write_json(reference, failed)
+        with pytest.raises(ValueError, match="unverified"):
+            benchmark_endpoint(args, perf_utils)
+        args.allow_output_mismatch = True
     monkeypatch.setenv(
         "PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"]
     )
@@ -230,6 +239,11 @@ def test_real_guidellm_against_independent_endpoint(
     assert counts.completions == 5  # two correctness, one warmup, two measured.
     assert (tmp_path / "performance/perf_results.csv").is_file()
     assert (tmp_path / "performance/math/guidellm_command.json").is_file()
+    identity = json.loads(
+        (tmp_path / "performance/benchmark_identity.json").read_text()
+    )
+    assert identity["output_mismatch_override"] == allow_mismatch
+    assert result["math"]["output_mismatch_override"] == allow_mismatch
 
 
 def test_incomplete_guidellm_results_are_rejected(tmp_path):
