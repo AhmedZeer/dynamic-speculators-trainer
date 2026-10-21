@@ -77,7 +77,9 @@ def compare(baseline, candidate):  # noqa: C901 -- explicit comparison compatibi
                     "correctness_status", "unknown"
                 ),
                 "exploratory": any(
-                    i.get("output_mismatch_override", False) for i in identities
+                    i.get("output_mismatch_override", False)
+                    or i.get("correctness_status") not in ("reference", "matched")
+                    for i in identities
                 ),
             }
         )

@@ -79,16 +79,42 @@ def read_metrics(target):
         return response.read().decode()
 
 
+def check_report(args, manifest, groups, status):
+    """Validate an optional report without requiring extra generation requests."""
+    if not args.correctness_report:
+        return None, False
+    correctness = json.loads(Path(args.correctness_report).read_text())
+    overridden = (
+        getattr(args, "allow_output_mismatch", False)
+        and correctness["status"] == "unverified"
+        and bool(correctness.get("mismatches"))
+    )
+    if correctness["validation_identity"] != manifest["identity"] or not (
+        correctness["status"] in ("reference", "matched") or overridden
+    ):
+        raise ValueError(
+            "Correctness report is unverified or belongs to different validation data"
+        )
+    if correctness["server_configuration"] != (
+        status["configuration"] if status else None
+    ):
+        raise ValueError("Correctness report belongs to a different server/checkpoint")
+    for rows in groups.values():
+        for row in rows:
+            checked = correctness["rows"].get(row["row_id"])
+            if checked is None or checked["identity"] != row_identity(row, args.seed):
+                raise ValueError(
+                    "Correctness report does not cover this workload and seed"
+                )
+    return correctness, overridden
+
+
 def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement boundaries
     if version("guidellm") != "0.7.1":
         raise ValueError("Validation benchmarking requires guidellm==0.7.1")
     if args.gen_kwargs:
         raise ValueError(
             "Validation mode fixes greedy generation settings; omit --gen-kwargs"
-        )
-    if not args.correctness_report:
-        raise ValueError(
-            "Validation benchmarks require --correctness-report from check-endpoint"
         )
     if args.warmups < 0:
         raise ValueError("Warmup count must be nonnegative")
@@ -107,31 +133,8 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
     validate_status(status, manifest)
     if args.max_concurrency < 1 or (status is not None and args.max_concurrency != 1):
         raise ValueError("Matched Speculators servers require --max-concurrency 1")
-    correctness = json.loads(Path(args.correctness_report).read_text())
-    allow_mismatch = getattr(args, "allow_output_mismatch", False)
-    accepted = correctness["status"] in ("reference", "matched")
-    overridden = (
-        allow_mismatch
-        and correctness["status"] == "unverified"
-        and bool(correctness.get("mismatches"))
-    )
-    if correctness["validation_identity"] != manifest["identity"] or not (
-        accepted or overridden
-    ):
-        raise ValueError(
-            "Correctness report is unverified or belongs to different validation data"
-        )
-    if correctness["server_configuration"] != (
-        status["configuration"] if status else None
-    ):
-        raise ValueError("Correctness report belongs to a different server/checkpoint")
-    for rows in groups.values():
-        for row in rows:
-            checked = correctness["rows"].get(row["row_id"])
-            if checked is None or checked["identity"] != row_identity(row, args.seed):
-                raise ValueError(
-                    "Correctness report does not cover this workload and seed"
-                )
+    correctness, overridden = check_report(args, manifest, groups, status)
+    correctness_status = correctness["status"] if correctness else "not_checked"
     tokenizer_path = (
         str(args.tokenizer_path)
         if args.tokenizer_path
@@ -166,10 +169,14 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
         "concurrency": args.max_concurrency,
         "warmups": args.warmups,
         "sweep_size": args.sweep_rate,
-        "correctness_sha256": file_digest(Path(args.correctness_report)),
-        "correctness_status": correctness["status"],
+        "correctness_sha256": file_digest(Path(args.correctness_report))
+        if correctness
+        else None,
+        "correctness_status": correctness_status,
         "output_mismatch_override": overridden,
-        "mismatched_prompts": len(correctness.get("mismatches", [])),
+        "mismatched_prompts": len(correctness.get("mismatches", []))
+        if correctness
+        else None,
         "tokenizer_path": tokenizer_path,
     }
     write_json(output / "benchmark_identity.json", identity)
@@ -180,7 +187,8 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
             Path(args.validation_manifest).parent / info["file"],
             validation_dir / info["file"],
         )
-    shutil.copy2(args.correctness_report, output / "correctness.json")
+    if correctness:
+        shutil.copy2(args.correctness_report, output / "correctness.json")
     if args.server_provenance:
         source = Path(args.server_provenance).resolve()
         saved = json.loads((source / "server.json").read_text())
@@ -261,14 +269,14 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
         performance.extend(
             {
                 "subset": category,
-                "correctness_status": correctness["status"],
+                "correctness_status": correctness_status,
                 "output_mismatch_override": overridden,
                 **row,
             }
             for row in summaries
         )
         all_results[category] = {
-            "correctness_status": correctness["status"],
+            "correctness_status": correctness_status,
             "output_mismatch_override": overridden,
             "performance": summaries,
             "acceptance": acceptance,
@@ -307,7 +315,7 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
         output / "results.json",
         {
             "identity": digest(identity),
-            "correctness_status": correctness["status"],
+            "correctness_status": correctness_status,
             "output_mismatch_override": overridden,
             "groups": all_results,
         },

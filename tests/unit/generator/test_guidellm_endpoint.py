@@ -182,9 +182,9 @@ def http_server(request):  # noqa: C901 -- small mock protocol implementation
 
 
 @pytest.mark.parametrize("http_server", [4, 2], indirect=True)
-@pytest.mark.parametrize("allow_mismatch", [False, True])
+@pytest.mark.parametrize("check_mode", ["reference", "mismatch", "omitted"])
 def test_real_guidellm_against_independent_endpoint(  # noqa: PLR0917
-    workload, http_server, tmp_path, perf_utils, monkeypatch, allow_mismatch
+    workload, http_server, tmp_path, perf_utils, monkeypatch, check_mode
 ):
     if importlib.util.find_spec("guidellm") is None:
         pytest.skip(
@@ -193,11 +193,12 @@ def test_real_guidellm_against_independent_endpoint(  # noqa: PLR0917
     manifest, tokenizer_path = workload
     target, counts = http_server
     reference = tmp_path / "check/reference.json"
-    check_endpoint(target, manifest, reference)
+    if check_mode != "omitted":
+        check_endpoint(target, manifest, reference)
     args = Namespace(
         target=target,
         validation_manifest=manifest,
-        correctness_report=reference,
+        correctness_report=reference if check_mode != "omitted" else None,
         subsets="all",
         max_requests=0,
         max_concurrency=1,
@@ -211,6 +212,7 @@ def test_real_guidellm_against_independent_endpoint(  # noqa: PLR0917
         tokenizer_path=tokenizer_path,
         allow_output_mismatch=False,
     )
+    allow_mismatch = check_mode == "mismatch"
     if allow_mismatch:
         failed = json.loads(reference.read_text())
         failed.update(status="unverified", mismatches=[next(iter(failed["rows"]))])
@@ -236,7 +238,7 @@ def test_real_guidellm_against_independent_endpoint(  # noqa: PLR0917
         == 2 * counts.output_tokens
     )
     assert counts.streaming == 2
-    assert counts.completions == 5  # two correctness, one warmup, two measured.
+    assert counts.completions == (3 if check_mode == "omitted" else 5)
     assert (tmp_path / "performance/perf_results.csv").is_file()
     assert (tmp_path / "performance/math/guidellm_command.json").is_file()
     identity = json.loads(
@@ -244,6 +246,13 @@ def test_real_guidellm_against_independent_endpoint(  # noqa: PLR0917
     )
     assert identity["output_mismatch_override"] == allow_mismatch
     assert result["math"]["output_mismatch_override"] == allow_mismatch
+    if check_mode == "omitted":
+        assert identity["correctness_status"] == "not_checked"
+        assert identity["correctness_sha256"] is None
+        assert identity["mismatched_prompts"] is None
+        assert result["math"]["correctness_status"] == "not_checked"
+        assert not (tmp_path / "performance/correctness.json").exists()
+        assert "not_checked" in (tmp_path / "performance/perf_results.csv").read_text()
 
 
 def test_incomplete_guidellm_results_are_rejected(tmp_path):

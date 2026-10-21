@@ -476,12 +476,12 @@ def main() -> None:
     parser.add_argument(
         "--validation-manifest",
         type=Path,
-        help="Frozen validation manifest with strict correctness checks",
+        help="Frozen validation manifest; correctness checks are optional",
     )
     parser.add_argument(
         "--correctness-report",
         type=Path,
-        help="Successful check-endpoint report for this server/workload",
+        help="Optional check-endpoint report; omitted means correctness not checked",
     )
     parser.add_argument(
         "--allow-output-mismatch",

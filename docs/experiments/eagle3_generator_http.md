@@ -15,6 +15,34 @@ activation downloads are needed.
 
 ## Environment and validation workload
 
+### Direct throughput without a correctness run
+
+`check-endpoint` is optional. For performance iteration, start the desired server
+and run GuideLLM directly:
+
+```bash
+python scripts/evaluate/evaluate.py throughput \
+  --target http://127.0.0.1:8000/v1 \
+  --validation-manifest output/generator-http-validation-50/manifest.json \
+  --server-provenance output/http-servers/scale-1-lora \
+  --tokenizer-path ./models/qwen3-8b \
+  --max-concurrency 1 --max-requests 0 --warmups 3 \
+  --output-dir output/http-benchmarks/scale-1-lora-throughput
+```
+
+Change the provenance/output paths for the connected server and use your actual
+manifest path. Omit both `--correctness-report` and `--allow-output-mismatch`.
+This sends only the configured warmups and measured generations, with no
+separate correctness generations. Server/model identity, workload checksums,
+prompt tokenization, request success, and adapter lifecycle checks still run.
+Artifacts record `correctness_status=not_checked`, a null report checksum and
+mismatch count, and no fabricated correctness report. Speedup comparisons label
+unchecked measurements exploratory.
+
+If you supply `--correctness-report`, its server, workload, seed, and coverage
+are checked as before. A failed supplied report requires the explicit
+`--allow-output-mismatch` override described below.
+
 ### Matched ordinary-LoRA baseline
 
 The original campaign's `fresh_lora` uses subsets `00002`–`00005` and 1,000
@@ -80,8 +108,9 @@ The failed report is copied into the benchmark directory; JSON and performance
 CSV outputs explicitly retain `correctness_status=unverified` and the override.
 Strict checking remains the default. This mode does not establish lossless decoding.
 
-For each server, start it with the launch commands below, create its correctness
-report, then benchmark it before stopping it. If a report already describes the
+When reusing correctness evidence, start the server with the launch commands
+below, create its correctness report, then benchmark it before stopping it.
+For timing alone, use the direct command above instead. If a report already describes the
 same connected server and workload, it can be reused. A changed code revision or
 launch configuration requires a new report and provenance directory. A failed
 `check-endpoint` writes the report before exiting with the disagreement error.
@@ -183,8 +212,8 @@ a small cap does not select only the first subset. The cap applies to each
 domain, not each subset; it uses all rows when fewer than the cap are available.
 Selection settings are recorded in the checksummed manifest.
 
-Use the new manifest path for both correctness checks and GuideLLM, and create
-new correctness reports for it. Existing manifests remain readable. GuideLLM's
+Use the new manifest path for GuideLLM and any optional correctness checks.
+If using correctness reports, create new ones for that manifest. Existing manifests remain readable. GuideLLM's
 `--subsets math,code` selector also accepts `nemo-math,nemo-code`, including when
 reading older manifests with short group names. Exporting never overwrites an
 existing directory.
@@ -279,7 +308,7 @@ or use training-time file-based activation extraction. Higher concurrent adapter
 execution requires a different adapter-isolation design; increasing client
 concurrency alone would introduce queuing.
 
-## Establish exact-output correctness
+## Optional: establish exact-output correctness
 
 With the target-only server running, create a reference:
 
@@ -310,7 +339,9 @@ all adapter/base-EAGLE3 checks. It does not launch a server.
 
 For a short integration check, add `--limit 3` to both correctness commands.
 This selects three prompts per category; the performance command must then use
-`--max-requests 3`. Use the full reference/check for full-workload measurements.
+`--max-requests 3` if supplying that report. Alternatively omit the report to
+measure a larger workload directly. Use the full reference/check when supplying
+correctness evidence for full-workload measurements.
 Correctness artifacts are bound to the server/checkpoint, workload and generation
 settings; a report for another checkpoint cannot authorize a measurement.
 
@@ -344,8 +375,9 @@ pinned target tokenizer/config files are fetched, not model weights.
 Three explicit warmup requests per group precede both counter snapshots and
 GuideLLM measurement. Native vLLM speculative acceptance metrics are collected
 from `/metrics`; adapter timings come from `/speculators/status`. The client
-checks tokenization again and requires a successful correctness artifact covering
-the selected workload. Failed/incomplete GuideLLM request counts, server changes,
+checks tokenization again. Correctness reports are optional; supplied reports
+must cover the selected workload and match the server, with an explicit override
+for known output disagreements. Failed/incomplete GuideLLM request counts, server changes,
 missing adapter execution, or missing restoration fail the measurement.
 
 Results contain:
@@ -357,7 +389,7 @@ Results contain:
   Target-only acceptance is undefined and omitted.
 - `adapter_performance.csv`: generator, merge, restoration seconds and counts.
 - Per-group GuideLLM JSON, exact input JSONL, actual GuideLLM command, before/after
-  Prometheus snapshots, server snapshots, correctness reference and provenance.
+  Prometheus snapshots, server snapshots, optional correctness report and provenance.
 - `validation/manifest.json` and all original frozen workload files.
 
 Use a new output directory for each measurement/repetition. Server construction

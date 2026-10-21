@@ -61,3 +61,16 @@ def test_speedup_rejects_different_budget(tmp_path):
     (candidate / "benchmark_identity.json").write_text(json.dumps(data))
     with pytest.raises(ValueError, match="concurrency"):
         compare(base, candidate)
+
+
+def test_unchecked_speedup_remains_exploratory(tmp_path):
+    base, candidate = tmp_path / "base", tmp_path / "generator"
+    write_measurement(base, kind="target_only", throughput=100, latency=4)
+    write_measurement(candidate, kind="generator", throughput=150, latency=2)
+    path = candidate / "benchmark_identity.json"
+    identity = json.loads(path.read_text())
+    identity["correctness_status"] = "not_checked"
+    path.write_text(json.dumps(identity))
+    result = compare(base, candidate)[0]
+    assert result["exploratory"] is True
+    assert result["candidate_correctness_status"] == "not_checked"
