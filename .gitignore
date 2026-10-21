@@ -195,3 +195,5 @@ hs_connectors/*.manifest
 hs_connectors/*.spec
 hs_connectors/pip-log.txt
 hs_connectors/pip-delete-this-directory.txt
+
+tmp/
