@@ -7,7 +7,12 @@ Aggregate output tokens/s from the native measurement files. All arms use the sa
 | eagle3 | 64.18 | 60.87 | 59.04 | 55.32 |
 | lora | 72.56 | 65.62 | 64.26 | 56.52 |
 | generator | 77.81 | 68.45 | 66.58 | 57.68 |
+| generator (24K, step 2,676) | 73.29 | 65.07 | 63.39 | 54.72 |
 
 Rates include prefill and serving overhead; they are not isolated decode-only kernel throughput. These are individual measurements, not estimates across repeated runs.
 
 The [structured summary](summary.json) contains exact measurements and source hashes. [Full original artifacts](artifacts.tar.gz) preserve native GuideLLM outputs, exact workloads, commands, configuration, checkpoint checksums, and available patches/provenance. Extract with `tar -xzf artifacts.tar.gz` into a separate directory.
+
+The new run directory is labeled `generator-all24k-10ep-v1-2600`; the user supplied 2,600 as the step count, while its checkpoint provenance (`server_provenance/source_provenance/result.json`) records **2,676 completed updates / 2 completed epochs**, trained on 24K examples. The table uses the recorded checkpoint progress. The earlier generator and LoRA rows use their original 4K/1,500-update checkpoints.
+
+[Additional full checkpoint benchmark artifacts](artifacts-generator-all24k-label2600.tar.gz) preserve the new run separately from the original three-run archive. Workload hashes, output token totals, seed and concurrency match the earlier measurements. Correctness remains `not_checked`; hardware/runtime equivalence is not established by matching workloads alone.

@@ -1318,6 +1318,524 @@
           "ttft_median_ms": 47.249555587768555
         }
       }
+    },
+    "generator_all24k_step2676": {
+      "source_directory": "generator-all24k-10ep-v1-2600",
+      "user_reported_steps": 2600,
+      "completed_updates_from_checkpoint_provenance": 2676,
+      "completed_epochs_from_checkpoint_provenance": 2,
+      "training_examples": 24000,
+      "step_label_note": "Folder/user label is 2600; supplied checkpoint result.json records 2676 completed updates.",
+      "identity": {
+        "categories": [
+          "nemo-chat",
+          "nemo-code",
+          "nemo-math",
+          "nemo-stem"
+        ],
+        "concurrency": 1,
+        "correctness_sha256": null,
+        "correctness_status": "not_checked",
+        "grouping": "category",
+        "guidellm_version": "0.7.1",
+        "limit": 0,
+        "mismatched_prompts": null,
+        "mode": "throughput",
+        "output_mismatch_override": false,
+        "seed": 42,
+        "server": {
+          "api_server_count": 1,
+          "bundle_weights_sha256": "ccbbc7cd46359c77ab12a6158f6043ccd70242761fc201b8726176f57dac1f4c",
+          "deployment_context_size": 1,
+          "gpu_memory_utilization": 0.85,
+          "kind": "generator",
+          "max_model_len": 8192,
+          "max_num_seqs": 1,
+          "model_runner": "V1",
+          "models": {
+            "drafter": {
+              "id": "RedHatAI/Qwen3-8B-speculator.eagle3",
+              "revision": "08610ffa01dd9f16731fe8f627b85905b6aa51c4"
+            },
+            "target": {
+              "id": "Qwen/Qwen3-8B",
+              "revision": "b968826d9c46dd6066d109eabc6255188de91218"
+            }
+          },
+          "renderer_num_workers": 1,
+          "seed": 42,
+          "served_model_name": "speculators",
+          "source_job": {
+            "arm": "direct",
+            "condition": "last",
+            "drafter_model_path": "/content/dynamic-speculators-trainer/models/qwen3-8b-eagle3",
+            "epoch_ends": [
+              1338,
+              2676,
+              4014,
+              5349,
+              6691,
+              8015,
+              9355,
+              10681,
+              12023,
+              13369
+            ],
+            "epoch_schedule_version": 1,
+            "epochs": 10,
+            "hub_repo": "azeeer/eagle3-generator-all24k-10ep-v1",
+            "kind": "pretraining",
+            "label": "all-data-10epochs",
+            "objective": "direct",
+            "save_every_epochs": 2,
+            "stage": "pretraining",
+            "subsets": [
+              "chat-00000",
+              "chat-00001",
+              "chat-00002",
+              "chat-00003",
+              "chat-00004",
+              "chat-00005",
+              "code-00000",
+              "code-00001",
+              "code-00002",
+              "code-00003",
+              "code-00004",
+              "code-00005",
+              "math-00000",
+              "math-00001",
+              "math-00002",
+              "math-00003",
+              "math-00004",
+              "math-00005",
+              "stem-00000",
+              "stem-00001",
+              "stem-00002",
+              "stem-00003",
+              "stem-00004",
+              "stem-00005"
+            ],
+            "training_examples": 24000,
+            "updates": 13369,
+            "validation_subsets": [
+              "math-00000",
+              "code-00000",
+              "stem-00000",
+              "chat-00000"
+            ],
+            "vllm_provenance_dir": "/content/dynamic-speculators-trainer/output/generator-campaign-online/provenance/vllm"
+          },
+          "speculative_tokens": 3,
+          "speculators_git_sha": "69a5f30643cf75caf28a2d7ca584cd584cab850e",
+          "speculators_patch_identity": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "static_adapter_policy": null,
+          "version": 1,
+          "vllm_version": "0.31.0",
+          "worker_extension_cls": "speculators.generator.serving.http.AdapterWorkerExtension"
+        },
+        "sweep_size": 10,
+        "target": "http://127.0.0.1:8000/v1",
+        "tokenizer_path": "models/qwen3-8b",
+        "validation": "11673f5891c24d2529df157cdd40f71d5a5079cf55d12cdc5a091c420f80036c",
+        "warmups": 3
+      },
+      "performance": {
+        "nemo-math": {
+          "itl_median_ms": 13.168078777836818,
+          "latency_median_s": 3.408466100692749,
+          "measured_seconds": 174.65857243537903,
+          "output_tokens_per_second": 73.28583888853095,
+          "output_tps_median": 73.87699829437712,
+          "rps_median": 0.2865534268287892,
+          "strategy": "throughput",
+          "successful_requests": 50,
+          "target_rate": "",
+          "total_output_tokens": 12800.0,
+          "ttft_median_ms": 49.532413482666016
+        },
+        "nemo-code": {
+          "itl_median_ms": 15.284001593496285,
+          "latency_median_s": 3.951420783996582,
+          "measured_seconds": 196.49529504776,
+          "output_tokens_per_second": 65.06517113752004,
+          "output_tps_median": 64.77084282471172,
+          "rps_median": 0.2514287659938527,
+          "strategy": "throughput",
+          "successful_requests": 50,
+          "target_rate": "",
+          "total_output_tokens": 12785.0,
+          "ttft_median_ms": 55.383920669555664
+        },
+        "nemo-stem": {
+          "itl_median_ms": 15.584414613013173,
+          "latency_median_s": 4.000418424606323,
+          "measured_seconds": 201.15351271629333,
+          "output_tokens_per_second": 63.38939761884245,
+          "output_tps_median": 63.057500225216415,
+          "rps_median": 0.24632460293167285,
+          "strategy": "throughput",
+          "successful_requests": 50,
+          "target_rate": "",
+          "total_output_tokens": 12751.0,
+          "ttft_median_ms": 49.956560134887695
+        },
+        "nemo-chat": {
+          "itl_median_ms": 17.251082027659695,
+          "latency_median_s": 4.324691534042358,
+          "measured_seconds": 201.61042761802673,
+          "output_tokens_per_second": 54.719391900211356,
+          "output_tps_median": 55.820765216236744,
+          "rps_median": 0.22668689658243737,
+          "strategy": "throughput",
+          "successful_requests": 50,
+          "target_rate": "",
+          "total_output_tokens": 11032.0,
+          "ttft_median_ms": 50.019264221191406
+        }
+      }
     }
-  }
+  },
+  "additional_archives": [
+    {
+      "file": "artifacts-generator-all24k-label2600.tar.gz",
+      "sha256": "2ca4bd294bcc2017ebdb28afd2700b1f40b7550b55025dcb21c55afb84dbdc47",
+      "files": [
+        {
+          "path": "generator-all24k-10ep-v1-2600/acceptance.csv",
+          "bytes": 680,
+          "sha256": "d9290d7369502a87f06875c89248ba54b1d5e6e0bf02952ec31551c891a7c4c8"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/adapter_performance.csv",
+          "bytes": 549,
+          "sha256": "17b85fc82657e91d0b133d16024ce0c9e45b7417dbf25eba0b3370b0a8f434f1"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/benchmark_identity.json",
+          "bytes": 3084,
+          "sha256": "282e687c93a1c49f01c1cbd918792d36cd5b9ee382865e7f8641830d4ba714bd"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/eval_command.txt",
+          "bytes": 639,
+          "sha256": "ab4bb53bff2bb8f180000bcb9a71ea55e756fd5deb1b6a90755ae8d672a11e40"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-chat/guidellm.json",
+          "bytes": 403857,
+          "sha256": "056e0d0adc4e001240daf072bb89c1db97fff0e4ad58fb006b782dc924fcffd1"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-chat/guidellm_command.json",
+          "bytes": 1257,
+          "sha256": "251ad570e5ab64078c3c3716b6a311d24f61e63f11be02ebef094ca0df5c5c80"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-chat/metrics_after.prom",
+          "bytes": 55994,
+          "sha256": "258d942494995c2886af26c9f228b26b2e05980b70168cdb1ff774070b03c8df"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-chat/metrics_before.prom",
+          "bytes": 55738,
+          "sha256": "286b4ba3e073bfbfdd5e57967e2d5548d5394e1840a7880552e9832dcd779b85"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-chat/result.json",
+          "bytes": 1392,
+          "sha256": "1108520d281aec78fe97845dd994416fc3522f3d5249049aa0ee0699bb5c818c"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-chat/server_after.json",
+          "bytes": 3210,
+          "sha256": "a826c67a827a1b4614c63a6123924dc6a928c8f8779c412e8254c14bc9729761"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-chat/server_before.json",
+          "bytes": 3211,
+          "sha256": "5aeaa458f30f08371acf1229d37c211bb5d4db924b16636c88f28430d882a448"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-chat/validation.jsonl",
+          "bytes": 276318,
+          "sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-code/guidellm.json",
+          "bytes": 376678,
+          "sha256": "0d8b14770b7d340e73fe7abf02259e2b9c19011c0548dac9d971b8ccd9058145"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-code/guidellm_command.json",
+          "bytes": 1257,
+          "sha256": "127e8cacc528e7d358eeff3db7be131b6b2d65bbc09a17163580871891e96928"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-code/metrics_after.prom",
+          "bytes": 56241,
+          "sha256": "cf9cd552d2e17823b16dca547d252b770297fe7cce758827354499025b73effe"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-code/metrics_before.prom",
+          "bytes": 56018,
+          "sha256": "3964e91df1976e99ebab496586a9c7cc9c1189b652467b19b51cef72a221865b"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-code/result.json",
+          "bytes": 1385,
+          "sha256": "4a353957ee959209cbca379eb7cf43398735a868a3f0db4b0515f92fa2a542b0"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-code/server_after.json",
+          "bytes": 3213,
+          "sha256": "b3203ec71a3fa9c1ee8b73007e6339b22c8d0345e20883830c2c1dd9d972d4a4"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-code/server_before.json",
+          "bytes": 3210,
+          "sha256": "ea42a1e708a98deb39113540e7c670a6037939f32b4fb49827992e58334e0daf"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-code/validation.jsonl",
+          "bytes": 235509,
+          "sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-math/guidellm.json",
+          "bytes": 288531,
+          "sha256": "95b6c379bdb4780391b5bfb0a44e61a262fe7a756a82b2b5124fee3680c3fa4e"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-math/guidellm_command.json",
+          "bytes": 1257,
+          "sha256": "36fe93b5dd2eb10ff4bbe56d58f3f90e486cfd6cb89f13bbb4805f4dcca80117"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-math/metrics_after.prom",
+          "bytes": 56235,
+          "sha256": "10f28a1baeaebb03cd904682026e0488d1830d1425413e2e0e72269cb124bb79"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-math/metrics_before.prom",
+          "bytes": 56234,
+          "sha256": "2ca1511cf649bbc6ced6517ff28a50148c3787b8602d42e189b075255b66c2e2"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-math/result.json",
+          "bytes": 1387,
+          "sha256": "7ad4e5c87ad4f9799da0a61e8b103d24b3294d36a61e971c422f61667defede2"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-math/server_after.json",
+          "bytes": 3212,
+          "sha256": "918db39d31a8f8bb5e10afd6c8813a73c9455fd10fa79f2cef828aac101942ed"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-math/server_before.json",
+          "bytes": 3211,
+          "sha256": "e5bb4d5a9b4c426ff46dd2be828d80618a153cd1c2b07345234354c2ff3f0068"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-math/validation.jsonl",
+          "bytes": 57003,
+          "sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-stem/guidellm.json",
+          "bytes": 340663,
+          "sha256": "219a00f60cb4df90180412ef21a9cd307ecca6645cd5902b4f0cc244acbb1985"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-stem/guidellm_command.json",
+          "bytes": 1257,
+          "sha256": "30655ace006d6ff2b15e403adc6c88c7f7d37660ad76affcf5d59f9be69d70e0"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-stem/metrics_after.prom",
+          "bytes": 56246,
+          "sha256": "c9a05ac331365b5e25b7686345d8b8ece0cffb268c74900a56a27742301360e6"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-stem/metrics_before.prom",
+          "bytes": 56236,
+          "sha256": "6d710cac62714850ae8a7c309763f3c595a7e1b7871c8e69e1c27e47aabc730b"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-stem/result.json",
+          "bytes": 1390,
+          "sha256": "3d595948daa91678a40880b373236b798d6f7f431157d8ba6297b162a40c9666"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-stem/server_after.json",
+          "bytes": 3212,
+          "sha256": "a9588645df08cb85ede35425f855e46660d54df9c6ef6eb7c6dd3f9d920f87de"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-stem/server_before.json",
+          "bytes": 3211,
+          "sha256": "17b877a5e6636cdae3476b7ce153132778cb157131f5273ce5a1867322fb4e71"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/nemo-stem/validation.jsonl",
+          "bytes": 121588,
+          "sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/perf_results.csv",
+          "bytes": 960,
+          "sha256": "c34ef769d1a766ee6b29e0e1fd7761856b18f3b7ca4b349d8aaec6325864b53c"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/results.json",
+          "bytes": 6509,
+          "sha256": "7935848d0f149e9727d309f6d60f80f1145dd5cd8d467a28e6c4b736406feb72"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/bundle.json",
+          "bytes": 3864,
+          "sha256": "3519e0b1caefe2b8695b8011655a0adf74ec2f6cae79f8668addd548fc47df0b"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/checkpoint_sha256.txt",
+          "bytes": 495,
+          "sha256": "8f51132290852a4ab4070da7e075f9a6e14f2e14553663e25211fdd99c170222"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/drafter_checkpoint_sha256.txt",
+          "bytes": 84,
+          "sha256": "9633fed7ef998a0938b387b0dadfccd8ba95e82832104daacc245e30debe1f81"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/generator-vllm.patch",
+          "bytes": 2699,
+          "sha256": "f864ea5f8fbd4647cb8b8d56cd9686f05e7d03e2e42b86a9565e9c38b762d8a0"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/server.json",
+          "bytes": 2336,
+          "sha256": "8f8959ed3ac9a4851c89c358e5943f0ae9fd49f57c803c00f111c4491f291818"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/server_environment.json",
+          "bytes": 2584,
+          "sha256": "73f7ae8ace26d621b38736a6f2fc6472393986c6a3d082ab4edda58795bf26a5"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/server_identity.json",
+          "bytes": 83,
+          "sha256": "131898505dacd6ddbdc8237146e7b531809e558b9086df4c565696cc0be2167f"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/source_provenance/bundle.json",
+          "bytes": 3864,
+          "sha256": "3519e0b1caefe2b8695b8011655a0adf74ec2f6cae79f8668addd548fc47df0b"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/source_provenance/configuration.json",
+          "bytes": 2787,
+          "sha256": "72a36ef183ca661de783e76781404b914b997811337b19a7e9d269dba8709320"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/source_provenance/metrics.json",
+          "bytes": 6819,
+          "sha256": "83e99ff5b71f815b7f0463bca00bb2bf590e71adf6358276e42955425129a921"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/source_provenance/provenance/vllm/checkpoint_sha256.txt",
+          "bytes": 495,
+          "sha256": "8f51132290852a4ab4070da7e075f9a6e14f2e14553663e25211fdd99c170222"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/source_provenance/provenance/vllm/vllm.patch",
+          "bytes": 49,
+          "sha256": "54b2e093fd0e7784f5eca683c55e01d64b82ee577c174030b15733c115929450"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/source_provenance/provenance/vllm/vllm_command.txt",
+          "bytes": 850,
+          "sha256": "cbf649261a2e708759774b47278e0d63e5b3fbd08519c09c403c85b4f5f1a520"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/source_provenance/resolved_experiment.json",
+          "bytes": 2510740,
+          "sha256": "4abbc482b82f8c2272fc9632d21ce453cb55a657c0adc38baa22b7d1abe8a87e"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/source_provenance/result.json",
+          "bytes": 1517,
+          "sha256": "2303f22dad18868e89b54ee856f3a8e2b5ecad52bd40abd0816bbadb5f49d9ad"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/source_provenance/speculators.patch",
+          "bytes": 88,
+          "sha256": "99d1267ec0b181a4485256325e607745abc530c5eb8f833623d57de51776d053"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/source_provenance/timing.json",
+          "bytes": 5730130,
+          "sha256": "7e4373bd8e573a55731602a27b93e40278e13bbfd6b650d17e34df1fef7cb40b"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/source_provenance/train_command.txt",
+          "bytes": 539,
+          "sha256": "0f529752903edd03a5cfd6bb18ea2087bbba33ad8d79f139bef477a14055e199"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/source_provenance/upload_manifest.json",
+          "bytes": 2336,
+          "sha256": "c87f952651cf67af1d1da8b0b21fdd65582d76d4223cd728eea4a428191ea913"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/source_provenance/wandb.json",
+          "bytes": 300,
+          "sha256": "1a66defd268a29fa30a72ba3369b130e5d9fd17f768b3d3f1803157db70ad77e"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/speculators.patch",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/vllm.patch",
+          "bytes": 2699,
+          "sha256": "f864ea5f8fbd4647cb8b8d56cd9686f05e7d03e2e42b86a9565e9c38b762d8a0"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/server_provenance/vllm_command.txt",
+          "bytes": 1123,
+          "sha256": "fdb04312b3b44dbec72b32204283a8b3e7cf46f20d920547c6c4be93a48455e6"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/speculators.patch",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/validation/manifest.json",
+          "bytes": 4872,
+          "sha256": "26cfaf24dd4b632ee673f6a8b2cd3f44712e8470a2a25733c895730a0910d83d"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/validation/nemo-chat.jsonl",
+          "bytes": 276318,
+          "sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/validation/nemo-code.jsonl",
+          "bytes": 235509,
+          "sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/validation/nemo-math.jsonl",
+          "bytes": 57003,
+          "sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28"
+        },
+        {
+          "path": "generator-all24k-10ep-v1-2600/validation/nemo-stem.jsonl",
+          "bytes": 121588,
+          "sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757"
+        }
+      ]
+    }
+  ]
 }
