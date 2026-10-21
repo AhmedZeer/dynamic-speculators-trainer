@@ -1,6 +1,7 @@
 """Bank diagnostics are visible before extraction and ignore root log filters."""
 
 import logging
+import re
 import time
 from importlib import import_module
 
@@ -25,6 +26,8 @@ def test_stage_logs_blocking_work_and_memory_without_root_logger(capsys, root_le
     assert "Manifest loading: still running" in output
     assert "Manifest loading: completed" in output
     assert "process RSS=" in output
+    assert re.search(r"\[\d{2}:\d{2}\] \[speculators pid=\d+\]", output)
+    assert "lora-bank pid=" not in output
 
 
 def test_stage_failure_stops_heartbeat_and_preserves_error(capsys):

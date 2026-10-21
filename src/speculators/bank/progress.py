@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 
 import typer
@@ -21,14 +22,22 @@ def process_memory() -> str:
         return "process RSS=unavailable"
 
 
-def report(message: str):
+def report(message: str, *, component: str = "speculators"):
     typer.echo(
-        f"[lora-bank pid={os.getpid()}] {message} | {process_memory()}", err=True
+        f"[{datetime.now().astimezone():%H:%M}] [{component} pid={os.getpid()}] "
+        f"{message} | {process_memory()}",
+        err=True,
     )
 
 
 @contextmanager
-def stage_progress(label: str, interval: float = 10.0, *, quiet: bool = False):
+def stage_progress(
+    label: str,
+    interval: float = 10.0,
+    *,
+    quiet: bool = False,
+    component: str = "speculators",
+):
     """Report stages immediately and during blocking I/O, without root filters."""
     started = time.monotonic()
     stopped = threading.Event()
@@ -37,10 +46,13 @@ def stage_progress(label: str, interval: float = 10.0, *, quiet: bool = False):
     def heartbeat():
         while not stopped.wait(interval):
             reported.set()
-            report(f"{label}: still running ({time.monotonic() - started:.1f}s)")
+            report(
+                f"{label}: still running ({time.monotonic() - started:.1f}s)",
+                component=component,
+            )
 
     if not quiet:
-        report(f"{label}: starting")
+        report(f"{label}: starting", component=component)
     thread = threading.Thread(target=heartbeat, daemon=True)
     thread.start()
     outcome = "completed"
@@ -53,7 +65,10 @@ def stage_progress(label: str, interval: float = 10.0, *, quiet: bool = False):
         stopped.set()
         thread.join()
         if not quiet or reported.is_set() or outcome == "stopped":
-            report(f"{label}: {outcome} ({time.monotonic() - started:.1f}s)")
+            report(
+                f"{label}: {outcome} ({time.monotonic() - started:.1f}s)",
+                component=component,
+            )
 
 
 class StartupWatchdog:

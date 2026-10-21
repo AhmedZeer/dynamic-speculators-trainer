@@ -22,6 +22,7 @@ from speculators.benchmark.processes import (
     owned_process,
     termination_cleanup,
 )
+from speculators.benchmark.progress import report_failure, stage_progress
 from speculators.generator.serving.endpoint import validate_status
 from speculators.generator.serving.validation import load_validation
 from tests.unit.generator.test_serving import write_bundle
@@ -70,6 +71,23 @@ def test_config_and_dry_run(tmp_path):
         Model(name="bad", type="lora", model="a/b", subfolder="../escape")
     with pytest.raises(ValidationError):
         Settings(concurrency=2)
+
+
+def test_benchmark_diagnostics_include_failure_excerpt_and_heartbeats(tmp_path, capsys):
+    log = tmp_path / "client.log"
+    log.write_text("\n".join(["old detail"] * 20 + ["ValueError: failed prompt check"]))
+    report_failure("base/nemo-math", RuntimeError("client exited 1"), log)
+    with stage_progress("Waiting for server", interval=0.01):
+        time.sleep(0.035)
+    text = capsys.readouterr().err
+    assert "[benchmark pid=" in text
+    assert "lora-bank" not in text
+    assert "FAILED base/nemo-math: RuntimeError: client exited 1" in text
+    assert "ValueError: failed prompt check" in text
+    assert str(log) in text
+    assert text.count("old detail") == 11
+    assert "Waiting for server: still running" in text
+    assert "Waiting for server: completed" in text
 
 
 def test_hub_bundle_resolution_pins_and_excludes_optimizer(tmp_path, monkeypatch):
@@ -422,6 +440,7 @@ def test_suite_matrix_resume_and_corrupt_result_replay(fake_suite):
     assert len(case.launches) == 2
     state = json.loads((case.output / "state.json").read_text())
     entry = state["tasks"]["base/nemotron/nemo-math"]
+    assert entry["wall_seconds"] > 0
     native = case.output / entry["output"] / "nemo-math/guidellm.json"
     native.write_text("corrupt")
     suite.run_suite(case.config, case.output, resume=True)
@@ -432,13 +451,17 @@ def test_suite_matrix_resume_and_corrupt_result_replay(fake_suite):
 
 
 def test_suite_client_failure_continues_then_resume_retries_only_failure(
-    fake_suite, monkeypatch
+    fake_suite, monkeypatch, capsys
 ):
     case = fake_suite
     case.failures.add("base/nemotron/nemo-math")
     result = suite.run_suite(case.config, case.output)
     assert result["completed"] == 3
     assert result["failed"] == 1
+    logs = capsys.readouterr().err
+    assert "FAILED base/nemotron/nemo-math" in logs
+    assert "Recycling server base after client failure" in logs
+    assert "COMPLETED other/nemotron/nemo-math: 12.50 tok/s" in logs
     assert all(child.poll() is not None for child in case.children)
     original = suite.server_command
     monkeypatch.setattr(

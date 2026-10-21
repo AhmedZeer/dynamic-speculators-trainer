@@ -12,7 +12,6 @@ from filelock import FileLock
 from huggingface_hub import snapshot_download
 
 from speculators.bank.artifacts import digest, file_digest, write_json
-from speculators.bank.progress import report
 from speculators.benchmark.config import Suite
 from speculators.benchmark.prepare import local_source, prepare_workload, resolve_model
 from speculators.benchmark.processes import (
@@ -21,6 +20,7 @@ from speculators.benchmark.processes import (
     termination_cleanup,
     wait_ready,
 )
+from speculators.benchmark.progress import report, report_failure, stage_progress
 from speculators.generator.campaign_config import CampaignConfig
 from speculators.generator.serving.endpoint import save_provenance
 from speculators.generator.serving.validation import load_validation
@@ -217,6 +217,7 @@ def write_summary(output, plan, state):
 
 def _measure_model(root, output, model, plan, state, settings, tokenizer):  # noqa: C901, PLR0917 -- owns sequential server/client lifecycle
     tasks = []
+    skipped = 0
     for benchmark, workload in plan["workloads"].items():
         for category in workload["groups"]:
             task = {
@@ -227,6 +228,12 @@ def _measure_model(root, output, model, plan, state, settings, tokenizer):  # no
             }
             if not valid_completed(output, state["tasks"].get(task["key"], {})):
                 tasks.append(task)
+            else:
+                skipped += 1
+    report(
+        f"Model {model['name']}: type={model['type']}; "
+        f"pending={len(tasks)}; completed/skipped={skipped}"
+    )
     target = f"http://127.0.0.1:{settings.port}/v1"
     env = {**os.environ, "CUDA_VISIBLE_DEVICES": str(settings.gpu)}
     while tasks:
@@ -243,7 +250,9 @@ def _measure_model(root, output, model, plan, state, settings, tokenizer):  # no
             command = server_command(root, model, plan["target"], settings, provenance)
             write_json(provenance / "launch_argv.json", command)
             report(
-                f"Suite: starting {model['name']}; {len(tasks)} measurements pending"
+                f"Suite: starting {model['name']}; {len(tasks)} measurements pending; "
+                f"attempt={state['server_attempts']}; GPU={settings.gpu}; "
+                f"endpoint={target}; server_log={provenance / 'server.log'}"
             )
             with owned_process(
                 command,
@@ -252,12 +261,19 @@ def _measure_model(root, output, model, plan, state, settings, tokenizer):  # no
                 env=env,
                 timeout=settings.shutdown_timeout_seconds,
             ) as process:
+                report(f"Server {model['name']}: launched pid={process.pid}")
                 manifest = json.loads(
                     Path(plan["workloads"][tasks[0]["benchmark"]]["path"]).read_text()
                 )
-                wait_ready(
-                    process, target, model, manifest, settings.startup_timeout_seconds
-                )
+                with stage_progress(f"Server {model['name']}: waiting for readiness"):
+                    wait_ready(
+                        process,
+                        target,
+                        model,
+                        manifest,
+                        settings.startup_timeout_seconds,
+                    )
+                report(f"Server {model['name']}: ready; model identity verified")
                 while tasks:
                     task = tasks.pop(0)
                     previous = state["tasks"].get(task["key"], {})
@@ -285,22 +301,31 @@ def _measure_model(root, output, model, plan, state, settings, tokenizer):  # no
                         destination,
                     )
                     write_json(destination / "client_argv.json", client)
-                    report(f"Suite: measuring {task['key']}")
+                    report(
+                        f"Suite: measuring {task['key']}; attempt={attempt}; "
+                        f"requests={workload['groups'][task['category']]['rows']}; "
+                        f"warmups={settings.warmups}; remaining_after={len(tasks)}; "
+                        f"client_log={destination / 'client.log'}"
+                    )
+                    started = time.monotonic()
                     try:
-                        with owned_process(
-                            client,
-                            destination / "client.log",
-                            cwd=root,
-                            env=env,
-                            timeout=settings.shutdown_timeout_seconds,
-                        ) as worker:
+                        with (
+                            stage_progress(f"Client {task['key']}"),
+                            owned_process(
+                                client,
+                                destination / "client.log",
+                                cwd=root,
+                                env=env,
+                                timeout=settings.shutdown_timeout_seconds,
+                            ) as worker,
+                        ):
                             code = worker.wait(timeout=settings.client_timeout_seconds)
                             if code:
                                 raise RuntimeError(
                                     f"Benchmark client exited with code {code}; "
                                     f"see {destination / 'client.log'}"
                                 )
-                        verify_result(destination, task, workload, model)
+                        group = verify_result(destination, task, workload, model)
                         entry.update(
                             status="completed",
                             checksums={
@@ -308,23 +333,43 @@ def _measure_model(root, output, model, plan, state, settings, tokenizer):  # no
                                 for path in result_files(destination, task["category"])
                             },
                         )
+                        performance = group["performance"][0]
+                        report(
+                            f"COMPLETED {task['key']}: "
+                            f"{performance['output_tokens_per_second']:.2f} tok/s; "
+                            f"requests={performance['successful_requests']}; "
+                            f"wall={time.monotonic() - started:.2f}s"
+                        )
                     except KeyboardInterrupt:
                         entry["status"] = "interrupted"
+                        report(
+                            f"INTERRUPTED {task['key']}; "
+                            f"client_log={destination / 'client.log'}"
+                        )
                         raise
                     except Exception as exc:
                         entry.update(
                             status="failed", error=f"{type(exc).__name__}: {exc}"
                         )
+                        report_failure(task["key"], exc, destination / "client.log")
                         if not settings.continue_on_error:
                             raise
                         # Recycle the server to clear outstanding work.
+                        report(
+                            f"Recycling server {model['name']} after client failure; "
+                            f"{len(tasks)} measurements remain"
+                        )
                         break
                     finally:
+                        entry["wall_seconds"] = time.monotonic() - started
                         write_json(output / "state.json", state)
                         write_summary(output, plan, state)
         except KeyboardInterrupt:
             raise
         except Exception as exc:
+            report_failure(
+                f"Server attempt {model['name']}", exc, provenance / "server.log"
+            )
             if not settings.continue_on_error:
                 raise
             for task in tasks:
@@ -338,6 +383,8 @@ def _measure_model(root, output, model, plan, state, settings, tokenizer):  # no
                 }
             tasks.clear()
             write_json(output / "state.json", state)
+        finally:
+            report(f"Server {model['name']}: attempt ended; owned processes cleaned up")
         # Give terminated workers time to release the listener before the next launch.
         deadline = time.monotonic() + settings.shutdown_timeout_seconds
         while time.monotonic() < deadline:
@@ -349,6 +396,7 @@ def _measure_model(root, output, model, plan, state, settings, tokenizer):  # no
 
 
 def run_suite(config_path, output_root, *, resume=False, dry_run=False):  # noqa: C901
+    session_started = time.monotonic()
     config_path = Path(config_path).resolve()
     config = Suite.load(config_path)
     if dry_run:
@@ -364,6 +412,10 @@ def run_suite(config_path, output_root, *, resume=False, dry_run=False):  # noqa
         )
     output = Path(output_root).resolve()
     output.mkdir(parents=True, exist_ok=True)
+    report(
+        f"Suite: config={config_path}; output={output}; resume={resume}; "
+        f"models={len(config.models)}; datasets={len(config.benchmarks)}"
+    )
     port_lock = (
         Path(tempfile.gettempdir())
         / f"speculators-suite-{os.getuid()}-{config.settings.port}.lock"
@@ -400,12 +452,16 @@ def run_suite(config_path, output_root, *, resume=False, dry_run=False):  # noqa
         models = []
         for spec in config.models:
             previous = pins.get(spec.name)
-            model = resolve_model(
-                spec,
-                config_path.parent,
-                output / "local_models",
-                pinned=previous["revision"] if previous else None,
-            )
+            with stage_progress(
+                f"Resolve {spec.name}: type={spec.type}; source={spec.model}"
+            ):
+                model = resolve_model(
+                    spec,
+                    config_path.parent,
+                    output / "local_models",
+                    pinned=previous["revision"] if previous else None,
+                )
+            report(f"Resolved {spec.name}: revision={model['revision']}")
             if previous and model_signature(model) != model_signature(previous):
                 raise ValueError(f"Model {spec.name} changed since the saved suite")
             pins[spec.name] = model
@@ -438,12 +494,20 @@ def run_suite(config_path, output_root, *, resume=False, dry_run=False):  # noqa
             )
         workloads = {}
         for benchmark in config.benchmarks:
-            workload = prepare_workload(
-                benchmark,
-                cfg,
-                output / "workloads" / benchmark.label,
-                settings,
-                tokenizer,
+            with stage_progress(f"Prepare workload {benchmark.label}"):
+                workload = prepare_workload(
+                    benchmark,
+                    cfg,
+                    output / "workloads" / benchmark.label,
+                    settings,
+                    tokenizer,
+                )
+            report(
+                f"Workload {benchmark.label}: "
+                + ", ".join(
+                    f"{name}={info['rows']} prompts"
+                    for name, info in workload["groups"].items()
+                )
             )
             if workload["models"]["target"] != target:
                 raise ValueError("Workload target differs from the model bundles")
@@ -484,6 +548,12 @@ def run_suite(config_path, output_root, *, resume=False, dry_run=False):  # noqa
             write_summary(output, plan, state)
         failed = sum(
             entry["status"] != "completed" for entry in state["tasks"].values()
+        )
+        report(
+            f"Suite finished: completed={len(state['tasks']) - failed}; "
+            f"failed/incomplete={failed}; "
+            f"wall={time.monotonic() - session_started:.2f}s; "
+            f"summary={output / 'summary.md'}; failures={output / 'failures.json'}"
         )
         return {
             "output": str(output),

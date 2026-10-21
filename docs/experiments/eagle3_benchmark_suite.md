@@ -136,6 +136,15 @@ in the native artifacts. Every actual server launch passes `--provenance-dir`;
 client and suite invocations save command, package, git, and patch provenance.
 Include the complete output directory when publishing results.
 
+Console diagnostics use `[HH:MM] [benchmark pid=…]` in the process's local
+timezone. They report model resolution, prompt counts, skipped completed tasks,
+server/client log paths, server readiness, and a heartbeat every 30 seconds
+during startup and client execution. Completed categories report measured tok/s,
+request count, and wall seconds (also saved as `wall_seconds` in `state.json`).
+Failures print the exception and the last 12 log lines before any server restart.
+Repeated server launches after individual categories indicate failed clients;
+inspect the reported `client.log` and `failures.json` for the full diagnostics.
+
 The suite runs throughput directly, with **no correctness-generation pass**.
 Results explicitly record `correctness_status=not_checked`; these measurements
 support exploratory speed comparisons. Server identity, tokenizer agreement,
