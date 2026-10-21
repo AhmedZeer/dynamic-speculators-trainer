@@ -3,8 +3,44 @@
 Inspected 2026-10-21 at dataset revision
 `2ae86affa2cb97a972b7fc681dd51c04fbff083e`:
 [RedHatAI/speculator_benchmarks](https://huggingface.co/datasets/RedHatAI/speculator_benchmarks/tree/2ae86affa2cb97a972b7fc681dd51c04fbff083e).
-All nine JSONL files were read to inspect row counts and schemas. This is an
-inventory, not a new integration or completed benchmark.
+All nine JSONL files were read to inspect row counts and schemas before
+integration. The frozen workload exporter described below now supports this
+inspected revision; this document does not report completed benchmark results.
+
+## Frozen export command
+
+```bash
+speculators generator export-validation \
+  --config examples/eagle3-lora/generator_campaign_online.yaml \
+  --dataset RedHatAI/speculator_benchmarks \
+  --output output/generator-http-validation-redhatall50 \
+  --tokenizer-path ./models/qwen3-8b \
+  --categories all --max-samples 50 --max-tokens 256 \
+  --seed 42 --prompt-format auto
+```
+
+This exports up to 50 prompts for each of eight unique groups, using the pinned
+revision below. The duplicate `writing` selector aliases `question`; it never
+adds a second copy of MT-Bench. Groups use the `specbench-*` prefix, separate
+from Nemotron's `nemo-*` validation groups. To choose tasks explicitly, pass
+`--categories HumanEval,math_reasoning,qa,question,rag,summarization,tool_call,translation`.
+Model revision references are taken from the local pinned trajectory metadata
+specified by the config; no training or activation payload is used for export.
+The eight small benchmark JSONL files are fetched through the Hub cache.
+
+`auto` preserves raw HumanEval code-completion prompts and applies the target
+tokenizer's user-chat template to instruction tasks, including its default
+thinking policy. Use `--prompt-format raw` or `chat` to choose one policy for all
+groups. The rendered prompt text, token IDs, policy, source hashes, source
+categories and selection seed are saved in the manifest/workload. Sampling is
+balanced across source categories, including MT-Bench's eight categories.
+Prompts leaving no generation space within the configured context limit are
+excluded and counted in the manifest; the actual export counts are printed.
+Source references, code solutions and tests are not sent as input prompts.
+
+Use `output/generator-http-validation-redhatall50/manifest.json` in the existing
+direct-throughput command. No correctness run is required. For task selection
+at benchmark time, use exact exported names such as `--subsets specbench-qa`.
 
 | File selector | Task | Rows |
 | --- | --- | ---: |
@@ -44,14 +80,14 @@ There are 924 rows across files, or 844 after dropping the duplicate file
 ## Proposed external-workload protocol
 
 Use eight unique file groups, with labels such as `specbench-humaneval`,
-`specbench-math-reasoning`, `specbench-mt-bench`, and `specbench-tool-call`.
+`specbench-math-reasoning`, `specbench-question` (MT-Bench), and `specbench-tool-call`.
 Keep `nemo-*` labels for Nemotron validation. Start with 50 deterministic prompts
 per unique group, preserve source category metadata, and balance MT-Bench
 sampling across its eight categories. Fix the revision, tokenizer, prompt
 formatting policy, output cap, concurrency, and seed for every server mode.
 
 HumanEval is code-completion data; do not silently apply a conversational
-template to every task. Decide prompt handling before freezing the workload.
+template to every task. The exporter records the chosen formatting policy explicitly.
 Log realized prompt lengths and generated lengths; RAG and summarization may
 stress different context lengths from the short Nemotron math workload.
 

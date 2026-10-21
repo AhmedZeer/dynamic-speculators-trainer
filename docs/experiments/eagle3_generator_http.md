@@ -94,7 +94,7 @@ Use the same GuideLLM workload and settings as the generator, with output path
 `output/http-benchmarks/scale-1-lora`. The server merges the static LoRA once at
 startup. Do not run this measurement alongside the training activation server.
 For external datasets, see the [benchmark inventory](speculator_benchmarks_inventory.md)
-before integration; it documents a duplicated category and task-format differences.
+for the Red Hat export command, duplicated category, and task-format differences.
 
 ### Exploratory timing while token equality is unresolved
 

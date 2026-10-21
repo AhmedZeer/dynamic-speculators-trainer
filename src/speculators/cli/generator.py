@@ -241,11 +241,18 @@ def export_validation_command(
     ] = 0,
     categories: Annotated[
         str,
-        typer.Option("--categories", help="Comma-separated Nemotron domains or all."),
+        typer.Option("--categories", help="Comma-separated dataset categories or all."),
     ] = "all",
     seed: Annotated[int, typer.Option("--seed")] = 42,
+    dataset: Annotated[
+        str,
+        typer.Option("--dataset", help="nemotron or RedHatAI/speculator_benchmarks"),
+    ] = "nemotron",
+    prompt_format: Annotated[
+        str, typer.Option("--prompt-format", help="Red Hat prompts: auto, raw, or chat")
+    ] = "auto",
 ):
-    """Freeze current campaign validation prompts for independent HTTP benchmarks."""
+    """Freeze Nemotron validation or Red Hat prompts for HTTP benchmarks."""
     import json  # noqa: PLC0415
 
     from speculators.generator.campaign_config import CampaignConfig  # noqa: PLC0415
@@ -253,7 +260,20 @@ def export_validation_command(
         export_validation,
     )
 
-    result = export_validation(
+    exporter = export_validation
+    extra = {}
+    if dataset == "RedHatAI/speculator_benchmarks":
+        from speculators.generator.serving.external_validation import (  # noqa: PLC0415
+            export_external_validation,
+        )
+
+        exporter = export_external_validation
+        extra["prompt_format"] = prompt_format
+    elif dataset != "nemotron":
+        raise typer.BadParameter(
+            "Dataset must be nemotron or RedHatAI/speculator_benchmarks"
+        )
+    result = exporter(
         CampaignConfig.load(config),
         output,
         tokenizer_path=tokenizer_path,
@@ -263,6 +283,7 @@ def export_validation_command(
         if categories == "all"
         else [s.strip() for s in categories.split(",")],
         seed=seed,
+        **extra,
     )
     typer.echo(json.dumps(result, indent=2))
 
