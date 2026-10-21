@@ -24,7 +24,7 @@ optimization:
   max_grad_norm: 0.85
   warmup_updates: 100
   pretraining_updates: 1500
-  pretraining_validation_interval: 250
+  pretraining_validation_interval: 500
   episodes_per_update: 4
   checkpoint_interval: 500
   log_interval: 10

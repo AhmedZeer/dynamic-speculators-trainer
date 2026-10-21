@@ -48,11 +48,21 @@ occur at updates 2,676, 5,349, 8,015, 10,681, and 13,369. The command computes
 these boundaries from the actual local inputs; do not reuse these numbers for
 a different dataset or schedule.
 
-Context-4 validation runs initially and at epochs 2, 4, 6, 8, and 10, using the
-existing held-out `00000` validation rows in each domain. It does not run a
-vLLM inference benchmark. Local recovery checkpoints also follow the config's
+Context-4 validation runs initially, every **500 optimizer updates**, and at the
+final update, using the existing held-out `00000` validation rows in each domain.
+The YAML setting is `optimization.pretraining_validation_interval: 500` and is
+independent of the two-epoch Hub upload cadence. Checkpoint metadata includes
+the latest scheduled validation; uploads do not trigger additional validation.
+It does not run a vLLM inference benchmark. Local recovery checkpoints follow the config's
 optimizer-step checkpoint interval; these intermediate recovery saves are not
 separate Hub snapshots.
+
+Changing only the validation interval is supported when resuming: optimizer
+state, training schedule, and checkpoint identity are retained, while the
+effective configuration change is archived under `provenance/validation-change-*`. If the
+restored update is a validation boundary not evaluated in its saved history,
+it is evaluated immediately before training continues. Previously missed
+boundaries are not retroactively evaluated using later model weights.
 
 ## Remote checkpoints
 

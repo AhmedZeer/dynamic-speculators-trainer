@@ -388,7 +388,11 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
                 f"session_elapsed={time.perf_counter() - started:.2f}s"
             )
 
-        if not history:
+        if not history or (
+            progress > 0
+            and progress % cfg.optimization.pretraining_validation_interval == 0
+            and history[-1]["update"] != progress
+        ):
             validate()
             save()
         examples_seen = sum(t["train/examples"] for t in timing)
@@ -475,9 +479,7 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
                 )
             )
             validation_due = (
-                epoch_checkpoint
-                if epoch_schedule
-                else (progress % cfg.optimization.pretraining_validation_interval == 0)
+                progress % cfg.optimization.pretraining_validation_interval == 0
             )
             if validation_due or progress == job["updates"]:
                 validate()

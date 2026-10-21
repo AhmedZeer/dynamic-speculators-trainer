@@ -46,6 +46,7 @@ def test_hub_failure_resumes_boundary_and_uploads_portable_checkpoints(
 ):
     cfg, _, _ = online_campaign
     cfg.context.min_examples = cfg.context.max_examples = 4
+    cfg.optimization.pretraining_validation_interval = 1000
     root = tmp_path / "epoch-run"
     provenance = tmp_path / "vllm"
     provenance.mkdir()
@@ -107,10 +108,20 @@ def test_hub_failure_resumes_boundary_and_uploads_portable_checkpoints(
     run = root / "pretraining/all-data-4epochs"
     failed = torch.load(run / "checkpoint.pt", weights_only=True)
     assert failed["progress"] == plan["epoch_ends"][1]
+    saved_identity = failed["identity"]
+    assert [row["update"] for row in failed["history"]] == [0]
+    cfg.optimization.pretraining_validation_interval = 2
     result = epoch_training.train_full_data(
         cfg, root, "example/full-data", provenance, epochs=4, save_every_epochs=2
     )
     assert result["completed_updates"] == plan["updates"]
+    restored = torch.load(run / "checkpoint.pt", weights_only=True)
+    assert restored["identity"] == saved_identity
+    assert list((run / "provenance").glob("validation-change-*/configuration.json"))
+    assert [row["update"] for row in result["history"]] == [
+        0,
+        *range(plan["epoch_ends"][1], plan["updates"] + 1, 2),
+    ]
     assert uploaded == list(
         zip(["epoch-0002", "epoch-0004"], plan["epoch_ends"][1::2], strict=True)
     )

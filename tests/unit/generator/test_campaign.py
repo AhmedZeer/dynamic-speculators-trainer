@@ -478,12 +478,13 @@ def test_resume_after_intentional_update_budget_change(tiny_campaign, monkeypatc
         campaign.run_one(cfg, campaign.jobs(cfg)[0])
 
 
-def test_campaign_compatibility_allows_only_budget_and_output_changes():
+def test_campaign_compatibility_allows_budget_output_and_validation_changes():
     cfg = config()
     previous = {"configuration": cfg.model_dump(mode="json")}
     cfg.output_root = cfg.output_root / "moved"
     cfg.optimization.pretraining_updates = 1500
     cfg.adaptation_updates = 500
+    cfg.optimization.pretraining_validation_interval = 500
     assert compatible_campaign(previous, cfg)
     cfg.seed += 1
     assert not compatible_campaign(previous, cfg)

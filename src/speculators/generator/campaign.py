@@ -17,7 +17,10 @@ from speculators.generator.campaign_config import DOMAINS, SCALES
 from speculators.generator.campaign_data import CampaignCorpus
 from speculators.generator.campaign_inputs import campaign_banks, prepare_inputs
 from speculators.generator.campaign_inventory import working_sets
-from speculators.generator.campaign_resume import resume_identity
+from speculators.generator.campaign_resume import (
+    record_validation_change,
+    resume_identity,
+)
 from speculators.generator.campaign_train import run_training
 from speculators.generator.config import ExperimentConfig
 from speculators.generator.engine import Runtime, begin_run, run_identity
@@ -210,6 +213,7 @@ def run_one(  # noqa: C901 -- shared online/offline run lifecycle
             result = json.loads((output / "result.json").read_text())
             log_completed(local_cfg, corpus, job, output, identity, result)
             return result
+        record_validation_change(output, local_cfg)
         write_json(output / "configuration.json", local_cfg.model_dump(mode="json"))
         runtime_args = {}
         if online:

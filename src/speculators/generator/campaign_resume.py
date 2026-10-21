@@ -1,4 +1,4 @@
-"""Allow budget/path changes without rewriting saved checkpoint identities."""
+"""Allow budget, path, and validation changes while preserving checkpoint identities."""
 
 import copy
 import json
@@ -15,6 +15,9 @@ def compatible_campaign(previous, cfg):
     saved = CampaignConfig.model_validate(previous["configuration"])
     saved.output_root = cfg.output_root
     saved.optimization.pretraining_updates = cfg.optimization.pretraining_updates
+    saved.optimization.pretraining_validation_interval = (
+        cfg.optimization.pretraining_validation_interval
+    )
     saved.adaptation_updates = cfg.adaptation_updates
     return campaign_identity(saved) == campaign_identity(cfg)
 
@@ -48,3 +51,26 @@ def resume_identity(output, current):
         "retaining saved checkpoint identity and optimizer progress"
     )
     return saved
+
+
+def record_validation_change(output, cfg):
+    """Archive validation changes separately from the model identity."""
+    path = output / "configuration.json"
+    if not path.exists():
+        return
+    previous = json.loads(path.read_text())["optimization"][
+        "pretraining_validation_interval"
+    ]
+    current = cfg.optimization.pretraining_validation_interval
+    if previous != current:
+        write_json(
+            output
+            / "provenance"
+            / f"validation-change-{time.time_ns()}"
+            / "configuration.json",
+            {
+                "previous_interval": previous,
+                "validation_interval": current,
+                "configuration": cfg.model_dump(mode="json"),
+            },
+        )
