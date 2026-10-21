@@ -10,6 +10,7 @@ from importlib.metadata import version as pkg_version
 
 import typer
 
+from speculators.cli.benchmark import app as benchmark_app
 from speculators.cli.convert import convert
 from speculators.cli.generate_offline_data import generate_offline_data
 from speculators.cli.generator import app as generator_app
@@ -63,3 +64,4 @@ app.command(rich_help_panel="Tools")(convert)
 
 app.add_typer(lora_bank_app, name="lora-bank", rich_help_panel="Pipeline")
 app.add_typer(generator_app, name="generator", rich_help_panel="Pipeline")
+app.add_typer(benchmark_app, name="benchmark", rich_help_panel="Tools")

@@ -1,5 +1,9 @@
 # Independent HTTP serving and GuideLLM evaluation
 
+To run a model/category matrix with automatic server startup, cleanup, resume,
+and combined tables, use the [benchmark suite wrapper](eagle3_benchmark_suite.md)
+and its [example YAML](../../examples/eagle3-lora/benchmark_suite.yaml).
+
 Serving and evaluation are separate processes. `launch_vllm.py serve` owns one
 vLLM engine; the evaluator only sends HTTP requests. The same evaluator can
 measure target-only, original EAGLE3, a generated adapter, or a trained ordinary

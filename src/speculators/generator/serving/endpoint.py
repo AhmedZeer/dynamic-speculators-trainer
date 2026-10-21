@@ -51,6 +51,7 @@ def validate_status(status, manifest):
         raise ValueError("Server target revision differs from validation manifest")
     if (
         "drafter" in configuration["models"]
+        and "drafter" in manifest["models"]
         and configuration["models"]["drafter"] != manifest["models"]["drafter"]
     ):
         raise ValueError("Server drafter revision differs from validation manifest")

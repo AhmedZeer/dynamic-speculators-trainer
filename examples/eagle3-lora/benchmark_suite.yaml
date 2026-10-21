@@ -1,0 +1,28 @@
+models:
+  - name: eagle3-base
+    type: drafter
+    model: RedHatAI/Qwen3-8B-speculator.eagle3
+    revision: 08610ffa01dd9f16731fe8f627b85905b6aa51c4
+  - name: trained-lora
+    type: lora
+    model: azeeer/eagle3-lora-matched-4k-v1
+  - name: generator-24k
+    type: generator
+    model: azeeer/eagle3-generator-all24k-10ep-v1
+    # Replace with the checkpoint folder you want to measure.
+    subfolder: epoch-0002
+
+benchmarks:
+  - dataset: nemotron
+    categories: [math, code, stem, chat]
+  - dataset: RedHatAI/speculator_benchmarks
+    categories: [HumanEval, math_reasoning, qa, question, rag, summarization, tool_call, translation]
+
+# Optional. These are the defaults; models and benchmarks are sufficient.
+settings:
+  max_samples: 50
+  max_tokens: 256
+  seed: 42
+  warmups: 3
+  concurrency: 1
+  gpu: 0
