@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "received_date": "2026-10-21",
+  "status": "preliminary_console_only_comparison",
+  "baseline_record": "2026-10-21-nemomath50-eagle3-base-4",
+  "candidate_record": "2026-10-21-nemomath50-scale-1-lora-v2",
+  "dataset": "nemotron",
+  "group": "nemo-math",
+  "source_metrics_sha256": {
+    "2026-10-21-nemomath50-eagle3-base-4": "8cb68e49f7cbec527e8a0086c7877a035710707c1f9142849a7abf6f4f6bba10",
+    "2026-10-21-nemomath50-scale-1-lora-v2": "2b7e8fc196707903d7944fc5f7c801184782a1a225134b21fff79329d25ee328"
+  },
+  "throughput_speedup": 1.1554160125588695,
+  "throughput_speedup_basis": "73.6 / 63.7; reported aggregate server output tokens/s",
+  "duration_speedup": 1.1550832854681217,
+  "duration_speedup_basis": "201.1 / 174.1; both report 12800 completed output tokens",
+  "duration_reduction_percent": 13.426156141223272,
+  "median_latency_speedup": 1.1764705882352942,
+  "median_latency_speedup_basis": "4.0 / 3.4 seconds; rounded request-latency medians",
+  "checks": {
+    "reported_input_token_totals_equal": true,
+    "reported_output_token_totals_equal": true,
+    "reported_concurrency_equal": true,
+    "prompt_identity_verified": false,
+    "hardware_equivalence_verified": false,
+    "lossless_decoding_verified": false
+  },
+  "limitations": [
+    "Single measurement per arm; no run-to-run variance estimate.",
+    "Native metrics, workload hashes, command files and runtime provenance have not been supplied.",
+    "Matching console totals do not establish identical prompts or hardware.",
+    "Correctness failure remains deferred under GEN-002.",
+    "No target-only timing baseline has been supplied."
+  ]
+}

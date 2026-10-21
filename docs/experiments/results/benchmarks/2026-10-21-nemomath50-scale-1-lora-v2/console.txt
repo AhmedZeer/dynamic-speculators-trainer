@@ -1,0 +1,61 @@
+ℹ Run Summary Info
+|============|==========|==========|=======|======|======|========|=====|=====|=========|=====|=====|
+| Benchmark  | Timings                               ||||| Input Tokens     ||| Output Tokens     |||
+| Strategy   | Start    | End      | Dur   | Warm | Cool | Comp   | Inc | Err | Comp    | Inc | Err |
+|            |          |          | Sec   | Sec  | Sec  | Tot    | Tot | Tot | Tot     | Tot | Tot |
+|------------|----------|----------|-------|------|------|--------|-----|-----|---------|-----|-----|
+| throughput | 10:02:48 | 10:05:42 | 174.1 | 0.0  | 0.0  | 4930.0 | 0.0 | 0.0 | 12800.0 | 0.0 | 0.0 |
+|============|==========|==========|=======|======|======|========|=====|=====|=========|=====|=====|
+
+
+ℹ Text Metrics Statistics (Completed Requests)
+|============|=======|=======|======|======|=======|=======|======|======|=======|=======|=======|=======|
+| Benchmark  | Input Tokens             |||| Input Words              |||| Input Characters           ||||
+| Strategy   | Per Request  || Per Second || Per Request  || Per Second || Per Request  || Per Second   ||
+|            | Mdn   | p95   | Mdn  | Mean | Mdn   | p95   | Mdn  | Mean | Mdn   | p95   | Mdn   | Mean  |
+|------------|-------|-------|------|------|-------|-------|------|------|-------|-------|-------|-------|
+| throughput | 91.0  | 164.0 | 27.4 | 28.9 | 46.0  | 86.0  | 13.1 | 14.8 | 302.0 | 479.0 | 91.6  | 98.2  |
+|============|=======|=======|======|======|=======|=======|======|======|=======|=======|=======|=======|
+| Benchmark  | Output Tokens            |||| Output Words             |||| Output Characters          ||||
+| Strategy   | Per Request  || Per Second || Per Request  || Per Second || Per Request  || Per Second   ||
+|            | Mdn   | p95   | Mdn  | Mean | Mdn   | p95   | Mdn  | Mean | Mdn   | p95   | Mdn   | Mean  |
+|------------|-------|-------|------|------|-------|-------|------|------|-------|-------|-------|-------|
+| throughput | 256.0 | 256.0 | 73.5 | 75.2 | 141.0 | 184.0 | 40.5 | 41.4 | 694.0 | 923.0 | 197.3 | 207.0 |
+|============|=======|=======|======|======|=======|=======|======|======|=======|=======|=======|=======|
+
+
+ℹ Request Token Statistics (Completed Requests)
+|============|======|=======|=======|=======|=======|=======|======|=======|=========|========|
+| Benchmark  | Input Tok   || Output Tok   || Total Tok    || Stream Iter || Output Tok      ||
+| Strategy   | Per Req     || Per Req      || Per Req      || Per Req     || Per Stream Iter ||
+|            | Mdn  | p95   | Mdn   | p95   | Mdn   | p95   | Mdn  | p95   | Mdn     | p95    |
+|------------|------|-------|-------|-------|-------|-------|------|-------|---------|--------|
+| throughput | 91.0 | 164.0 | 256.0 | 256.0 | 347.0 | 420.0 | 94.0 | 111.0 | 2.8     | 3.2    |
+|============|======|=======|=======|=======|=======|=======|======|=======|=========|========|
+
+
+ℹ Request Latency Statistics (Completed Requests)
+|============|=========|========|======|======|======|======|======|======|======|======|
+| Benchmark  | Request Latency || TTFT       || TTFOT      || ITL        || TPOT       ||
+| Strategy   | Sec             || ms         || ms         || ms         || ms         ||
+|            | Mdn     | p95    | Mdn  | p95  | Mdn  | p95  | Mdn  | p95  | Mdn  | p95  |
+|------------|---------|--------|------|------|------|------|------|------|------|------|
+| throughput | 3.4     | 4.1    | 43.4 | 46.9 | 43.4 | 46.9 | 13.3 | 15.9 | 13.5 | 16.0 |
+|============|=========|========|======|======|======|======|======|======|======|======|
+
+
+ℹ Server Throughput Statistics (All Requests)
+|============|=======|======|=========|==============|===============|==============|
+| Benchmark  | Requests             ||| Input Tokens | Output Tokens | Total Tokens |
+| Strategy   | Concurrency || Per Sec | Per Sec      | Per Sec       | Per Sec      |
+|            | Mdn   | Mean | Mean                                               ||||
+|------------|-------|------|---------|--------------|---------------|--------------|
+| throughput | 1.0   | 1.0  | 0.3     | 28.8         | 73.6          | 101.9        |
+|============|=======|======|=========|==============|===============|==============|
+
+
+
+✔ Benchmarking complete, generated 1 benchmark(s)
+…   json    : 
+/content/drive/MyDrive/dyn-spec-bench-v1/http-benchmarks/nemomath50/scale-1-lora
+-v2/nemo-math/guidellm.json

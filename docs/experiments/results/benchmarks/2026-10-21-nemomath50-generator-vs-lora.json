@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "received_date": "2026-10-21",
+  "status": "preliminary_console_only_comparison",
+  "baseline_record": "2026-10-21-nemomath50-scale-1-lora-v2",
+  "candidate_record": "2026-10-21-nemomath50-scale-1-direct-v2",
+  "dataset": "nemotron",
+  "group": "nemo-math",
+  "source_metrics_sha256": {
+    "2026-10-21-nemomath50-scale-1-lora-v2": "2b7e8fc196707903d7944fc5f7c801184782a1a225134b21fff79329d25ee328",
+    "2026-10-21-nemomath50-scale-1-direct-v2": "1605469bfc35d23d8801e2c99b69892e512dfab7c8f73c9b681bf16d6c1df08f"
+  },
+  "throughput_speedup": 1.017663043478261,
+  "throughput_speedup_basis": "74.9 / 73.6; reported aggregate server output tokens/s",
+  "duration_speedup": 1.018724400234055,
+  "duration_speedup_basis": "174.1 / 170.9; both report 12800 completed output tokens",
+  "duration_reduction_percent": 1.838024124066622,
+  "median_latency_speedup": 1.0303030303030303,
+  "median_latency_speedup_basis": "3.4 / 3.3 seconds; rounded request-latency medians",
+  "checks": {
+    "reported_input_token_totals_equal": true,
+    "reported_output_token_totals_equal": true,
+    "reported_concurrency_equal": true,
+    "prompt_identity_verified": false,
+    "hardware_equivalence_verified": false,
+    "lossless_decoding_verified": false
+  },
+  "limitations": [
+    "Single measurement per arm; no run-to-run variance estimate.",
+    "Native metrics, workload hashes, command files and runtime provenance have not been supplied.",
+    "Matching console totals do not establish identical prompts or hardware.",
+    "Correctness failure remains deferred under GEN-002.",
+    "No target-only timing baseline has been supplied.",
+    "The generator advantage over trained LoRA is small; no repeated timing measurements establish that it exceeds normal run-to-run variation."
+  ]
+}

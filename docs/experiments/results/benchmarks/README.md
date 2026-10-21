@@ -17,6 +17,7 @@ The receipt date is not assumed to be the execution date or timezone.
 | --- | --- | --- | --- | --- |
 | [scale-1-direct-v2](2026-10-21-nemomath50-scale-1-direct-v2/metrics.json) | nemo-math | 74.9 | 3.3 / 4.1 s | Console only; exact-output correctness not established |
 | [eagle3-base-4](2026-10-21-nemomath50-eagle3-base-4/metrics.json) | nemo-math | 63.7 | 4.0 / 4.8 s | Console only; exact-output correctness not established |
+| [scale-1-lora-v2](2026-10-21-nemomath50-scale-1-lora-v2/metrics.json) | nemo-math | 73.6 | 3.4 / 4.1 s | Console only; exact-output correctness not established |
 
 Throughput and latency are different measurements. Keep GuideLLM's per-request
 token-rate statistics separate from aggregate server token throughput. Calculate
@@ -38,3 +39,24 @@ and exact-output correctness remains unresolved under GEN-002. Streaming tokens
 per iteration do not establish speculative acceptance. No target-only timing
 baseline has been supplied, so these ratios measure the observed additional
 benefit over EAGLE3, not end-to-end speedup over target-only decoding.
+
+## Preliminary trained-LoRA comparison
+
+Trained LoRA `scale-1-lora-v2` reports **73.6 output tokens/s**, taking 174.1 s
+for 12,800 output tokens. Its median/p95 request latency is 3.4/4.1 s; median
+TTFT is 43.4 ms. Reported input/output token totals and concurrency match the
+other two runs; workload hashes, checkpoints, training configurations, hardware,
+and runtime equivalence have not been supplied for this measurement.
+
+- [LoRA versus EAGLE3 base](2026-10-21-nemomath50-lora-vs-eagle3.json):
+  approximately **1.16x throughput** (73.6 / 63.7).
+- [Generator versus trained LoRA](2026-10-21-nemomath50-generator-vs-lora.json):
+  approximately **1.018x throughput**, or **1.8% higher throughput**
+  (74.9 / 73.6). Total measured duration is 170.9 versus 174.1 s, about 1.8%
+  less time; median TTFT is higher for the generator (48.1 versus 43.4 ms).
+
+The generator and trained LoRA perform closely in these individual runs. The
+small difference does not establish a reliable generator advantage without
+repeated measurements. The ordinary LoRA captures most of the observed timing
+improvement over EAGLE3 base on this workload. These results do not establish
+relative performance on external distributions or resolve GEN-002 correctness.
