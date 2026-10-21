@@ -15,6 +15,59 @@ activation downloads are needed.
 
 ## Environment and validation workload
 
+### Matched ordinary-LoRA baseline
+
+The original campaign's `fresh_lora` uses subsets `00002`–`00005` and 1,000
+updates. It does not match `scale-1-direct` (subset `00000`, 1,500 updates).
+For a comparison with the same data and optimizer-update budget, first run the
+training activation server from the [online runbook](eagle3_generator_campaign_online.md),
+then train:
+
+```bash
+speculators generator train-lora-baseline \
+  --config examples/eagle3-lora/generator_campaign_online.yaml \
+  --scale 1 --output-root output/lora-matched
+```
+
+Use `--scale 2` or `--scale 4` to match those generator pools. The command derives
+training/validation membership, update count, and optimization settings from
+the selected generator job and the supplied config. With the current recipe,
+scale 1 is 4K examples jointly across math/code/stem/chat, 1,500 updates,
+rank 32, alpha 64, `o_proj`/`v_proj`, and `lk_hybrid`. Only ordinary LoRA is trained;
+there is no generator or LoRA-bank warmup. Data-pool and update matching do not
+imply equal trainable parameter counts or wall time. Use the original generator's
+effective config if the example config has changed. `--dry-run` prints the job
+without starting training. Checkpoints and training provenance go under
+`output/lora-matched/pretraining/scale-1-lora` and resume there as usual.
+
+Publish the resulting static-adapter bundle using the existing command:
+
+```bash
+speculators generator push-to-hub \
+  --run-dir output/lora-matched/pretraining/scale-1-lora \
+  --repo-id azeeer/eagle3-lora-matched-4k-v1 \
+  --drafter-model-path ./models/qwen3-8b-eagle3 \
+  --provenance-dir output/generator-direct-campaign-v3/provenance/vllm
+```
+
+The provenance directory must describe the activation server actually used.
+After stopping training and its activation server, download your bundle and
+start independent HTTP serving:
+
+```bash
+hf download azeeer/eagle3-lora-matched-4k-v1 \
+  --revision YOUR_PUBLISHED_COMMIT_SHA --local-dir ./bundles/scale-1-lora
+python scripts/launch_vllm.py serve \
+  --adapter-bundle ./bundles/scale-1-lora \
+  --provenance-dir output/http-servers/scale-1-lora
+```
+
+Use the same GuideLLM workload and settings as the generator, with output path
+`output/http-benchmarks/scale-1-lora`. The server merges the static LoRA once at
+startup. Do not run this measurement alongside the training activation server.
+For external datasets, see the [benchmark inventory](speculator_benchmarks_inventory.md)
+before integration; it documents a duplicated category and task-format differences.
+
 ### Exploratory timing while token equality is unresolved
 
 [GEN-002](results/GEN-002-http-token-equality.md) records the failed exact-output

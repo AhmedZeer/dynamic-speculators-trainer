@@ -46,6 +46,27 @@ def campaign(
     typer.echo(json.dumps(result, indent=2))
 
 
+@app.command(name="train-lora-baseline")
+def train_lora_baseline_command(
+    config: ConfigOption,
+    output_root: Annotated[Path, typer.Option("--output-root")],
+    scale: Annotated[
+        int, typer.Option("--scale", help="Match generator scale 1, 2, or 4")
+    ] = 1,
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+):
+    """Train ordinary LoRA with the generator's data and update budget."""
+    import json  # noqa: PLC0415
+
+    from speculators.generator.campaign_config import CampaignConfig  # noqa: PLC0415
+    from speculators.generator.lora_baseline import train_matched_lora  # noqa: PLC0415
+
+    result = train_matched_lora(
+        CampaignConfig.load(config), scale, output_root, dry_run=dry_run
+    )
+    typer.echo(json.dumps(result, indent=2))
+
+
 class ConditionName(str, Enum):
     last = "last"
     last_mean = "last_mean"
