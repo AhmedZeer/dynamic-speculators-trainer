@@ -1,5 +1,10 @@
 # Generation benchmark archive
 
+The [complete nemoall50 comparison](2026-10-21-nemoall50/README.md) contains
+the EAGLE3/LoRA/generator table across math, code, stem, and chat, with full native
+measurement files and available provenance archived alongside it. These are new
+measurements; they do not replace the earlier math-only records below.
+
 Each run has its own directory containing:
 
 - `console.txt`: supplied console output, retained as evidence.

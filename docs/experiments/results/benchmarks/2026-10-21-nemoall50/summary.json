@@ -1,0 +1,1323 @@
+{
+  "schema_version": 1,
+  "received_date": "2026-10-21",
+  "dataset": "nemotron",
+  "validation_identity": "11673f5891c24d2529df157cdd40f71d5a5079cf55d12cdc5a091c420f80036c",
+  "metric": "total generated output tokens / measured GuideLLM seconds (includes prefill and serving overhead; not isolated decode-only rate)",
+  "requests_per_category": 50,
+  "correctness_status": "not_checked",
+  "workload_hashes_match": true,
+  "archive": {
+    "file": "artifacts.tar.gz",
+    "sha256": "56ae00952661a5a8f73ce4c7eb0285167a69fc7c384cf1a622aeb57c3cc342a5",
+    "files": [
+      {
+        "path": "eagle3-base/acceptance.csv",
+        "bytes": 682,
+        "sha256": "ca048e661eb93c8465608d358bb306179c3be23e2f19a43b07ac7e4d8aadc590"
+      },
+      {
+        "path": "eagle3-base/benchmark_identity.json",
+        "bytes": 1585,
+        "sha256": "8b3e19e68a03038cf9c72eaeacbfc279c5a9b3ab04fb48037c61a1677be0af9e"
+      },
+      {
+        "path": "eagle3-base/eval_command.txt",
+        "bytes": 603,
+        "sha256": "cec8b76f042719289df6dddc0decf3c257d12625480a67e69ae8c1afbb1d6c9f"
+      },
+      {
+        "path": "eagle3-base/nemo-chat/guidellm.json",
+        "bytes": 403792,
+        "sha256": "18b63b3e82c28a5080c4b68d1027deec20f7cff9bbae9996ee86c844f8891af2"
+      },
+      {
+        "path": "eagle3-base/nemo-chat/guidellm_command.json",
+        "bytes": 1221,
+        "sha256": "2cbb64673ac32a5f43f4db5a8dfc4bb0e960de49b809d5a8a9134f0d76216708"
+      },
+      {
+        "path": "eagle3-base/nemo-chat/metrics_after.prom",
+        "bytes": 55991,
+        "sha256": "ec6801ee836762ed65ebc4df1ed8fe07657e3e7bc7e944111d208f36176c9d5d"
+      },
+      {
+        "path": "eagle3-base/nemo-chat/metrics_before.prom",
+        "bytes": 55739,
+        "sha256": "edfd8db464d9caa13ad573c36cb0db0e2e3588139ae55307f8288a4a3278ba09"
+      },
+      {
+        "path": "eagle3-base/nemo-chat/result.json",
+        "bytes": 1163,
+        "sha256": "6ac8602679a8f9ff98b90ebdb347276873a4933234f07ef613fafe51ac2e6738"
+      },
+      {
+        "path": "eagle3-base/nemo-chat/server_after.json",
+        "bytes": 1386,
+        "sha256": "557d58126fd74e82f3d89463ee39556ce2e1769e12f7c54db1789c7858ec813f"
+      },
+      {
+        "path": "eagle3-base/nemo-chat/server_before.json",
+        "bytes": 1386,
+        "sha256": "557d58126fd74e82f3d89463ee39556ce2e1769e12f7c54db1789c7858ec813f"
+      },
+      {
+        "path": "eagle3-base/nemo-chat/validation.jsonl",
+        "bytes": 276318,
+        "sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f"
+      },
+      {
+        "path": "eagle3-base/nemo-code/guidellm.json",
+        "bytes": 377067,
+        "sha256": "9deff6ad41dbf2842c3f0d5352a2cd2500a2a972c0c536e37a6dcda29adb7af0"
+      },
+      {
+        "path": "eagle3-base/nemo-code/guidellm_command.json",
+        "bytes": 1221,
+        "sha256": "c89ccb819ea0ca16109490dc314790b3c1cfd72ad44286f963d284228f03169e"
+      },
+      {
+        "path": "eagle3-base/nemo-code/metrics_after.prom",
+        "bytes": 56229,
+        "sha256": "9e857302e58d4d6aae2fde4da6572e88838a912a7dde573e7b3c24830b290f4e"
+      },
+      {
+        "path": "eagle3-base/nemo-code/metrics_before.prom",
+        "bytes": 56019,
+        "sha256": "72f3b0013fdd0178aff8095b6c8a13dcda9847048804d51f6ab9b2be777b0238"
+      },
+      {
+        "path": "eagle3-base/nemo-code/result.json",
+        "bytes": 1157,
+        "sha256": "c7a5a24060f85576ee8b216476fe38e87102b343cb05c8fb3b17c0d1ee76d35a"
+      },
+      {
+        "path": "eagle3-base/nemo-code/server_after.json",
+        "bytes": 1386,
+        "sha256": "557d58126fd74e82f3d89463ee39556ce2e1769e12f7c54db1789c7858ec813f"
+      },
+      {
+        "path": "eagle3-base/nemo-code/server_before.json",
+        "bytes": 1386,
+        "sha256": "557d58126fd74e82f3d89463ee39556ce2e1769e12f7c54db1789c7858ec813f"
+      },
+      {
+        "path": "eagle3-base/nemo-code/validation.jsonl",
+        "bytes": 235509,
+        "sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748"
+      },
+      {
+        "path": "eagle3-base/nemo-math/guidellm.json",
+        "bytes": 288725,
+        "sha256": "60ca381e7b30630e72748f9514a0d6406a9787239d17ea5fa580e31eae7793f5"
+      },
+      {
+        "path": "eagle3-base/nemo-math/guidellm_command.json",
+        "bytes": 1221,
+        "sha256": "c835846a99bb631a90c2a9ca6a2ebd555c5912d0c744e9639e2dd692358c1539"
+      },
+      {
+        "path": "eagle3-base/nemo-math/metrics_after.prom",
+        "bytes": 56238,
+        "sha256": "51dc4319592e26b7c65b129069b90fd3c720e83dc67f96b0a51af98fd1f21759"
+      },
+      {
+        "path": "eagle3-base/nemo-math/metrics_before.prom",
+        "bytes": 56232,
+        "sha256": "2008b7a8d9cd71ef77cda2429468e9c2a10a84745cd82f012c8f6a593794aa05"
+      },
+      {
+        "path": "eagle3-base/nemo-math/result.json",
+        "bytes": 1161,
+        "sha256": "74ca3dcaad8ffa343eb7980830c472a10274c9ae66acdce3f7accd11f7a48449"
+      },
+      {
+        "path": "eagle3-base/nemo-math/server_after.json",
+        "bytes": 1386,
+        "sha256": "557d58126fd74e82f3d89463ee39556ce2e1769e12f7c54db1789c7858ec813f"
+      },
+      {
+        "path": "eagle3-base/nemo-math/server_before.json",
+        "bytes": 1386,
+        "sha256": "557d58126fd74e82f3d89463ee39556ce2e1769e12f7c54db1789c7858ec813f"
+      },
+      {
+        "path": "eagle3-base/nemo-math/validation.jsonl",
+        "bytes": 57003,
+        "sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28"
+      },
+      {
+        "path": "eagle3-base/nemo-stem/guidellm.json",
+        "bytes": 340568,
+        "sha256": "7c5314534fa717d727879b0d90c84a006fcb023b736fad645994d15ec427f76e"
+      },
+      {
+        "path": "eagle3-base/nemo-stem/guidellm_command.json",
+        "bytes": 1221,
+        "sha256": "66d073747f74c9b6fcfb960df32efec3a0109ff7aa63703e37386ac339bebfd0"
+      },
+      {
+        "path": "eagle3-base/nemo-stem/metrics_after.prom",
+        "bytes": 56242,
+        "sha256": "84abd7225686e75fe60381312ef09aa916cbf59cc48a45ae143f5769e71ceb90"
+      },
+      {
+        "path": "eagle3-base/nemo-stem/metrics_before.prom",
+        "bytes": 56238,
+        "sha256": "0178e98cf52f07012590cb9e1bbb3f239667a703fded25dc27c16f1f111f6463"
+      },
+      {
+        "path": "eagle3-base/nemo-stem/result.json",
+        "bytes": 1165,
+        "sha256": "53c7f9a2c01cfd6a9eb4dbbb3a7d7acd7a99b9fa60f8f5304d8e1e0d109ac92f"
+      },
+      {
+        "path": "eagle3-base/nemo-stem/server_after.json",
+        "bytes": 1386,
+        "sha256": "557d58126fd74e82f3d89463ee39556ce2e1769e12f7c54db1789c7858ec813f"
+      },
+      {
+        "path": "eagle3-base/nemo-stem/server_before.json",
+        "bytes": 1386,
+        "sha256": "557d58126fd74e82f3d89463ee39556ce2e1769e12f7c54db1789c7858ec813f"
+      },
+      {
+        "path": "eagle3-base/nemo-stem/validation.jsonl",
+        "bytes": 121588,
+        "sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757"
+      },
+      {
+        "path": "eagle3-base/perf_results.csv",
+        "bytes": 958,
+        "sha256": "c11f032e25e5f3c0320131c99b91970459734f6f086d529a9098ea8b809b7deb"
+      },
+      {
+        "path": "eagle3-base/results.json",
+        "bytes": 5489,
+        "sha256": "21886b1bcda42fc88ec9ed9b38a5b0478c3741f3c2e1fca5b6a2ba351844aefb"
+      },
+      {
+        "path": "eagle3-base/server_provenance/checkpoint_sha256.txt",
+        "bytes": 495,
+        "sha256": "8f51132290852a4ab4070da7e075f9a6e14f2e14553663e25211fdd99c170222"
+      },
+      {
+        "path": "eagle3-base/server_provenance/drafter_checkpoint_sha256.txt",
+        "bytes": 84,
+        "sha256": "9633fed7ef998a0938b387b0dadfccd8ba95e82832104daacc245e30debe1f81"
+      },
+      {
+        "path": "eagle3-base/server_provenance/server.json",
+        "bytes": 955,
+        "sha256": "4b5fad370e7def680905fa735a3906c38c754b6469f6b77c6715c6080ef7946e"
+      },
+      {
+        "path": "eagle3-base/server_provenance/server_environment.json",
+        "bytes": 1085,
+        "sha256": "e7a46630b465389a19cf9379183dc53a4d681234c73fd716df704b87c1683adf"
+      },
+      {
+        "path": "eagle3-base/server_provenance/server_identity.json",
+        "bytes": 83,
+        "sha256": "031c83e83f56bb3210d31510687e8fa90be2f3eb77b9c89d912332d0209680fb"
+      },
+      {
+        "path": "eagle3-base/server_provenance/speculators.patch",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "eagle3-base/server_provenance/vllm.patch",
+        "bytes": 49,
+        "sha256": "54b2e093fd0e7784f5eca683c55e01d64b82ee577c174030b15733c115929450"
+      },
+      {
+        "path": "eagle3-base/server_provenance/vllm_command.txt",
+        "bytes": 1017,
+        "sha256": "c71a7241d590625a0d54363a994f24dcf31b0f96c72638231fa89ffcbc463ecc"
+      },
+      {
+        "path": "eagle3-base/speculators.patch",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "eagle3-base/validation/manifest.json",
+        "bytes": 4872,
+        "sha256": "26cfaf24dd4b632ee673f6a8b2cd3f44712e8470a2a25733c895730a0910d83d"
+      },
+      {
+        "path": "eagle3-base/validation/nemo-chat.jsonl",
+        "bytes": 276318,
+        "sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f"
+      },
+      {
+        "path": "eagle3-base/validation/nemo-code.jsonl",
+        "bytes": 235509,
+        "sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748"
+      },
+      {
+        "path": "eagle3-base/validation/nemo-math.jsonl",
+        "bytes": 57003,
+        "sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28"
+      },
+      {
+        "path": "eagle3-base/validation/nemo-stem.jsonl",
+        "bytes": 121588,
+        "sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757"
+      },
+      {
+        "path": "scale-1-direct/acceptance.csv",
+        "bytes": 680,
+        "sha256": "f2952da4d2528ffe11722fe1fd90b854904e2775ad62a7565dc86a990c51b90b"
+      },
+      {
+        "path": "scale-1-direct/adapter_performance.csv",
+        "bytes": 549,
+        "sha256": "ed8ab90f007910387acf0522d7e614a1a7ad973c98f0991a18c119ac306a4b2e"
+      },
+      {
+        "path": "scale-1-direct/benchmark_identity.json",
+        "bytes": 2156,
+        "sha256": "e17bf0fb06a6c784040e7b6c6c29cd81b67458f3e0d6e8dc2a852ffcb367831d"
+      },
+      {
+        "path": "scale-1-direct/eval_command.txt",
+        "bytes": 609,
+        "sha256": "42fb4c079b2129bb770e7097f78b88d5be597161333de4b16161366cf30ac67b"
+      },
+      {
+        "path": "scale-1-direct/nemo-chat/guidellm.json",
+        "bytes": 403767,
+        "sha256": "1a2b5936026adf0aaa2d90699a518e36d047fa0b8ac0edfb0bbbd080f98549cb"
+      },
+      {
+        "path": "scale-1-direct/nemo-chat/guidellm_command.json",
+        "bytes": 1227,
+        "sha256": "07983a90b81206015601cf33b084428dd872f4250be33c079bea405ea8db691d"
+      },
+      {
+        "path": "scale-1-direct/nemo-chat/metrics_after.prom",
+        "bytes": 56003,
+        "sha256": "7382011f0b0104a1b4a769f4779d2726263b0dd0b4a4b1354cc706ec56fdeb58"
+      },
+      {
+        "path": "scale-1-direct/nemo-chat/metrics_before.prom",
+        "bytes": 55747,
+        "sha256": "bde6af1d25817649457b3fa6c8c40f99f2fb5555bdd073ca5b92f51e3aba9094"
+      },
+      {
+        "path": "scale-1-direct/nemo-chat/result.json",
+        "bytes": 1390,
+        "sha256": "44d2fa9f59c877af7169abed023eb78c6cf3629604ee659a3413c22bbe4177b4"
+      },
+      {
+        "path": "scale-1-direct/nemo-chat/server_after.json",
+        "bytes": 2281,
+        "sha256": "e268dc0e533d28afc23e64d9957a49569a2ce360c7d9d45d2ceee2ac7d6bbbbe"
+      },
+      {
+        "path": "scale-1-direct/nemo-chat/server_before.json",
+        "bytes": 2281,
+        "sha256": "c27eeadcd369bf012f3bc83e08496b7074213ef8adbf5fc93bfc0f31bf5262aa"
+      },
+      {
+        "path": "scale-1-direct/nemo-chat/validation.jsonl",
+        "bytes": 276318,
+        "sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f"
+      },
+      {
+        "path": "scale-1-direct/nemo-code/guidellm.json",
+        "bytes": 376882,
+        "sha256": "13c9dbf6a06df3be95a6a7124b204139f1236607b942a8f7b872307a22b94205"
+      },
+      {
+        "path": "scale-1-direct/nemo-code/guidellm_command.json",
+        "bytes": 1227,
+        "sha256": "0828db56632b755ce10c5330bea9569bf7075daf267ffa9a77475fd28923b513"
+      },
+      {
+        "path": "scale-1-direct/nemo-code/metrics_after.prom",
+        "bytes": 56237,
+        "sha256": "56ba3e816fd3f600dd0151ec538933b9d48b833019a4218f69dd91ada395c78b"
+      },
+      {
+        "path": "scale-1-direct/nemo-code/metrics_before.prom",
+        "bytes": 56023,
+        "sha256": "4fd7e7a3e3d3c92687f3778d555d77b5ad6a07b0efb13f31a85a4140b437652a"
+      },
+      {
+        "path": "scale-1-direct/nemo-code/result.json",
+        "bytes": 1388,
+        "sha256": "2af0e3572815bf2b438bdfb56fa011b4ef635fe3e969fa0aebc55ccff49e0ac1"
+      },
+      {
+        "path": "scale-1-direct/nemo-code/server_after.json",
+        "bytes": 2285,
+        "sha256": "8b2ff02666f97913bb9c98146306450211b4dbddcb1811dbf7f713036d824d5e"
+      },
+      {
+        "path": "scale-1-direct/nemo-code/server_before.json",
+        "bytes": 2282,
+        "sha256": "000a0981f33c6e1fd137fdba85e3ba49871bb0a69d69480a2269f671c01a13db"
+      },
+      {
+        "path": "scale-1-direct/nemo-code/validation.jsonl",
+        "bytes": 235509,
+        "sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748"
+      },
+      {
+        "path": "scale-1-direct/nemo-math/guidellm.json",
+        "bytes": 288381,
+        "sha256": "5c943b96ebfc1d275426ad3850bebb6e6535186beb943880abb3ac9bf7237853"
+      },
+      {
+        "path": "scale-1-direct/nemo-math/guidellm_command.json",
+        "bytes": 1227,
+        "sha256": "ab0b5788d9279e9a21cee723ed7b5b83cb18da9a23ae35a2b4932b4392e12d31"
+      },
+      {
+        "path": "scale-1-direct/nemo-math/metrics_after.prom",
+        "bytes": 56240,
+        "sha256": "f53febcc5c6b9125a76d9d5cbe9f7b92c2442eeb802e05ef7ad3526d86e59108"
+      },
+      {
+        "path": "scale-1-direct/nemo-math/metrics_before.prom",
+        "bytes": 56237,
+        "sha256": "f6b5e7866f867080ef29a5df2bf4acd4b91929c4e501b459217bd19ef6c9667d"
+      },
+      {
+        "path": "scale-1-direct/nemo-math/result.json",
+        "bytes": 1386,
+        "sha256": "519f91a66eb2efce21068040d51f7fe5c6e9b83b109c8003558cd3e7c31b5551"
+      },
+      {
+        "path": "scale-1-direct/nemo-math/server_after.json",
+        "bytes": 2284,
+        "sha256": "e3e52938d9aa2dc66c24088fba2896a17e058602f59670daa48921be321b3a3e"
+      },
+      {
+        "path": "scale-1-direct/nemo-math/server_before.json",
+        "bytes": 2283,
+        "sha256": "6a71bdbbcc20364cfc67f6114ac50f49e5a93936c1959cdd5999c90c71e13a97"
+      },
+      {
+        "path": "scale-1-direct/nemo-math/validation.jsonl",
+        "bytes": 57003,
+        "sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28"
+      },
+      {
+        "path": "scale-1-direct/nemo-stem/guidellm.json",
+        "bytes": 340657,
+        "sha256": "dae5214b5f022e3e1e0f317066950c41dee5f777c98390466bb3554cf7939cae"
+      },
+      {
+        "path": "scale-1-direct/nemo-stem/guidellm_command.json",
+        "bytes": 1227,
+        "sha256": "6bf682fb5ea0c84cb38d73fc5ad7682194f60eb1ff8a44a66c2438a54efbb77c"
+      },
+      {
+        "path": "scale-1-direct/nemo-stem/metrics_after.prom",
+        "bytes": 56247,
+        "sha256": "d5ee7aa70428e35d068cd287d2dff8997d813d417118f76c33c69edfc7e96415"
+      },
+      {
+        "path": "scale-1-direct/nemo-stem/metrics_before.prom",
+        "bytes": 56255,
+        "sha256": "a92f8c9649991564ddcfa6e5594e75bd5d33294c9f76f4f5be19ffa2e94a8ffc"
+      },
+      {
+        "path": "scale-1-direct/nemo-stem/result.json",
+        "bytes": 1387,
+        "sha256": "4987e35a5de140813b64b592bc4364d7542f2535885ae134d16534ff666b137b"
+      },
+      {
+        "path": "scale-1-direct/nemo-stem/server_after.json",
+        "bytes": 2283,
+        "sha256": "84c0a15c4b1a36b60d5bf60f61adf37d79d55b914471a5da86a94c1a2e3b93c9"
+      },
+      {
+        "path": "scale-1-direct/nemo-stem/server_before.json",
+        "bytes": 2284,
+        "sha256": "2f6e26d438995e72961837cc74a2424bd56fd95a197c06ba25d98362efb3236a"
+      },
+      {
+        "path": "scale-1-direct/nemo-stem/validation.jsonl",
+        "bytes": 121588,
+        "sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757"
+      },
+      {
+        "path": "scale-1-direct/perf_results.csv",
+        "bytes": 957,
+        "sha256": "45523754d2cb512ee445c6b1920ccaad44c6713858d1deddfdde1d32fe098c7d"
+      },
+      {
+        "path": "scale-1-direct/results.json",
+        "bytes": 6506,
+        "sha256": "103c3e4b685e9a327ed302c9648018e41adb6634ee9164aa1b8093a8056d8930"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/bundle.json",
+        "bytes": 3008,
+        "sha256": "637f65e9efe665ab3cfd276835f47ff08f033d089cdfdee731f455efa47cbf28"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/checkpoint_sha256.txt",
+        "bytes": 495,
+        "sha256": "8f51132290852a4ab4070da7e075f9a6e14f2e14553663e25211fdd99c170222"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/drafter_checkpoint_sha256.txt",
+        "bytes": 84,
+        "sha256": "9633fed7ef998a0938b387b0dadfccd8ba95e82832104daacc245e30debe1f81"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/generator-vllm.patch",
+        "bytes": 2699,
+        "sha256": "f864ea5f8fbd4647cb8b8d56cd9686f05e7d03e2e42b86a9565e9c38b762d8a0"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/server.json",
+        "bytes": 1480,
+        "sha256": "df188431589a887f804e4d0634a556ede70b05eeb344d752c8450c4a882f0fc2"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/server_environment.json",
+        "bytes": 1656,
+        "sha256": "9cbee1f3c7475ce45720b0f87f47733f12313496f848f3e20d387c0148904d46"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/server_identity.json",
+        "bytes": 83,
+        "sha256": "db2906cc7420fdf31821ae215e304ceb0773530bfca9089b0e3ec899152a7906"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/source_provenance/bundle.json",
+        "bytes": 3008,
+        "sha256": "637f65e9efe665ab3cfd276835f47ff08f033d089cdfdee731f455efa47cbf28"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/source_provenance/configuration.json",
+        "bytes": 2429,
+        "sha256": "002bc8ee1098f07088031db0f45c26d57b0f3a28ce9a4021c4ec85004977e7c5"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/source_provenance/metrics.json",
+        "bytes": 23917,
+        "sha256": "3bebb17a52fd5aa9bd218204cf2a44edb44f82b0724cbcd75ea4745443f34fd7"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/source_provenance/provenance/vllm/checkpoint_sha256.txt",
+        "bytes": 495,
+        "sha256": "8f51132290852a4ab4070da7e075f9a6e14f2e14553663e25211fdd99c170222"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/source_provenance/provenance/vllm/vllm.patch",
+        "bytes": 49,
+        "sha256": "54b2e093fd0e7784f5eca683c55e01d64b82ee577c174030b15733c115929450"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/source_provenance/provenance/vllm/vllm_command.txt",
+        "bytes": 851,
+        "sha256": "0eb7d38c9289db373cbe09d2fa28463da612db537d8853b8ec92994cb3220a27"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/source_provenance/resolved_experiment.json",
+        "bytes": 422034,
+        "sha256": "a611b79050acf7e9c10c81a15109965abfe069533ab56241b86acd730b4beb1d"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/source_provenance/result.json",
+        "bytes": 28250,
+        "sha256": "f1e5f5c27c4c3e220bf633a5b673bc0658bfcbd0e27f9b2907cc93d79ac29139"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/source_provenance/speculators.patch",
+        "bytes": 88,
+        "sha256": "77ba7d8f6221eb0c9223feb8bfcbb47ce2f0d6fc89110e7dee37307bc401a059"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/source_provenance/timing.json",
+        "bytes": 3142935,
+        "sha256": "fed63a74723f4588ba705a2026944c33c0964411c4feb07a1917a5d86d59cdfc"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/source_provenance/train_command.txt",
+        "bytes": 396,
+        "sha256": "b1be7a86632e6a1b1c30046a2c76389a067b1ebbf0849627acf873d758775b2e"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/source_provenance/upload_manifest.json",
+        "bytes": 2163,
+        "sha256": "f4b8edd4fc316aa533070de237d9aedec6afe3411156953dd92f60a71986b3cb"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/source_provenance/wandb.json",
+        "bytes": 298,
+        "sha256": "a0e72000366b5b09f8d386fc6d427a56a523e5b35cad1d35a263637cbbec5d5b"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/speculators.patch",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/vllm.patch",
+        "bytes": 2699,
+        "sha256": "f864ea5f8fbd4647cb8b8d56cd9686f05e7d03e2e42b86a9565e9c38b762d8a0"
+      },
+      {
+        "path": "scale-1-direct/server_provenance/vllm_command.txt",
+        "bytes": 1102,
+        "sha256": "9cc6dd164f7c28ab9c07a24319d27e8c202c31e5d61ee2b3c15d74021bc9dd5a"
+      },
+      {
+        "path": "scale-1-direct/speculators.patch",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "scale-1-direct/validation/manifest.json",
+        "bytes": 4872,
+        "sha256": "26cfaf24dd4b632ee673f6a8b2cd3f44712e8470a2a25733c895730a0910d83d"
+      },
+      {
+        "path": "scale-1-direct/validation/nemo-chat.jsonl",
+        "bytes": 276318,
+        "sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f"
+      },
+      {
+        "path": "scale-1-direct/validation/nemo-code.jsonl",
+        "bytes": 235509,
+        "sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748"
+      },
+      {
+        "path": "scale-1-direct/validation/nemo-math.jsonl",
+        "bytes": 57003,
+        "sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28"
+      },
+      {
+        "path": "scale-1-direct/validation/nemo-stem.jsonl",
+        "bytes": 121588,
+        "sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757"
+      },
+      {
+        "path": "scale-1-lora-v2/acceptance.csv",
+        "bytes": 680,
+        "sha256": "abcdca34b2e05b6a2e44d7102332128f12e6a988c6105bec0aeae11a1c461658"
+      },
+      {
+        "path": "scale-1-lora-v2/adapter_performance.csv",
+        "bytes": 349,
+        "sha256": "be4896080d444bdb20b5ddd21ecab6e2aa0a1a7c7f87de0b90d3b11916259464"
+      },
+      {
+        "path": "scale-1-lora-v2/benchmark_identity.json",
+        "bytes": 2217,
+        "sha256": "54076f2fdd5fc82a9dbd370a8302f5e9505c78421933a6e711186ad356dd8947"
+      },
+      {
+        "path": "scale-1-lora-v2/eval_command.txt",
+        "bytes": 608,
+        "sha256": "9ef25f97a88389e040720573882e056ea9e40f68fcf74b3d8ac2e1d51b4b36d9"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-chat/guidellm.json",
+        "bytes": 403867,
+        "sha256": "1dcf752d25095c63bb7a81080bf7a71dbe07b35b50d1f2f80ed19ec7f7a6a0fc"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-chat/guidellm_command.json",
+        "bytes": 1229,
+        "sha256": "c43f2e2244d9b570c9a510fa69cd464a17bf9515e4f65c632f52f9fe90617fc4"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-chat/metrics_after.prom",
+        "bytes": 56235,
+        "sha256": "c99d018f7bcee8b1e4caf9245b4d928e1ad7611a89ab7ea140111af0e8c33a12"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-chat/metrics_before.prom",
+        "bytes": 56202,
+        "sha256": "12af57ccadf60f34b7a4cfdcb6962abd956a296d3ac9c25f2182f25bf73fe4b4"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-chat/result.json",
+        "bytes": 1337,
+        "sha256": "2672e5835fc2cf2cf1c8391d9627f385af929d9e7d57a58c43772d37763716ff"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-chat/server_after.json",
+        "bytes": 2313,
+        "sha256": "dd2f890847ea489ffef78d99f853c3619cbc1184970e090f2e8bdc5b57f09bc4"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-chat/server_before.json",
+        "bytes": 2313,
+        "sha256": "9a2d273f80b5d44c664059929a00d477ddd841830379a73c51671242c675f976"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-chat/validation.jsonl",
+        "bytes": 276318,
+        "sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-code/guidellm.json",
+        "bytes": 376802,
+        "sha256": "4e650192f185b726bbb89ed8a05dbef9aaf4e31956a5a4467fe3013bb6cfd378"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-code/guidellm_command.json",
+        "bytes": 1229,
+        "sha256": "8ec7047a2f4fc3743aa455ab00d95763512f5d2d3bf95f1b9aa5435498ce2dd2"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-code/metrics_after.prom",
+        "bytes": 56243,
+        "sha256": "9a47f55b238fbea9e327bbf3d49eba837863daca0394e35a37696754e00193c0"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-code/metrics_before.prom",
+        "bytes": 56240,
+        "sha256": "313d9ffd9ff80d859e501d4c3afa48321162d863b12c988bff376a5a434c558c"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-code/result.json",
+        "bytes": 1338,
+        "sha256": "1becaa436a02c0a87619a5baba025fdf896d1143114c3b7a5af34392473b0014"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-code/server_after.json",
+        "bytes": 2313,
+        "sha256": "e213ec9e3fe2b79459f4b4fc5d7d8603004f8913cc858246d6cf46265e09adae"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-code/server_before.json",
+        "bytes": 2313,
+        "sha256": "25152773d42c9448caca9c1d46ceb19ff71e20e5b2af8af994366bdd5d20ce0d"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-code/validation.jsonl",
+        "bytes": 235509,
+        "sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-math/guidellm.json",
+        "bytes": 288421,
+        "sha256": "4368248e19255e2605b8784adfb89b0380fd60ea6020e486e4bd5315b9ba6fc6"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-math/guidellm_command.json",
+        "bytes": 1229,
+        "sha256": "6520083c32f306133e258472854ba360b7a904c3f77af93aeb1f89da5119b2c2"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-math/metrics_after.prom",
+        "bytes": 56247,
+        "sha256": "6cfa136652eb206a2ed591b8f67754441b4ec56ea8df85fb02e122baff53d7e6"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-math/metrics_before.prom",
+        "bytes": 56257,
+        "sha256": "33c48fc2480fae6448e55a33473587a5da31bab7e439501a35fb8d6a005e87c8"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-math/result.json",
+        "bytes": 1336,
+        "sha256": "76fa4aadf8dc86fef6b74191aee307046a352a4353be33f45566b9f776144be0"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-math/server_after.json",
+        "bytes": 2313,
+        "sha256": "135ec8f05e5640da8449012d744339aa39de8464a6940460e413e34ff274cac9"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-math/server_before.json",
+        "bytes": 2313,
+        "sha256": "575f2c2b62b84068ea9987bc42b33bd9f78b98f60e67078e084459877cf695a5"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-math/validation.jsonl",
+        "bytes": 57003,
+        "sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-stem/guidellm.json",
+        "bytes": 340488,
+        "sha256": "2c9d0336a3cf7e50a9ec0f6d95595b494bfe49844ea38239f6e822a0c27d9ec9"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-stem/guidellm_command.json",
+        "bytes": 1229,
+        "sha256": "2c17a5e4430bf9c8b3199579891edfe74c88458a5137bed580b311c4f05878f4"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-stem/metrics_after.prom",
+        "bytes": 56252,
+        "sha256": "0eda0eeedb56b782f223fd9e7952c2a22511adc643cd4d9b1ca8dfac3991e188"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-stem/metrics_before.prom",
+        "bytes": 56245,
+        "sha256": "451bd8014e1f99d41a4e5df3f7d5ef1b6dffb29d8d55a3e78e7caff4c7943e73"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-stem/result.json",
+        "bytes": 1333,
+        "sha256": "c25f0d70023c8862b8c656439e17902f29cd591d7b0e890c225df3502b623f4c"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-stem/server_after.json",
+        "bytes": 2313,
+        "sha256": "952795729f4a89196d4b2e937c665d29fbea856ceb3b9a3e0198ccfa2998623f"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-stem/server_before.json",
+        "bytes": 2313,
+        "sha256": "9dc12f026de55324ac8f68a04c739d65a81d29fc979270f56042bca2d47430a8"
+      },
+      {
+        "path": "scale-1-lora-v2/nemo-stem/validation.jsonl",
+        "bytes": 121588,
+        "sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757"
+      },
+      {
+        "path": "scale-1-lora-v2/perf_results.csv",
+        "bytes": 950,
+        "sha256": "a5601b9f92a7fd3f73567f65ddc9ad1d000dace351990869878b458f88a0668b"
+      },
+      {
+        "path": "scale-1-lora-v2/results.json",
+        "bytes": 6299,
+        "sha256": "cb00657f46d9de359808541ac8d52f0a12e773de4be18d9e645e5675f61accce"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/bundle.json",
+        "bytes": 2832,
+        "sha256": "f89698942c15b4cfda88ab0761bea03b04686c281dc5aea03fd5570e6c2306f1"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/checkpoint_sha256.txt",
+        "bytes": 495,
+        "sha256": "8f51132290852a4ab4070da7e075f9a6e14f2e14553663e25211fdd99c170222"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/drafter_checkpoint_sha256.txt",
+        "bytes": 84,
+        "sha256": "9633fed7ef998a0938b387b0dadfccd8ba95e82832104daacc245e30debe1f81"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/generator-vllm.patch",
+        "bytes": 2699,
+        "sha256": "f864ea5f8fbd4647cb8b8d56cd9686f05e7d03e2e42b86a9565e9c38b762d8a0"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/server.json",
+        "bytes": 1539,
+        "sha256": "0f653fbca663654b5d2f8bd4852312acb079d2cd21fde44fca9b365fe606ea31"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/server_environment.json",
+        "bytes": 1717,
+        "sha256": "c38be84bb54b125764e064ac18e120cefd14d889575e30d443be312487471ad6"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/server_identity.json",
+        "bytes": 83,
+        "sha256": "7a55c87b0dc3e7e2bf4d8ade6de08f046720c34ec2328610ef3b2b5849a12aad"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/source_provenance/bundle.json",
+        "bytes": 2832,
+        "sha256": "f89698942c15b4cfda88ab0761bea03b04686c281dc5aea03fd5570e6c2306f1"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/source_provenance/configuration.json",
+        "bytes": 2413,
+        "sha256": "91421079314148556986f2538333d8b7901828c3ded993e90d823cc7f5ed49a9"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/source_provenance/metrics.json",
+        "bytes": 23902,
+        "sha256": "21928da9e3ff14b49a5edef5024f4bbd4a39cd9c97c1f762228cff8248131a06"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/source_provenance/provenance/vllm/checkpoint_sha256.txt",
+        "bytes": 495,
+        "sha256": "8f51132290852a4ab4070da7e075f9a6e14f2e14553663e25211fdd99c170222"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/source_provenance/provenance/vllm/vllm.patch",
+        "bytes": 49,
+        "sha256": "54b2e093fd0e7784f5eca683c55e01d64b82ee577c174030b15733c115929450"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/source_provenance/provenance/vllm/vllm_command.txt",
+        "bytes": 850,
+        "sha256": "55dd2bdef61f978fc09bd79849f7dc95077dfa37485cc2a26c64c5da68090f50"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/source_provenance/resolved_experiment.json",
+        "bytes": 422063,
+        "sha256": "e245caf154f2d2bdac7ad19d37f5bd5bbc64698492252413b4b5df8addacb747"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/source_provenance/result.json",
+        "bytes": 28054,
+        "sha256": "b28843acc8b20a74d013528d27bfd8d9c7ac433f8b8572314e800e0c55a2755c"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/source_provenance/speculators.patch",
+        "bytes": 88,
+        "sha256": "cdcad2dd517e4e46b06bd9698d2973587225806d26b2d2a508d29a4a3ef6cb3a"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/source_provenance/timing.json",
+        "bytes": 3099868,
+        "sha256": "5d846655bd5e787d891cdeb3fd8c261562a1194cc972aac7a9e88798432a1848"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/source_provenance/train_command.txt",
+        "bytes": 385,
+        "sha256": "ff343f403b13cbb4d15e8bfa6948bd880eff7392d9f306e99ec70cfce12fece4"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/source_provenance/upload_manifest.json",
+        "bytes": 2156,
+        "sha256": "0547694503a653732aef34b369f91bf913bff74b4f596722a946cc326ae55af3"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/source_provenance/wandb.json",
+        "bytes": 296,
+        "sha256": "2a1b0968c31011aca79a256962b59caccf173b051b9b04b849df143228b5b2fd"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/speculators.patch",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/vllm.patch",
+        "bytes": 2699,
+        "sha256": "f864ea5f8fbd4647cb8b8d56cd9686f05e7d03e2e42b86a9565e9c38b762d8a0"
+      },
+      {
+        "path": "scale-1-lora-v2/server_provenance/vllm_command.txt",
+        "bytes": 1100,
+        "sha256": "7e3499ca5624f25159282e23737b14980a1a1e34b949d9c040038fe95d1be6dd"
+      },
+      {
+        "path": "scale-1-lora-v2/speculators.patch",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "scale-1-lora-v2/validation/manifest.json",
+        "bytes": 4872,
+        "sha256": "26cfaf24dd4b632ee673f6a8b2cd3f44712e8470a2a25733c895730a0910d83d"
+      },
+      {
+        "path": "scale-1-lora-v2/validation/nemo-chat.jsonl",
+        "bytes": 276318,
+        "sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f"
+      },
+      {
+        "path": "scale-1-lora-v2/validation/nemo-code.jsonl",
+        "bytes": 235509,
+        "sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748"
+      },
+      {
+        "path": "scale-1-lora-v2/validation/nemo-math.jsonl",
+        "bytes": 57003,
+        "sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28"
+      },
+      {
+        "path": "scale-1-lora-v2/validation/nemo-stem.jsonl",
+        "bytes": 121588,
+        "sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757"
+      }
+    ]
+  },
+  "runs": {
+    "eagle3": {
+      "source_directory": "eagle3-base",
+      "identity": {
+        "categories": [
+          "nemo-chat",
+          "nemo-code",
+          "nemo-math",
+          "nemo-stem"
+        ],
+        "concurrency": 1,
+        "correctness_sha256": null,
+        "correctness_status": "not_checked",
+        "grouping": "category",
+        "guidellm_version": "0.7.1",
+        "limit": 0,
+        "mismatched_prompts": null,
+        "mode": "throughput",
+        "output_mismatch_override": false,
+        "seed": 42,
+        "server": {
+          "api_server_count": 1,
+          "bundle_weights_sha256": null,
+          "deployment_context_size": null,
+          "gpu_memory_utilization": 0.85,
+          "kind": "eagle3_base",
+          "max_model_len": 8192,
+          "max_num_seqs": 1,
+          "model_runner": "V1",
+          "models": {
+            "drafter": {
+              "id": "RedHatAI/Qwen3-8B-speculator.eagle3",
+              "revision": "08610ffa01dd9f16731fe8f627b85905b6aa51c4"
+            },
+            "target": {
+              "id": "Qwen/Qwen3-8B",
+              "revision": "b968826d9c46dd6066d109eabc6255188de91218"
+            }
+          },
+          "renderer_num_workers": 1,
+          "seed": 42,
+          "served_model_name": "speculators",
+          "source_job": null,
+          "speculative_tokens": 3,
+          "speculators_git_sha": "8d9b2c47b6df43132a754d6ca456a286408deac1",
+          "speculators_patch_identity": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "static_adapter_policy": null,
+          "version": 1,
+          "vllm_version": "0.31.0",
+          "worker_extension_cls": "speculators.generator.serving.http.AdapterWorkerExtension"
+        },
+        "sweep_size": 10,
+        "target": "http://127.0.0.1:8000/v1",
+        "tokenizer_path": "models/qwen3-8b",
+        "validation": "11673f5891c24d2529df157cdd40f71d5a5079cf55d12cdc5a091c420f80036c",
+        "warmups": 3
+      },
+      "performance": {
+        "nemo-math": {
+          "itl_median_ms": 15.160719553629557,
+          "latency_median_s": 3.9111311435699463,
+          "measured_seconds": 199.42938494682312,
+          "output_tokens_per_second": 64.18311927007676,
+          "output_tps_median": 64.96227799922886,
+          "rps_median": 0.2487983625342755,
+          "strategy": "throughput",
+          "successful_requests": 50,
+          "target_rate": "",
+          "total_output_tokens": 12800.0,
+          "ttft_median_ms": 43.43008995056152
+        },
+        "nemo-code": {
+          "itl_median_ms": 16.50216626185997,
+          "latency_median_s": 4.25562596321106,
+          "measured_seconds": 210.0317759513855,
+          "output_tokens_per_second": 60.87174163093898,
+          "output_tps_median": 60.15372347659238,
+          "rps_median": 0.23633177020457782,
+          "strategy": "throughput",
+          "successful_requests": 50,
+          "target_rate": "",
+          "total_output_tokens": 12785.0,
+          "ttft_median_ms": 47.12653160095215
+        },
+        "nemo-stem": {
+          "itl_median_ms": 16.869070950676413,
+          "latency_median_s": 4.339280366897583,
+          "measured_seconds": 215.97969841957092,
+          "output_tokens_per_second": 59.037956313974426,
+          "output_tps_median": 58.751201063989434,
+          "rps_median": 0.22771220653096858,
+          "strategy": "throughput",
+          "successful_requests": 50,
+          "target_rate": "",
+          "total_output_tokens": 12751.0,
+          "ttft_median_ms": 43.534278869628906
+        },
+        "nemo-chat": {
+          "itl_median_ms": 17.27396086150525,
+          "latency_median_s": 4.363182067871094,
+          "measured_seconds": 199.41583824157715,
+          "output_tokens_per_second": 55.321583768264034,
+          "output_tps_median": 57.607418924190064,
+          "rps_median": 0.2269656075164868,
+          "strategy": "throughput",
+          "successful_requests": 50,
+          "target_rate": "",
+          "total_output_tokens": 11032.0,
+          "ttft_median_ms": 43.20120811462402
+        }
+      }
+    },
+    "lora": {
+      "source_directory": "scale-1-lora-v2",
+      "identity": {
+        "categories": [
+          "nemo-chat",
+          "nemo-code",
+          "nemo-math",
+          "nemo-stem"
+        ],
+        "concurrency": 1,
+        "correctness_sha256": null,
+        "correctness_status": "not_checked",
+        "grouping": "category",
+        "guidellm_version": "0.7.1",
+        "limit": 0,
+        "mismatched_prompts": null,
+        "mode": "throughput",
+        "output_mismatch_override": false,
+        "seed": 42,
+        "server": {
+          "api_server_count": 1,
+          "bundle_weights_sha256": "598456fc6e314ebdf96f5a9cb2d384fc3589d808d17eb3233d8d457662d1ef9f",
+          "deployment_context_size": null,
+          "gpu_memory_utilization": 0.85,
+          "kind": "static_lora",
+          "max_model_len": 8192,
+          "max_num_seqs": 1,
+          "model_runner": "V1",
+          "models": {
+            "drafter": {
+              "id": "RedHatAI/Qwen3-8B-speculator.eagle3",
+              "revision": "08610ffa01dd9f16731fe8f627b85905b6aa51c4"
+            },
+            "target": {
+              "id": "Qwen/Qwen3-8B",
+              "revision": "b968826d9c46dd6066d109eabc6255188de91218"
+            }
+          },
+          "renderer_num_workers": 1,
+          "seed": 42,
+          "served_model_name": "speculators",
+          "source_job": {
+            "arm": "fresh_lora",
+            "color": "#174a7e",
+            "condition": "last",
+            "kind": "pretraining",
+            "label": "scale-1-lora",
+            "matched_generator": "scale-1-direct",
+            "objective": "direct",
+            "scale": 1,
+            "stage": "pretraining",
+            "subsets": [
+              "math-00000",
+              "code-00000",
+              "stem-00000",
+              "chat-00000"
+            ],
+            "training_examples": 4000,
+            "updates": 1500,
+            "validation_subsets": [
+              "math-00000",
+              "code-00000",
+              "stem-00000",
+              "chat-00000"
+            ]
+          },
+          "speculative_tokens": 3,
+          "speculators_git_sha": "8dde30013b2439a2ef943f33f38ee551a97ec98f",
+          "speculators_patch_identity": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "static_adapter_policy": "merged_once",
+          "version": 1,
+          "vllm_version": "0.31.0",
+          "worker_extension_cls": "speculators.generator.serving.http.AdapterWorkerExtension"
+        },
+        "sweep_size": 10,
+        "target": "http://127.0.0.1:8000/v1",
+        "tokenizer_path": "models/qwen3-8b",
+        "validation": "11673f5891c24d2529df157cdd40f71d5a5079cf55d12cdc5a091c420f80036c",
+        "warmups": 3
+      },
+      "performance": {
+        "nemo-math": {
+          "itl_median_ms": 13.520309971828087,
+          "latency_median_s": 3.493032932281494,
+          "measured_seconds": 176.39455842971802,
+          "output_tokens_per_second": 72.56459674236484,
+          "output_tps_median": 73.71848028816132,
+          "rps_median": 0.2838084084292972,
+          "strategy": "throughput",
+          "successful_requests": 50,
+          "target_rate": "",
+          "total_output_tokens": 12800.0,
+          "ttft_median_ms": 44.00348663330078
+        },
+        "nemo-code": {
+          "itl_median_ms": 15.180713990155388,
+          "latency_median_s": 3.9225242137908936,
+          "measured_seconds": 194.84793138504028,
+          "output_tokens_per_second": 65.6152719154892,
+          "output_tps_median": 65.67302806075519,
+          "rps_median": 0.25471513749673125,
+          "strategy": "throughput",
+          "successful_requests": 50,
+          "target_rate": "",
+          "total_output_tokens": 12785.0,
+          "ttft_median_ms": 50.3232479095459
+        },
+        "nemo-stem": {
+          "itl_median_ms": 15.726167080449123,
+          "latency_median_s": 4.021772623062134,
+          "measured_seconds": 198.41704273223877,
+          "output_tokens_per_second": 64.26363292394852,
+          "output_tps_median": 63.293966373489646,
+          "rps_median": 0.2491697024473535,
+          "strategy": "throughput",
+          "successful_requests": 50,
+          "target_rate": "",
+          "total_output_tokens": 12751.0,
+          "ttft_median_ms": 44.43359375
+        },
+        "nemo-chat": {
+          "itl_median_ms": 16.67962915757123,
+          "latency_median_s": 4.181483507156372,
+          "measured_seconds": 195.18539237976074,
+          "output_tokens_per_second": 56.520623113719935,
+          "output_tps_median": 59.26380502714267,
+          "rps_median": 0.23320958478636264,
+          "strategy": "throughput",
+          "successful_requests": 50,
+          "target_rate": "",
+          "total_output_tokens": 11032.0,
+          "ttft_median_ms": 43.81370544433594
+        }
+      }
+    },
+    "generator": {
+      "source_directory": "scale-1-direct",
+      "identity": {
+        "categories": [
+          "nemo-chat",
+          "nemo-code",
+          "nemo-math",
+          "nemo-stem"
+        ],
+        "concurrency": 1,
+        "correctness_sha256": null,
+        "correctness_status": "not_checked",
+        "grouping": "category",
+        "guidellm_version": "0.7.1",
+        "limit": 0,
+        "mismatched_prompts": null,
+        "mode": "throughput",
+        "output_mismatch_override": false,
+        "seed": 42,
+        "server": {
+          "api_server_count": 1,
+          "bundle_weights_sha256": "9fd118a8c6b20dfa2a2a460390e3029fb0086e9d80cce95f93f4984c30ac75c1",
+          "deployment_context_size": 1,
+          "gpu_memory_utilization": 0.85,
+          "kind": "generator",
+          "max_model_len": 8192,
+          "max_num_seqs": 1,
+          "model_runner": "V1",
+          "models": {
+            "drafter": {
+              "id": "RedHatAI/Qwen3-8B-speculator.eagle3",
+              "revision": "08610ffa01dd9f16731fe8f627b85905b6aa51c4"
+            },
+            "target": {
+              "id": "Qwen/Qwen3-8B",
+              "revision": "b968826d9c46dd6066d109eabc6255188de91218"
+            }
+          },
+          "renderer_num_workers": 1,
+          "seed": 42,
+          "served_model_name": "speculators",
+          "source_job": {
+            "arm": "direct",
+            "color": "#174a7e",
+            "condition": "last",
+            "kind": "pretraining",
+            "label": "scale-1-direct",
+            "objective": "direct",
+            "scale": 1,
+            "stage": "pretraining",
+            "subsets": [
+              "math-00000",
+              "code-00000",
+              "stem-00000",
+              "chat-00000"
+            ],
+            "training_examples": 4000,
+            "updates": 1500,
+            "validation_subsets": [
+              "math-00000",
+              "code-00000",
+              "stem-00000",
+              "chat-00000"
+            ]
+          },
+          "speculative_tokens": 3,
+          "speculators_git_sha": "8d9b2c47b6df43132a754d6ca456a286408deac1",
+          "speculators_patch_identity": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "static_adapter_policy": null,
+          "version": 1,
+          "vllm_version": "0.31.0",
+          "worker_extension_cls": "speculators.generator.serving.http.AdapterWorkerExtension"
+        },
+        "sweep_size": 10,
+        "target": "http://127.0.0.1:8000/v1",
+        "tokenizer_path": "models/qwen3-8b",
+        "validation": "11673f5891c24d2529df157cdd40f71d5a5079cf55d12cdc5a091c420f80036c",
+        "warmups": 3
+      },
+      "performance": {
+        "nemo-math": {
+          "itl_median_ms": 12.430890401204428,
+          "latency_median_s": 3.2183949947357178,
+          "measured_seconds": 164.5049831867218,
+          "output_tokens_per_second": 77.80919308366074,
+          "output_tps_median": 79.00896503223748,
+          "rps_median": 0.3027466820459111,
+          "strategy": "throughput",
+          "successful_requests": 50,
+          "target_rate": "",
+          "total_output_tokens": 12800.0,
+          "ttft_median_ms": 46.86427116394043
+        },
+        "nemo-code": {
+          "itl_median_ms": 14.571454478245155,
+          "latency_median_s": 3.7648704051971436,
+          "measured_seconds": 186.7704575061798,
+          "output_tokens_per_second": 68.45301002476248,
+          "output_tps_median": 68.39355567573187,
+          "rps_median": 0.2631836246643538,
+          "strategy": "throughput",
+          "successful_requests": 50,
+          "target_rate": "",
+          "total_output_tokens": 12785.0,
+          "ttft_median_ms": 52.813053131103516
+        },
+        "nemo-stem": {
+          "itl_median_ms": 14.893553303737267,
+          "latency_median_s": 3.8170690536499023,
+          "measured_seconds": 191.52585458755493,
+          "output_tokens_per_second": 66.57586792894823,
+          "output_tps_median": 66.75810695777692,
+          "rps_median": 0.2594809470405231,
+          "strategy": "throughput",
+          "successful_requests": 50,
+          "target_rate": "",
+          "total_output_tokens": 12751.0,
+          "ttft_median_ms": 47.41239547729492
+        },
+        "nemo-chat": {
+          "itl_median_ms": 16.135043723910464,
+          "latency_median_s": 4.130372047424316,
+          "measured_seconds": 191.24644827842712,
+          "output_tokens_per_second": 57.6847313992415,
+          "output_tps_median": 59.34299157949543,
+          "rps_median": 0.24181860237825253,
+          "strategy": "throughput",
+          "successful_requests": 50,
+          "target_rate": "",
+          "total_output_tokens": 11032.0,
+          "ttft_median_ms": 47.249555587768555
+        }
+      }
+    }
+  }
+}
