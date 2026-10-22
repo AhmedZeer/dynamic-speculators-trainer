@@ -6,6 +6,8 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+MAX_CONCURRENCY = 8
+
 
 class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -55,7 +57,9 @@ class Settings(Strict):
     max_tokens: int = Field(default=256, ge=1)
     seed: int = 42
     warmups: int = Field(default=3, ge=0)
-    concurrency: Literal[1] = 1
+    concurrency: int = Field(default=1, ge=1, le=8)
+    concurrencies: list[int] | None = None
+    batch_wait_ms: float = Field(default=50, ge=0)
     port: int = Field(default=8000, ge=1024, le=65535)
     gpu: str | int = 0
     gpu_memory_utilization: float = Field(default=0.85, gt=0, lt=1)
@@ -65,6 +69,21 @@ class Settings(Strict):
     client_timeout_seconds: float = Field(default=3600, gt=0)
     shutdown_timeout_seconds: float = Field(default=30, gt=0)
     continue_on_error: bool = True
+
+    @field_validator("concurrencies")
+    @classmethod
+    def supported_concurrencies(cls, value):
+        if value is not None and (
+            not value
+            or len(value) != len(set(value))
+            or any(not 1 <= item <= MAX_CONCURRENCY for item in value)
+        ):
+            raise ValueError("concurrencies must contain distinct values from 1 to 8")
+        return value
+
+    @property
+    def concurrency_values(self):
+        return self.concurrencies or [self.concurrency]
 
 
 class Suite(Strict):

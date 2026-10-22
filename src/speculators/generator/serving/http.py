@@ -31,6 +31,7 @@ def worker_status(worker):
         adapter_totals=dict(controller.totals) if controller else {},
         adapter_setup_merge_seconds=controller.setup_merge_seconds if controller else 0,
         active_request_id=controller.active if controller else None,
+        active_request_ids=sorted(controller.active_requests) if controller else [],
     )
     return result
 
@@ -40,9 +41,6 @@ def finish_http_request(worker, response_id):
         getattr(worker.model_runner, "drafter", None), "draft_adapter", None
     )
     if controller is None:
-        return {}
-    internal = controller.active or controller.last_record.get("request_id")
-    if internal is None:
         return {}
     # The completions API appends '-0' for its single prompt. The engine then
     # appends its UUID suffix. Never finish a different queued HTTP request.

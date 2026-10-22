@@ -82,6 +82,8 @@ def wait_ready(process, target, model, manifest, timeout):
                 status = json.load(response)
             validate_status(status, manifest)
             config = status["configuration"]
+            if config.get("max_num_seqs", 1) != model.get("concurrency", 1):
+                raise ValueError("Connected server concurrency differs")
             if config["kind"] != expected[model["type"]]:
                 raise ValueError("Connected server has the wrong model type")
             if model["type"] == "drafter":

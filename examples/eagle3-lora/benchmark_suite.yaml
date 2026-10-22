@@ -24,11 +24,12 @@ benchmarks:
   - dataset: RedHatAI/speculator_benchmarks
     categories: [HumanEval, math_reasoning, summarization]
 
-# Optional. These are the defaults; models and benchmarks are sufficient.
+# Sweep closed-batch concurrency; use concurrency: 1 for a serial-only suite.
 settings:
   max_samples: 50
   max_tokens: 256
   seed: 42
   warmups: 3
-  concurrency: 1
+  concurrencies: [1, 2, 4, 8]
+  batch_wait_ms: 50
   gpu: 0

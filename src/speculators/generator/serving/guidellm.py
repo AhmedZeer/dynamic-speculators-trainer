@@ -131,8 +131,13 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
         }
     status = server_status(args.target)
     validate_status(status, manifest)
-    if args.max_concurrency < 1 or (status is not None and args.max_concurrency != 1):
-        raise ValueError("Matched Speculators servers require --max-concurrency 1")
+    capacity = (
+        status["configuration"].get("max_num_seqs", 1)
+        if status
+        else args.max_concurrency
+    )
+    if not 1 <= args.max_concurrency <= capacity:
+        raise ValueError("Client concurrency must not exceed the server's max_num_seqs")
     correctness, overridden = check_report(args, manifest, groups, status)
     correctness_status = correctness["status"] if correctness else "not_checked"
     tokenizer_path = (

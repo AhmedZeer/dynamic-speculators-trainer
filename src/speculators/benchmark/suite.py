@@ -49,6 +49,10 @@ def server_command(root, model, target, settings, provenance):
         str(settings.speculative_tokens),
         "--seed",
         str(settings.seed),
+        "--concurrency",
+        str(settings.concurrency),
+        "--batch-wait-ms",
+        str(settings.batch_wait_ms),
     ]
     if model["type"] == "drafter":
         command += [
@@ -83,7 +87,7 @@ def client_command(  # noqa: PLR0917 -- explicit subprocess inputs
         "--tokenizer-path",
         str(tokenizer),
         "--max-concurrency",
-        "1",
+        str(settings.concurrency),
         "--max-requests",
         "0",
         "--warmups",
@@ -112,6 +116,8 @@ def verify_result(output, task, workload, model):
     identity = json.loads((output / "benchmark_identity.json").read_text())
     if identity["validation"] != workload["identity"]:
         raise ValueError("Client measured the wrong frozen workload")
+    if identity.get("concurrency", 1) != model.get("concurrency", 1):
+        raise ValueError("Client measured the wrong concurrency")
     expected_kind = {
         "lora": "static_lora",
         "generator": "generator",
@@ -170,8 +176,17 @@ def write_summary(output, plan, state):
         "| Model | " + " | ".join(f"{bench}/{cat}" for bench, cat in columns) + " |",
         "| --- | " + " | ".join("---:" for _ in columns) + " |",
     ]
+    if any(model.get("concurrency", 1) > 1 for model in plan["models"]):
+        table[4:4] = [
+            "-cN denotes concurrency N; fixed batches never refill active groups.",
+            "",
+        ]
     for model in plan["models"]:
-        row = {"model": model["name"], "type": model["type"]}
+        row = {
+            "model": model["name"],
+            "type": model["type"],
+            "concurrency": model.get("concurrency", 1),
+        }
         cells = []
         details[model["name"]] = {}
         for benchmark, category in columns:
@@ -432,7 +447,12 @@ def run_suite(config_path, output_root, *, resume=False, dry_run=False):  # noqa
                 raise FileExistsError(
                     "Suite output exists; use --resume or a new output root"
                 )
-            if json.loads(request_path.read_text()) != request:
+            if (
+                Suite.model_validate(json.loads(request_path.read_text())).model_dump(
+                    mode="json"
+                )
+                != request
+            ):
                 raise ValueError("Suite configuration changed; use a new output root")
         write_json(request_path, request)
         attempt_dir = output / "suite_attempts" / str(time.time_ns())
@@ -468,6 +488,24 @@ def run_suite(config_path, output_root, *, resume=False, dry_run=False):  # noqa
             models.append(model)
             write_json(pins_path, pins)
         references = [m["models"]["target"] for m in models if "models" in m]
+        models = [
+            {
+                **model,
+                "base_name": model["name"],
+                "name": f"{model['name']}-c{concurrency}"
+                if len(settings.concurrency_values) > 1 or concurrency != 1
+                else model["name"],
+                "concurrency": concurrency,
+            }
+            for model in models
+            for concurrency in settings.concurrency_values
+        ]
+        if len({model["name"] for model in models}) != len(models):
+            raise ValueError("Model names collide after adding concurrency suffixes")
+        report(
+            f"Concurrency sweep={settings.concurrency_values}; "
+            f"server variants={len(models)}"
+        )
         target = references[0] if references else DEFAULT_TARGET
         if any(reference != target for reference in references):
             raise ValueError("All models in a suite must share one pinned target")
@@ -542,7 +580,15 @@ def run_suite(config_path, output_root, *, resume=False, dry_run=False):  # noqa
                         entry["status"] = "pending"
         try:
             for model in models:
-                _measure_model(root, output, model, plan, state, settings, tokenizer)
+                _measure_model(
+                    root,
+                    output,
+                    model,
+                    plan,
+                    state,
+                    settings.model_copy(update={"concurrency": model["concurrency"]}),
+                    tokenizer,
+                )
         finally:
             write_json(state_path, state)
             write_summary(output, plan, state)

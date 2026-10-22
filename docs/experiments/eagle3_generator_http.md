@@ -17,23 +17,23 @@ Generator conditioning uses the current prompt alone (context 1). Training still
 uses contexts 1–8 and its existing context-4 validation. No training changes or
 activation downloads are needed.
 
-### Why generator serving currently uses one active request
+### Shared adapters for fixed batches
 
 Training contexts of 1–8 examples are pooled into **one** conditioning vector
 and produce one shared adapter, rather than one adapter per example. The
-deployment runtime generates an adapter from each request's own prompt, then
-copies the merged V/O weights into the shared drafter. It restores those weights
-when the request finishes. Two simultaneous requests needing different adapters
-cannot use that same merged weight tensor correctly. The controller therefore
-enforces one active request and the launcher sets `max_num_seqs=1`.
+serial runtime generates an adapter from each request's own prompt. Fixed-batch
+serving instead pools all group members' prompt summaries, merges one shared
+V/O adapter into the drafter before draft prefill, and restores it only after
+the final member finishes. No new request can join an active group. This matches
+the model's set-conditioning interface and avoids mixing draft KV states from
+different adapters.
 
-Concurrent generator serving would require request-indexed adapter factors and
-adapter-aware draft projection operations, plus correct request/token mappings
-and KV-cache lifecycle handling. Increasing the sequence limit alone cannot
-provide this. Sharing one adapter across a group of requests is a different
-conditioning policy that needs a separate evaluation. The static LoRA uses one
-permanent merge; its current concurrency limit also follows the matched serial
-benchmark configuration.
+`launch_vllm.py serve --concurrency 4 --batch-wait-ms 50` enables this policy;
+include the normal model/bundle arguments and `--provenance-dir`. The default
+remains concurrency 1. The [suite runbook](eagle3_benchmark_suite.md) describes
+the 1/2/4/8 sweep, partial groups, patch upgrade, artifacts, and memory limits.
+Concurrent requests requiring independent per-request adapters would still need
+adapter-aware projections; that is a separate serving policy.
 
 ## Environment and validation workload
 

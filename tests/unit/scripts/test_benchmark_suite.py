@@ -70,7 +70,7 @@ def test_config_and_dry_run(tmp_path):
     with pytest.raises(ValidationError, match="subfolder"):
         Model(name="bad", type="lora", model="a/b", subfolder="../escape")
     with pytest.raises(ValidationError):
-        Settings(concurrency=2)
+        Settings(concurrency=9)
 
 
 def test_benchmark_diagnostics_include_failure_excerpt_and_heartbeats(tmp_path, capsys):
@@ -317,7 +317,8 @@ result = {"groups": {category: {
 }}}
 (output / "results.json").write_text(json.dumps(result))
 (output / "benchmark_identity.json").write_text(json.dumps({
-    "validation": workload["identity"], "server": {"kind": "eagle3_base"}}))
+    "validation": workload["identity"], "concurrency": workload.get("concurrency", 1),
+    "server": {"kind": "eagle3_base"}}))
 (directory / "guidellm.json").write_text("{}")
 """
 
@@ -374,6 +375,7 @@ def fake_suite(tmp_path, monkeypatch):
         status = {
             "configuration": {
                 "kind": "eagle3_base",
+                "max_num_seqs": settings.concurrency,
                 "models": {
                     "target": target,
                     "drafter": {"id": model["path"], "revision": model["revision"]},
@@ -396,7 +398,7 @@ def fake_suite(tmp_path, monkeypatch):
             str(client_script),
             str(output),
             task["category"],
-            json.dumps(data),
+            json.dumps({**data, "concurrency": settings.concurrency}),
             task["model"],
             str(marker),
             str(fail),
@@ -448,6 +450,21 @@ def test_suite_matrix_resume_and_corrupt_result_replay(fake_suite):
     assert len(case.launches) == 3
     with pytest.raises(FileExistsError, match="resume"):
         suite.run_suite(case.config, case.output)
+
+
+def test_suite_concurrency_sweep_separates_results_and_resumes(fake_suite):
+    case = fake_suite
+    config = yaml.safe_load(case.config.read_text())
+    config["settings"]["concurrencies"] = [1, 2]
+    case.config.write_text(yaml.safe_dump(config))
+    result = suite.run_suite(case.config, case.output)
+    assert result["completed"] == 8
+    assert case.launches == ["base-c1", "base-c2", "other-c1", "other-c2"]
+    summary = json.loads((case.output / "summary.json").read_text())
+    assert [row["concurrency"] for row in summary["rows"]] == [1, 2, 1, 2]
+    suite.run_suite(case.config, case.output, resume=True)
+    assert len(case.launches) == 4
+    assert len(case.marker.read_text().splitlines()) == 8
 
 
 def test_suite_client_failure_continues_then_resume_retries_only_failure(

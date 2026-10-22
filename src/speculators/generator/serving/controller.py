@@ -18,6 +18,7 @@ from speculators.generator.serving.bundle import (
 logger = logging.getLogger(__name__)
 MATRIX_NDIM = 2
 REQUEST_ID_SUFFIX_LENGTH = 8
+FINISHED_RECORD_LIMIT = 128
 
 
 def elapsed(device, operation):
@@ -45,7 +46,18 @@ def validate_runtime(config, metadata):
     checks = {
         "V1 model runner": not getattr(config, "use_v2_model_runner", False),
         "method=eagle3": spec.method == "eagle3",
-        "one active sequence": scheduler.max_num_seqs == 1,
+        "supported batch capacity": 1
+        <= scheduler.max_num_seqs
+        <= metadata["max_examples"],
+        "fixed batch scheduler": scheduler.max_num_seqs == 1
+        or (
+            getattr(scheduler, "scheduler_cls", None)
+            == "speculators.generator.serving.scheduler.FixedBatchScheduler"
+            and json.loads(os.environ.get("SPECULATORS_SERVER_CONFIG", "{}")).get(
+                "batching_policy"
+            )
+            == "fixed_shared_adapter"
+        ),
         "unchunked prefill": not scheduler.enable_chunked_prefill,
         "synchronous scheduling": scheduler.async_scheduling is False,
         "prefix caching disabled": not config.cache_config.enable_prefix_caching,
@@ -169,6 +181,9 @@ class DraftAdapterController:
                 self.device, lambda: self.merger.apply(self.factors)
             )
         self.active = None
+        self.active_requests = set()
+        self.records = {}
+        self.completed_records = {}
         self.record = {}
         self.last_record = {}
         self.totals = {
@@ -178,6 +193,9 @@ class DraftAdapterController:
             "generator_seconds": 0.0,
             "merge_seconds": 0.0,
             "restore_seconds": 0.0,
+            "prepared_batches": 0,
+            "completed_batches": 0,
+            "conditioning_examples": 0,
         }
 
     @torch.inference_mode()
@@ -220,6 +238,7 @@ class DraftAdapterController:
             self.merger.restore()
             raise
         self.active = request_id
+        self.active_requests = {request_id}
         self.last_record = {}
         self.record = {
             "request_id": request_id,
@@ -230,6 +249,10 @@ class DraftAdapterController:
             "deployment_context_size": 1,
         }
         self.totals["prepared_requests"] += 1
+        self.totals["prepared_batches"] += 1
+        self.totals["conditioning_examples"] += 1
+        self.records = {request_id: self.record}
+        self.completed_records.pop(request_id, None)
         for key in ("generator_invocations", "generator_seconds", "merge_seconds"):
             self.totals[key] += self.record[key]
         logger.info(
@@ -239,43 +262,111 @@ class DraftAdapterController:
             merge_seconds,
         )
 
-    def finish(self, request_id):
-        if self.active == request_id:
-            seconds = 0.0
-            if not self.permanent_static:
-                _, seconds = elapsed(self.device, self.merger.restore)
-            self.record["restore_seconds"] = seconds
-            self.totals["completed_requests"] += 1
-            self.totals["restore_seconds"] += seconds
-            self.last_record = dict(self.record)
-            self.active = None
-            self.record = {}
-        return (
-            dict(self.last_record)
-            if self.last_record.get("request_id") == request_id
-            else {}
+    @torch.inference_mode()
+    def prepare_batch(self, request_ids, prompt_lengths, positions, states, offsets):  # noqa: C901 -- validate all packed prefills before merging
+        """Generate once from all prompt summaries before any draft prefill."""
+        if self.active is not None:
+            if not set(request_ids) <= self.active_requests:
+                raise RuntimeError("New request entered an unfinished fixed batch")
+            return
+        count = len(request_ids)
+        if not 1 <= count <= self.metadata["max_examples"]:
+            raise ValueError("Batch exceeds the generator's conditioning capacity")
+        if (
+            len(set(request_ids)) != count
+            or len(offsets) != count + 1
+            or len(prompt_lengths) != count
+        ):
+            raise ValueError("Invalid fixed batch request boundaries")
+        if (
+            offsets[0] != 0
+            or offsets[-1] != states.shape[0]
+            or positions.numel() != states.shape[0]
+        ):
+            raise ValueError("Fixed batch token boundaries differ from target prefill")
+        summaries = []
+        for index, length in enumerate(prompt_lengths):
+            start, end = offsets[index : index + 2]
+            if end - start != length or not torch.equal(
+                positions[start:end], torch.arange(length, device=positions.device)
+            ):
+                raise ValueError("Fixed batch requires complete target prefills")
+            summaries.append(states[end - 1])
+        summary = torch.stack(summaries).float()
+        if summary.shape[1] != self.metadata["input_dim"]:
+            raise ValueError("Auxiliary layer order/width differs from training")
+        factors, generation_seconds = self.factors, 0.0
+        if self.generator is not None:
+            factors, generation_seconds = elapsed(
+                self.device,
+                lambda: self.generator(
+                    summary, torch.tensor(prompt_lengths, device=self.device)
+                ),
+            )
+        merge_seconds = 0.0
+        if not self.permanent_static:
+            _, merge_seconds = elapsed(self.device, lambda: self.merger.apply(factors))
+        self.active_requests = set(request_ids)
+        self.active = request_ids[0]
+        self.records = {}
+        for index, request_id in enumerate(request_ids):
+            self.completed_records.pop(request_id, None)
+            self.records[request_id] = {
+                "request_id": request_id,
+                "generator_invocations": int(index == 0 and self.generator is not None),
+                "generator_seconds": generation_seconds if index == 0 else 0.0,
+                "merge_seconds": merge_seconds if index == 0 else 0.0,
+                "restore_seconds": 0.0,
+                "deployment_context_size": count,
+            }
+        self.record = self.records[self.active]
+        self.last_record = {}
+        self.totals["prepared_requests"] += count
+        self.totals["prepared_batches"] += 1
+        self.totals["conditioning_examples"] += count
+        self.totals["generator_invocations"] += int(self.generator is not None)
+        self.totals["generator_seconds"] += generation_seconds
+        self.totals["merge_seconds"] += merge_seconds
+        logger.info(
+            "Shared adapter ready: batch_size=%d, requests=%s", count, request_ids
         )
 
+    def finish(self, request_id):
+        if request_id in self.active_requests:
+            self.active_requests.remove(request_id)
+            seconds = 0.0
+            if not self.active_requests and not self.permanent_static:
+                _, seconds = elapsed(self.device, self.merger.restore)
+            record = self.records.pop(request_id)
+            record["restore_seconds"] = seconds
+            self.totals["completed_requests"] += 1
+            self.totals["restore_seconds"] += seconds
+            self.last_record = dict(record)
+            self.completed_records[request_id] = dict(record)
+            while len(self.completed_records) > FINISHED_RECORD_LIMIT:
+                self.completed_records.pop(next(iter(self.completed_records)))
+            if not self.active_requests:
+                self.totals["completed_batches"] += 1
+            self.active = next(iter(self.active_requests), None)
+            self.record = self.records[self.active] if self.active else {}
+        return dict(self.completed_records.get(request_id, {}))
+
     def finish_external(self, request_id):
-        """Resolve vLLM 0.31's external ID against this serial request's record.
+        """Resolve external IDs against active and recently completed members.
 
         InputProcessor appends '-' plus eight UUID hex characters internally.
         Lifecycle hooks use that internal ID; RequestOutput exposes the external
         ID. Never fall back to an unrelated active or completed request.
         """
-        internal = self.active or self.last_record.get("request_id")
-        if internal is None:
-            return {}
-        if internal == request_id:
-            return self.finish(internal)
-        external, separator, suffix = internal.rpartition("-")
-        if (
-            separator
-            and external == request_id
-            and len(suffix) == REQUEST_ID_SUFFIX_LENGTH
-            and all(character in "0123456789abcdef" for character in suffix)
-        ):
-            return self.finish(internal)
+        for internal in self.active_requests | self.completed_records.keys():
+            external, separator, suffix = internal.rpartition("-")
+            if internal == request_id or (
+                separator
+                and external == request_id
+                and len(suffix) == REQUEST_ID_SUFFIX_LENGTH
+                and all(character in "0123456789abcdef" for character in suffix)
+            ):
+                return self.finish(internal)
         return {}
 
     @torch.inference_mode()
@@ -311,10 +402,24 @@ def initialize_proposer(proposer, runner):
     validate_runtime(proposer.vllm_config, metadata)
 
 
-def prepare_proposer(proposer, positions, states):
+def prepare_proposer(proposer, positions, states, attention_metadata=None):
     runner = proposer.adapter_runner
     ids = runner.input_batch.req_ids
+    if proposer.draft_adapter.active is not None:
+        if not set(ids) <= proposer.draft_adapter.active_requests:
+            raise RuntimeError("New request entered an unfinished fixed batch")
+        return
     if len(ids) != 1:
-        raise ValueError("Draft adapter runtime requires exactly one active request")
+        if attention_metadata is None:
+            raise ValueError("Batched drafting requires attention token boundaries")
+        offsets = attention_metadata.query_start_loc_cpu.tolist()
+        proposer.draft_adapter.prepare_batch(
+            list(ids),
+            [runner.requests[name].num_prompt_tokens for name in ids],
+            positions,
+            states,
+            offsets,
+        )
+        return
     request = runner.requests[ids[0]]
     proposer.draft_adapter.prepare(ids[0], request.num_prompt_tokens, positions, states)

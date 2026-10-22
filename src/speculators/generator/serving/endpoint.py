@@ -98,11 +98,18 @@ def validate_adapter_delta(before, after):
         raise ValueError(
             "Adapters were not executed or were not restored for all prepared requests"
         )
-    if (
-        before["configuration"]["kind"] == "generator"
-        and delta["generator_invocations"] != delta["prepared_requests"]
-    ):
-        raise ValueError("Generator must execute exactly once per prepared adapter")
+    if before["configuration"]["kind"] == "generator" and delta[
+        "generator_invocations"
+    ] != delta.get("prepared_batches", delta["prepared_requests"]):
+        raise ValueError(
+            "Generator must execute exactly once per prepared batch adapter"
+        )
+    if "prepared_batches" in delta:
+        if delta["prepared_batches"] != delta["completed_batches"]:
+            raise ValueError("A shared-adapter batch was not completely finished")
+        delta["mean_batch_size"] = (
+            delta["prepared_requests"] / delta["prepared_batches"]
+        )
     return delta
 
 

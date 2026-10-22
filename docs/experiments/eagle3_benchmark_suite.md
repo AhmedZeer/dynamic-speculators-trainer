@@ -73,9 +73,66 @@ accept `prompt_format: auto` (default), `raw`, or `chat`. An optional benchmark
 Defaults are 50 samples **per category**, a 256-token output budget, seed 42,
 three warmup requests per category, one concurrent request, GPU 0, port 8000,
 8,192-token model context, three speculative tokens, and GPU memory utilization
-0.85. Override these through `settings` in the example. Concurrency is currently
-fixed at one to match the adapter runtime. Throughput uses the full exported
+0.85. Override these through `settings` in the example. Throughput uses the full exported
 category; it does not apply a second sampling limit.
+
+### Shared-adapter concurrency sweeps
+
+The example now sweeps all models at concurrency 1, 2, 4, and 8:
+
+```yaml
+settings:
+  concurrencies: [1, 2, 4, 8]
+  batch_wait_ms: 50
+```
+
+`concurrencies` overrides the single `concurrency` setting. Omit it and use
+`concurrency: 1` to retain serial-only behavior. Values must be distinct and
+between 1 and 8, and a generator's capacity must cover the chosen value.
+Start a new output root when changing the sweep configuration.
+
+At each concurrency, the server admits a closed group. It collects up to the
+configured capacity, allowing up to `batch_wait_ms` for collection at an idle
+batch boundary before starting a partial group. All prompts receive full target
+prefill. The generator pools their last-token auxiliary-state summaries into
+**one adapter**, merged before draft prefill. That adapter stays fixed until
+the final group member completes or is aborted. Vacant slots are not refilled
+while a group is active. EAGLE3 and static-LoRA baselines use the same closed
+admission policy for a matched comparison; static LoRA retains its permanent merge.
+
+Concurrent groups never overlap. A final partial group, uneven arrivals, and
+requests ending early can make actual batch size/utilization smaller than the
+configured concurrency. Adapter metrics record prepared/completed batch and
+request counts, generator invocations, and `mean_batch_size`. Generation must
+execute once per prepared batch, rather than once per request. Warmup requests
+are outside measured counters. GuideLLM controls concurrent outstanding HTTP
+requests; results include queueing and closed-batch collection overhead.
+
+Each model/concurrency variant gets its own server and measurement directories.
+Rows in `summary.md` are labeled, for example, `generator-4000step-c1` and
+`generator-4000step-c8`; CSV/JSON also have a `concurrency` column. The same
+frozen category prompts are reused at every concurrency. Batch composition can
+depend on arrival/completion order and is not guaranteed identical across models.
+
+The runtime rejects KV preemption or an initial group that cannot fit wholly
+in one prefill, preventing adapter changes against an incompatible draft KV
+cache. Reduce concurrency/context length if that happens. The token scheduling
+budget scales with concurrency so all selected prompts can be prefilled in one
+step; larger settings also increase profiling/prefill GPU memory requirements.
+
+After pulling this change, stop old servers and upgrade the Python-source hook:
+
+```bash
+python scripts/apply_vllm_generator_patch.py --apply
+speculators benchmark suite \
+  --config examples/eagle3-lora/benchmark_suite.yaml \
+  --output-root /content/drive/MyDrive/dyn-spec-bench-v1/suites/shared-batch-v1
+```
+
+The patch installer recognizes the previous serial hook and preserves its
+original-source backups during upgrade. Restarting the servers is required.
+The suite remains an experimental pinned vLLM 0.31.0 integration; CPU lifecycle
+and HTTP tests do not substitute for GPU smoke testing of the new batched path.
 
 Nemotron uses the existing campaign's validation membership. Only the trajectory
 metadata and selected validation Parquet files are downloaded if missing.
@@ -91,7 +148,7 @@ adapter models. See the [HTTP runbook](eagle3_generator_http.md) for installatio
 and patch instructions. The runner uses the current Python interpreter for both
 server and client; it does not install dependencies or patch vLLM automatically.
 
-The wrapper retains the existing BF16, eager, V1, single-sequence matched server
+The wrapper retains the existing BF16, eager, V1 matched server
 configuration. It waits for health and verified model status before measuring.
 Stop any manually launched server on the chosen port first; the runner refuses
 to reuse or terminate an unrelated service.

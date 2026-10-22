@@ -201,7 +201,7 @@ def test_real_guidellm_against_independent_endpoint(  # noqa: PLR0917
         correctness_report=reference if check_mode != "omitted" else None,
         subsets="all",
         max_requests=0,
-        max_concurrency=1,
+        max_concurrency=2 if check_mode == "omitted" else 1,
         mode="throughput",
         gen_kwargs="",
         output_dir=str(tmp_path / "performance"),
@@ -245,6 +245,7 @@ def test_real_guidellm_against_independent_endpoint(  # noqa: PLR0917
         (tmp_path / "performance/benchmark_identity.json").read_text()
     )
     assert identity["output_mismatch_override"] == allow_mismatch
+    assert identity["concurrency"] == args.max_concurrency
     assert result["math"]["output_mismatch_override"] == allow_mismatch
     if check_mode == "omitted":
         assert identity["correctness_status"] == "not_checked"

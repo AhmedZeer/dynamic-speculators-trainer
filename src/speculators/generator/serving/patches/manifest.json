@@ -14,12 +14,15 @@
     },
     "vllm/v1/spec_decode/eagle.py": {
       "before_sha256": "b2b1f7d15117b43108be368756d9c6e9334d9415a070e46178e18bb7c6476378",
-      "after_sha256": "8aa57a92b5782c62d0066c4037a90089e31b862625c52e3154a20a47ff293aa6",
+      "after_sha256": "8baed520d3269f7006eceed713c0b0273e917ea64113b1b4aaaee590a542fdd8",
       "replacements": [
         [
           "            runner=runner,\n        )\n",
-          "            runner=runner,\n        )\n\n        self.draft_adapter = None\n        if self.speculative_config.draft_adapter_path is not None:\n            from speculators.generator.serving.controller import initialize_proposer\n\n            initialize_proposer(self, runner)\n\n    def load_model(self, target_model):\n        super().load_model(target_model)\n        if self.speculative_config.draft_adapter_path is not None:\n            from speculators.generator.serving.controller import DraftAdapterController\n\n            self.draft_adapter = DraftAdapterController(\n                self.speculative_config.draft_adapter_path, self.model\n            )\n\n    def propose(self, *args, **kwargs):\n        if self.draft_adapter is not None:\n            from speculators.generator.serving.controller import prepare_proposer\n\n            prepare_proposer(\n                self, kwargs[\"target_positions\"], kwargs[\"target_hidden_states\"]\n            )\n        return super().propose(*args, **kwargs)\n\n    def dummy_run(self, *args, **kwargs):\n        if self.draft_adapter is not None:\n            self.draft_adapter.profile()\n        return super().dummy_run(*args, **kwargs)\n\n    def on_requests_finished(self, request_ids):\n        if self.draft_adapter is not None:\n            for request_id in request_ids:\n                self.draft_adapter.finish(request_id)\n"
+          "            runner=runner,\n        )\n\n        self.draft_adapter = None\n        if self.speculative_config.draft_adapter_path is not None:\n            from speculators.generator.serving.controller import initialize_proposer\n\n            initialize_proposer(self, runner)\n\n    def load_model(self, target_model):\n        super().load_model(target_model)\n        if self.speculative_config.draft_adapter_path is not None:\n            from speculators.generator.serving.controller import DraftAdapterController\n\n            self.draft_adapter = DraftAdapterController(\n                self.speculative_config.draft_adapter_path, self.model\n            )\n\n    def propose(self, *args, **kwargs):\n        if self.draft_adapter is not None:\n            from speculators.generator.serving.controller import prepare_proposer\n\n            prepare_proposer(\n                self, kwargs[\"target_positions\"], kwargs[\"target_hidden_states\"],\n                kwargs.get(\"common_attn_metadata\"),\n            )\n        return super().propose(*args, **kwargs)\n\n    def dummy_run(self, *args, **kwargs):\n        if self.draft_adapter is not None:\n            self.draft_adapter.profile()\n        return super().dummy_run(*args, **kwargs)\n\n    def on_requests_finished(self, request_ids):\n        if self.draft_adapter is not None:\n            for request_id in request_ids:\n                self.draft_adapter.finish(request_id)\n"
         ]
+      ],
+      "previous_sha256": [
+        "8aa57a92b5782c62d0066c4037a90089e31b862625c52e3154a20a47ff293aa6"
       ]
     },
     "vllm/v1/worker/gpu_model_runner.py": {

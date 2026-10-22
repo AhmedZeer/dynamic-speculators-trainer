@@ -93,7 +93,10 @@ def test_validation_limits_and_domain_aliases(
 @pytest.mark.parametrize(
     "kind", ["target_only", "eagle3_base", "generator", "static_lora"]
 )
-def test_server_builds_matched_independent_command(tmp_path, monkeypatch, kind):
+@pytest.mark.parametrize("concurrency", [1, 4])
+def test_server_builds_matched_independent_command(
+    tmp_path, monkeypatch, kind, concurrency
+):
     monkeypatch.setenv("SPECULATORS_SERVER_CONFIG", "{}")
     monkeypatch.setenv("VLLM_USE_V2_MODEL_RUNNER", "0")
     monkeypatch.setattr(importlib.metadata, "version", lambda *_: "0.31.0")
@@ -129,8 +132,13 @@ def test_server_builds_matched_independent_command(tmp_path, monkeypatch, kind):
         write_json(bundle / "bundle.json", metadata)
         args.adapter_bundle = bundle
         args.model, args.revision = None, None
+    args.concurrency = concurrency
     command = server.build_server(args, [])
-    assert command[command.index("--max-num-seqs") + 1] == "1"
+    assert command[command.index("--max-num-seqs") + 1] == str(concurrency)
+    assert ("--scheduler-cls" in command) == (concurrency > 1)
+    assert command[command.index("--max-num-batched-tokens") + 1] == str(
+        args.max_model_len * concurrency
+    )
     assert "--no-enable-prefix-caching" in command
     assert "--no-enable-chunked-prefill" in command
     assert "--middleware" in command

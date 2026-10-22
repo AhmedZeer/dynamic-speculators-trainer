@@ -19,6 +19,7 @@ from speculators.generator.serving.patch import PATCH_DIR, patch_sources
 from speculators.provenance import atomic_write, find_package_repo, git_diff, git_sha
 
 MIN_CONTEXT = 2
+MAX_CONCURRENCY = 8
 WORKER_EXTENSION = "speculators.generator.serving.http.AdapterWorkerExtension"
 
 
@@ -56,6 +57,16 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
     if importlib.metadata.version("vllm") != VLLM_VERSION:
         raise ValueError(f"Matched serving requires vLLM {VLLM_VERSION}")
     metadata = read_bundle(args.adapter_bundle) if args.adapter_bundle else None
+    concurrency = getattr(args, "concurrency", 1)
+    batch_wait_ms = getattr(args, "batch_wait_ms", 50)
+    if not 1 <= concurrency <= MAX_CONCURRENCY or batch_wait_ms < 0:
+        raise ValueError("Concurrency must be 1–8 and batch wait must be nonnegative")
+    if (
+        metadata
+        and metadata["kind"] == "generator"
+        and concurrency > metadata["max_examples"]
+    ):
+        raise ValueError("Concurrency exceeds the generator's trained context capacity")
     if metadata is not None:
         if patch_sources()["state"] != "patched":
             raise ValueError(
@@ -108,11 +119,13 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
         "served_model_name": args.served_model_name,
         "vllm_version": VLLM_VERSION,
         "model_runner": "V1",
-        "max_num_seqs": 1,
+        "max_num_seqs": concurrency,
+        "batching_policy": "fixed_shared_adapter" if concurrency > 1 else "serial",
+        "batch_wait_ms": batch_wait_ms,
         "max_model_len": args.max_model_len,
         "speculative_tokens": args.spec_tokens if args.spec_model else None,
         "gpu_memory_utilization": args.gpu_memory_utilization,
-        "deployment_context_size": 1 if kind == "generator" else None,
+        "deployment_context_size": concurrency if kind == "generator" else None,
         "seed": args.seed,
         "bundle_weights_sha256": metadata["weights_sha256"] if metadata else None,
         "source_job": metadata.get("source_job") if metadata else None,
@@ -148,11 +161,11 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
         "bfloat16",
         "--enforce-eager",
         "--max-num-seqs",
-        "1",
+        str(concurrency),
         "--max-model-len",
         str(args.max_model_len),
         "--max-num-batched-tokens",
-        str(args.max_model_len),
+        str(args.max_model_len * concurrency),
         "--tensor-parallel-size",
         "1",
         "--no-async-scheduling",
@@ -173,6 +186,15 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
         "--worker-extension-cls",
         WORKER_EXTENSION,
     ]
+    if concurrency > 1:
+        command.extend(
+            [
+                "--scheduler-cls",
+                "speculators.generator.serving.scheduler.FixedBatchScheduler",
+                "--scheduling-policy",
+                "fcfs",
+            ]
+        )
     if args.spec_model:
         speculative = {
             "model": args.spec_model,

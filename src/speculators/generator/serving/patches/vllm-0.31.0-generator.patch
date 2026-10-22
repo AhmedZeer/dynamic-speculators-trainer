@@ -11,7 +11,7 @@
      """The number of speculative tokens, if provided. It will default to the
 --- a/vllm/v1/spec_decode/eagle.py
 +++ b/vllm/v1/spec_decode/eagle.py
-@@ -20,3 +20,37 @@
+@@ -20,3 +20,38 @@
              pass_hidden_states_to_model=True,
              runner=runner,
          )
@@ -36,7 +36,8 @@
 +            from speculators.generator.serving.controller import prepare_proposer
 +
 +            prepare_proposer(
-+                self, kwargs["target_positions"], kwargs["target_hidden_states"]
++                self, kwargs["target_positions"], kwargs["target_hidden_states"],
++                kwargs.get("common_attn_metadata"),
 +            )
 +        return super().propose(*args, **kwargs)
 +
