@@ -1,0 +1,58 @@
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage[preprint]{icml2026}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{enumitem}
+\usepackage{url}
+\urlstyle{same}
+\newcommand{\recordstatus}[1]{\noindent\textbf{Status:} #1\par}
+\newcommand{\evidence}[1]{\noindent\textbf{Evidence:} #1\par}
+\input{generated/metadata}
+\icmltitlerunning{LoRA Generator Experimental Record}
+
+\begin{document}
+\twocolumn[
+  \icmltitle{Conditional LoRA Generators for EAGLE3:\\An Evolving Experimental Record}
+  \begin{icmlauthorlist}
+    \icmlauthor{Project Working Record}{project}
+  \end{icmlauthorlist}
+  \icmlaffiliation{project}{Internal experimental record, version \reportversion}
+  \icmlcorrespondingauthor{Project record}{\href{https://github.com/AhmedZeer/dynamic-speculators-trainer/issues}{repository issues}}
+  \icmlkeywords{speculative decoding, EAGLE3, LoRA, conditional generators, experimental record}
+  \vskip 0.3in
+]
+\printAffiliationsAndNotice{}
+\hypersetup{
+  pdftitle={Conditional LoRA Generators for EAGLE3: An Evolving Experimental Record},
+  pdfsubject={Working experimental record; evidence through \evidencedate},
+  pdfauthor={Project Working Record}
+}
+
+\begin{abstract}
+This document records ongoing experiments with a conditional generator that
+produces LoRA factors for an EAGLE3 drafter from sets of target hidden-state
+summaries. It describes the current training and serving interfaces, a supplied
+four-model throughput comparison on in-distribution and out-of-distribution
+workloads, activation-cache measurements, and an unresolved output-repeatability
+investigation. A fixed-batch shared-adapter serving implementation is recorded
+separately from its pending GPU measurements. Every experiment states its
+available evidence, execution status, and missing information. The document
+is extended on request and does not present final conclusions.
+\end{abstract}
+
+\input{sections/01_questions}
+\input{sections/02_method}
+\input{sections/03_setup}
+\input{sections/04_experiments}
+\input{sections/05_implementation}
+\input{sections/06_open_questions}
+\clearpage
+\appendix
+\small
+\input{sections/07_reproducibility}
+\end{document}

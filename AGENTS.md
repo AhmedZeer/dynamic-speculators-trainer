@@ -14,3 +14,11 @@ Training, eval, and vLLM-launch scripts write reproducibility artifacts so runs 
 **Always pass `--provenance-dir` when running `scripts/launch_vllm.py`** — point it at the associated run's output/checkpoint directory (e.g. `--provenance-dir <output_dir>`) so the vLLM provenance is co-located with the training/eval it belongs to.
 
 When publishing a model or eval results (HuggingFace, GitHub comments, etc.), always include the provenance artifacts (`train_command.txt`, `eval_command.txt`, `vllm_command.txt`, `checkpoint_sha256.txt`, `drafter_checkpoint_sha256.txt`, patches) so the run can be reproduced.
+
+## Reporting
+
+Keep Markdown experiment records as the working documentation. Update the
+LaTeX report under `reporting/` only when the user explicitly requests a report
+or an extension; do not generate daily or automatic reports. Follow
+`reporting/README.md`: distinguish measurements, implementation status, and open
+questions, preserve evidence limitations, and avoid final conclusions.

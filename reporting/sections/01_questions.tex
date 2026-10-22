@@ -1,0 +1,31 @@
+\section{Research Objectives and Questions}
+\label{sec:questions}
+
+We investigate a generator that maps a set of prompt summaries to one shared
+adapter for a frozen EAGLE3 drafter. The current comparison comprises the original
+drafter, a trained static LoRA, and two generator checkpoints described as trained
+on 24K examples. Older benchmark models are outside this comparison.
+
+The working questions are:
+\begin{enumerate}[leftmargin=*]
+  \item How do generator checkpoints behave relative to the original drafter and
+  a static trained adapter under a specified serving workload?
+  \item How do recorded measurements differ between Nemotron validation prompts
+  and selected Red Hat benchmark categories?
+  \item What changes when one generated adapter is shared by a fixed batch of
+  requests at different concurrencies?
+  \item What time and memory costs arise from obtaining and reusing target
+  activations during training?
+\end{enumerate}
+
+These questions remain open. A numerical table records an observation under its
+measurement conditions; it does not establish general superiority, statistical
+significance, lossless acceleration, or completion of a planned experiment.
+
+\subsection{Record Conventions}
+Experiment identifiers remain stable as evidence is appended. We use
+\emph{planned}, \emph{implemented}, \emph{partially measured}, \emph{measured}, and
+\emph{investigation deferred} as execution statuses. Evidence quality is stated
+separately: a measured value may still have incomplete provenance or no repetition.
+Dates distinguish receipt of evidence from execution when the latter is unknown.
+This version includes evidence available through \evidencedate.

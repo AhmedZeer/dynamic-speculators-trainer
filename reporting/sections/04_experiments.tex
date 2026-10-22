@@ -1,0 +1,97 @@
+\section{Experiments and Recorded Measurements}
+\label{sec:experiments}
+
+\subsection{GEN-003: Current Four-Model Throughput Record}
+\recordstatus{Measured; supplied summary, incomplete provenance.}
+\evidence{Suite \texttt{comparison-v2}; received 2026-10-22. Execution date
+not supplied. Tables are generated from the frozen JSON transcription.}
+
+\textbf{Question.} What throughput values were recorded for the four model
+variants on the selected in-distribution and out-of-distribution categories?
+
+\textbf{Setup.} The source is the suite owner's supplied
+\texttt{summary.md}. Tables~\ref{tab:nemotron} and~\ref{tab:redhat} preserve all
+28 reported measurements without adding older model rows. Step counts follow
+the supplied labels. Correctness was not checked. This record does not include
+the native per-request outputs, latency statistics, acceptance counters, or
+server provenance for this suite.
+
+\input{generated/throughput_tables}
+
+\textbf{Record notes.} The values are recorded separately by category and
+checkpoint. We do not pool categories into an overall score or infer a final
+model ranking. The checkpoint pair provides observations at two reported
+training stages, not a repeated or controlled causal estimate of additional
+training. The two tables do not establish output quality or a target-only
+decoding speedup.
+
+\textbf{Missing evidence.} Native GuideLLM results, effective configurations,
+hardware metadata, prompt fingerprints, checkpoint hashes, and repeated
+measurements remain to be attached to this suite record.
+
+\subsection{SYS-001: Cold and Warm Activation Reuse}
+\recordstatus{Measured; console timings transcribed in the cache record.}
+\evidence{Pilot logs received 2026-10-16; reported A100 80 GB, 400 validation
+payloads evaluated in context-4 groups.}
+
+\textbf{Question.} What stage wall times were observed before and after
+activation payloads were available in the shared RAM cache?
+
+\input{generated/cache_table}
+
+\textbf{Record notes.} The payloads occupied 16.81 GiB. Subsequent jobs in the
+same process reported initial validation passes of 19.99 and 16.86 seconds.
+The first pass includes extraction and startup effects, whereas the warm pass
+still performs generator/drafter evaluation. The difference is an end-to-end
+observation, not an isolated cache microbenchmark or inference speedup. In a
+direct-training pilot the cache reached 63.97 GiB, with 365 evictions and
+69.67 GiB final process RSS. Later prefetch and summary-cache changes have no
+separate GPU timing comparison in the evidence included here.
+
+\textbf{Missing evidence.} Repeated cold/warm trials with separated extraction,
+construction, transfer, and compute timings remain available follow-up work.
+
+\subsection{GEN-002: Output Repeatability Investigation}
+\recordstatus{Investigation deferred; exact sequence comparisons recorded.}
+\evidence{Local correctness reports summarized in the Markdown registry,
+observation dated 2026-10-21. Raw reports are not archived with this report.}
+
+\textbf{Question.} Were target-only and speculative outputs repeatable under
+the supplied prompt/settings fingerprints?
+
+On 50 Nemotron math prompts, original versus repeated target-only decoding
+matched exactly for 23/50 sequences; original versus repeated EAGLE3 decoding
+matched for 50/50. Repeated target-only versus repeated EAGLE3 matched for
+17/50. These are whole-sequence match counts, not token-error rates.
+
+\textbf{Record notes.} The cause remains unresolved. Runtime environment,
+numerical behavior, and decoding implementation differences have not been
+isolated. Current timing experiments explicitly record correctness as unchecked
+or unverified. No correctness claim is inferred from the throughput tables.
+
+\textbf{Missing evidence.} Preserve and compare complete runtime provenance and
+repeat a controlled reference experiment before making an exact-output claim.
+
+\subsection{BATCH-001: Shared-Adapter Concurrency Sweep}
+\recordstatus{Implemented; GPU measurements pending.}
+\evidence{Implementation revision \texttt{c0ee0e4}; CPU lifecycle and HTTP
+tests, plus an audit of the pinned vLLM hook upgrade.}
+
+\textbf{Question.} What measurements arise when a generator conditions one
+shared adapter on a fixed group at concurrency 1, 2, 4, or 8?
+
+\textbf{Planned measurement configuration.} Reuse the frozen category prompts
+for all model/concurrency variants. Record generated output tokens/s,
+speculative acceptance where available, request latency, actual mean batch size,
+and generator/merge/restoration costs. Keep the adapter fixed while a group
+drains. Original-drafter and static-LoRA variants use matching closed groups.
+
+\textbf{Available checks.} Tests cover packed prompt boundaries, one generator
+invocation per group, restoration after the last member, delayed HTTP cleanup,
+closed admission, partial groups, and suite resume across concurrency variants.
+The initial broader CPU/HTTP run passed 94 tests; a later focused run after
+controller refinements passed 50. These runs overlap and are not additive.
+
+\textbf{Pending evidence.} No A100 execution, batched throughput table,
+acceptance comparison, or memory measurement is supplied. CPU checks establish
+neither GPU compatibility under load nor a performance benefit.

@@ -1,0 +1,21 @@
+{
+  "record_id": "SYS-001",
+  "source": "docs/experiments/eagle3_activation_ram_cache.md",
+  "evidence": "Console measurements transcribed in the Markdown record; received 2026-10-16",
+  "examples": 400,
+  "evaluation_context": 4,
+  "hardware_reported": "A100 80 GB",
+  "payload_gib": 16.81,
+  "measurements_seconds": [
+    {"category": "Math", "first": 35.18, "warm": 6.25},
+    {"category": "Code", "first": 24.49, "warm": 5.47},
+    {"category": "STEM", "first": 15.53, "warm": 3.41},
+    {"category": "Chat", "first": 21.70, "warm": 4.93},
+    {"category": "All categories", "first": 96.90, "warm": 20.06}
+  ],
+  "limitations": [
+    "First pass includes activation extraction and startup effects.",
+    "This is not an isolated cache benchmark or a serving throughput measurement.",
+    "Later prefetch/summary-cache optimizations have no measured GPU comparison in this record."
+  ]
+}

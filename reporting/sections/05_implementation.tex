@@ -1,0 +1,40 @@
+\section{Implementation and Investigation Notes}
+\label{sec:implementation}
+
+\subsection{Activation Supply and Cache Lifetime}
+Training consumes local saved trajectories, with activations constructed on
+demand by an external vLLM extraction server. A bounded CPU cache retains full
+tensors, while prompt summaries can be reused separately. Cache capacity is
+not a cap on process RSS: temporary construction buffers, model state, and
+other allocations contribute additional memory. Persistent summaries,
+prefetching, and concurrency controls are implementation features; only the
+pilot timings in SYS-001 are treated as measurements here.
+
+\subsection{Checkpoint Publication and Recovery}
+The full-data training workflow supports local recovery and Hub snapshots
+containing generator weights, optimizer state, progress, RNG state, resolved
+configuration, and available provenance. Inference bundles can be downloaded
+without optimizer checkpoints. Recovery capability is recorded as workflow
+support; it does not demonstrate completion of the ten-epoch training plan.
+
+\subsection{Independent Serving and Benchmarking}
+The suite separates model serving from the GuideLLM client. It launches and
+cleans up owned server/client process groups, exports category workloads once,
+records attempt state, and can skip completed measurements with matching
+artifact checksums. Model type selects an original drafter, static-LoRA bundle,
+or generator bundle. Throughput can be measured without an additional
+correctness-generation pass; the absence of that pass is recorded explicitly.
+
+\subsection{Fixed-Batch Integration Boundaries}
+The new scheduler leaves vacant slots empty until a group finishes. It permits
+a partial group after a 50 ms collection window in the example configuration.
+The runtime rejects KV preemption or incomplete initial group admission rather
+than reuse draft cache entries under a different generated adapter. Larger
+concurrency also increases the prefill/profile token budget and may change
+GPU memory requirements. These are implementation constraints awaiting the
+GPU experiment in BATCH-001.
+
+Collection, queueing, uneven request completion, and partial tails are part of
+the measured serving protocol. Closed groups are not equivalent to unrestricted
+continuous batching. Batch membership may vary with arrival/completion order,
+even when the same prompt list is reused across model variants.

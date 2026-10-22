@@ -1,0 +1,7 @@
+{
+  "version": "01",
+  "evidence_through": "2026-10-22",
+  "implementation_revision": "c0ee0e4b7c59ff8ff6ee8c201e591dceb0589635",
+  "output_stem": "generator-experimental-record-2026-10-22-v01",
+  "update_policy": "Update only when explicitly requested; Markdown remains the working experiment record."
+}

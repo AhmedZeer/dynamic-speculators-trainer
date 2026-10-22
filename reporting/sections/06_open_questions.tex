@@ -1,0 +1,28 @@
+\section{Open Questions and Planned Evidence}
+\label{sec:open}
+
+This section is a work queue rather than a conclusion. Entries are retained or
+revised when new evidence arrives.
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Suite provenance.} Attach the native artifacts for
+  \texttt{comparison-v2}; resolve exact checkpoint progress, hardware,
+  concurrency, prompt identities, and effective serving settings.
+  \item \textbf{Repetition.} Repeat matched serving measurements to record
+  uncertainty rather than interpret small single-run differences.
+  \item \textbf{Batching.} Run BATCH-001 on the intended GPU. Check actual batch
+  sizes, memory, request completion/restoration, and acceptance before treating
+  it as a completed performance experiment.
+  \item \textbf{Reference behavior.} Continue GEN-002 when requested, separating
+  target-only repeatability from adapter-related behavior.
+  \item \textbf{Training progression.} Extend verified checkpoint observations
+  as snapshots become available. Do not infer later training outcomes from
+  the planned epoch schedule.
+  \item \textbf{Systems costs.} Separate activation extraction, preprocessing,
+  transfer, and training compute when a further timing study is commissioned.
+\end{enumerate}
+
+Future report versions should add measurements under the relevant stable
+identifier, or create a new identifier if the comparison protocol changes.
+Missing measurements remain missing; implementation status is not substituted
+for an experimental result.

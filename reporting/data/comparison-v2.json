@@ -1,0 +1,61 @@
+{
+  "record_id": "GEN-003",
+  "received_date": "2026-10-22",
+  "execution_date": null,
+  "suite": "comparison-v2",
+  "source": {
+    "type": "user_supplied_summary_markdown",
+    "path": "/content/drive/MyDrive/dyn-spec-bench-v1/suites/comparison-v2/summary.md",
+    "native_artifacts_archived": false
+  },
+  "metric": "aggregate_output_tokens_per_second",
+  "includes_prefill_and_serving_overhead": true,
+  "correctness_status": "not_checked",
+  "hardware": null,
+  "concurrency": null,
+  "seed": null,
+  "samples_per_category": null,
+  "workload_hashes": null,
+  "checkpoint_hashes": null,
+  "command_and_patch_provenance": null,
+  "checkpoint_steps_verified": false,
+  "training_data_size_verified": false,
+  "categories": {
+    "in_distribution": ["nemo-math", "nemo-code", "nemo-stem", "nemo-chat"],
+    "out_of_distribution": ["specbench-humaneval", "specbench-math-reasoning", "specbench-summarization"]
+  },
+  "models": [
+    {
+      "name": "eagle3-base",
+      "output_tokens_per_second": {
+        "nemo-math": 64.34, "nemo-code": 60.93, "nemo-stem": 59.28, "nemo-chat": 54.97,
+        "specbench-humaneval": 68.32, "specbench-math-reasoning": 66.55, "specbench-summarization": 58.29
+      }
+    },
+    {
+      "name": "trained-lora",
+      "output_tokens_per_second": {
+        "nemo-math": 72.50, "nemo-code": 64.79, "nemo-stem": 64.23, "nemo-chat": 56.35,
+        "specbench-humaneval": 67.24, "specbench-math-reasoning": 67.19, "specbench-summarization": 58.30
+      }
+    },
+    {
+      "name": "generator-24k-2000step",
+      "reported_training_examples": 24000,
+      "reported_optimizer_steps": 2000,
+      "output_tokens_per_second": {
+        "nemo-math": 77.58, "nemo-code": 68.11, "nemo-stem": 66.50, "nemo-chat": 57.58,
+        "specbench-humaneval": 69.24, "specbench-math-reasoning": 67.99, "specbench-summarization": 58.81
+      }
+    },
+    {
+      "name": "generator-4000step",
+      "reported_training_examples": 24000,
+      "reported_optimizer_steps": 4000,
+      "output_tokens_per_second": {
+        "nemo-math": 79.11, "nemo-code": 69.83, "nemo-stem": 67.92, "nemo-chat": 56.49,
+        "specbench-humaneval": 69.44, "specbench-math-reasoning": 68.32, "specbench-summarization": 58.69
+      }
+    }
+  ]
+}

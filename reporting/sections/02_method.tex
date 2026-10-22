@@ -1,0 +1,52 @@
+\section{Method and System Description}
+\label{sec:method}
+
+\subsection{Set-Conditioned Adapter Generation}
+The generator receives one summary per conditioning prompt, together with its
+prompt length. Current serving uses the hidden states at the last prompt token
+from the configured target layers. Prompt conditioning excludes response tokens.
+For a conditioning set $S=\{(h_i,\ell_i)\}_{i=1}^{n}$, a shared encoder produces
+representations $z_i$. The condition is constructed from their mean, population
+standard deviation, and the logarithm of the set size:
+\begin{equation}
+ c=F\!\left([\operatorname{mean}_i z_i,\,
+ \operatorname{std}_i z_i,\,\log(1+n)]\right).
+\end{equation}
+Module and layer descriptors are combined with $c$ before decoding full LoRA
+factors. For each adapted projection $p$, the resulting weight is
+\begin{equation}
+ W'_p=W_p+\frac{\alpha}{r}B_pA_p.
+\end{equation}
+The current implementation adapts the drafter's V and output projections.
+The set produces one adapter shared by its examples, rather than independent
+adapters for each example. Set conditioning therefore differs from the number
+of independently scheduled inference requests.
+
+\subsection{Training Interface}
+The target and base drafter remain frozen while generator parameters are
+optimized through generated factors. The current recipe uses
+\texttt{lk\_hybrid}, rank 32, and alpha 64. Conditioning-set sizes are sampled
+from 1--8; four episodes are accumulated per optimizer update in the documented
+recipe. Token-budget microbatches share the episode's factors. Context-4
+validation is a separate evaluation setting.
+
+Training replays saved prompt/response token trajectories through an external
+vLLM activation extractor. Only activations needed by the upcoming work are
+constructed, and CPU RAM retains reusable tensors within a bounded cache.
+The training pipeline does not require downloading the full activation dump.
+These describe the implementation and recipe, not verified configurations of
+every historical measurement.
+
+\subsection{Serial and Fixed-Batch Serving}
+Serial serving conditions one adapter on one prompt. The new fixed-batch mode
+collects a closed group, obtains all prompt summaries from full target prefill,
+generates one adapter, and merges it into the shared drafter before draft
+prefill. The weights remain fixed until all group members finish or are aborted.
+New requests cannot replace members that finish early. A subsequent group
+receives its own adapter after the previous group ends.
+
+The configured concurrency is a capacity, not a guarantee of actual batch size.
+A collection timeout permits partial groups, including the final workload tail.
+Original-drafter and static-LoRA baselines use the same closed admission policy
+in the new sweep. Static LoRA uses a permanent merge. No GPU throughput or
+acceptance result for this batching policy is included in this version.

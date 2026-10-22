@@ -1,0 +1,73 @@
+\section{Evidence Registry and Reproducibility}
+
+\subsection{Source Registry}
+Repository paths below identify the working records. The report's build manifest
+records hashes of the source files available when this PDF was built.
+\begin{description}[leftmargin=0pt]
+  \item[GEN-003] \path{docs/experiments/results/GEN-003-generator-suite-throughput.md};
+  the copied numeric source is \path{reporting/data/comparison-v2.json}.
+  \item[SYS-001] \path{docs/experiments/eagle3_activation_ram_cache.md}; the copied
+  timing source is \path{reporting/data/cache-pilot.json}.
+  \item[GEN-002] \path{docs/experiments/results/GEN-002-http-token-equality.md}.
+  \item[BATCH-001] \path{docs/experiments/eagle3_benchmark_suite.md} and
+  \path{docs/experiments/eagle3_generator_http.md}; implementation revision
+  \path{c0ee0e4b7c59ff8ff6ee8c201e591dceb0589635}.
+  \item[Training] \path{docs/experiments/eagle3_generator.md},
+  \path{docs/experiments/eagle3_generator_campaign_online.md}, and
+  \path{docs/experiments/eagle3_generator_full_data.md}.
+  \item[Datasets] \path{docs/experiments/speculator_benchmarks_inventory.md}.
+\end{description}
+
+The historical data-size ablation is preserved separately as GEN-001 in the
+Markdown registry. Its qualitative screenshots and missing provenance have not
+been converted into additional numerical claims or added model rows here.
+Retired approaches remain outside this report's current model comparison.
+
+\subsection{Reference Revisions and Artifact Requirements}
+The documented target reference is Qwen/Qwen3-8B at
+\path{b968826d9c46dd6066d109eabc6255188de91218}; the original drafter reference
+is RedHatAI/Qwen3-8B-speculator.eagle3 at
+\path{08610ffa01dd9f16731fe8f627b85905b6aa51c4}. The inspected Red Hat dataset
+revision is \path{2ae86affa2cb97a972b7fc681dd51c04fbff083e}.
+These reference revisions do not replace missing per-run checkpoint hashes.
+
+Publishing an experiment requires its available training/evaluation/serving
+commands, resolved configurations, model hashes, package/runtime details, and
+source patches. Native GuideLLM outputs and workload manifests should accompany
+performance records. This report contains a summary-level transcription for
+GEN-003; it does not claim to include those missing run artifacts.
+
+\noindent\begin{minipage}{\columnwidth}
+\subsection{Commands and Manual Update Policy}
+The shared-batch experiment is launched after updating the pinned vLLM hook:
+\begingroup\footnotesize
+\begin{verbatim}
+python \
+  scripts/apply_vllm_generator_patch.py \
+  --apply
+BENCH_CONFIG=examples/eagle3-lora/\
+benchmark_suite.yaml
+speculators benchmark suite \
+  --config "$BENCH_CONFIG" \
+  --output-root output/shared-batch-v1
+\end{verbatim}
+\endgroup
+\end{minipage}
+
+These are workflow commands, not a claim that this report's throughput tables
+were produced by that new batch configuration. Actual launch commands must be
+read from the associated run provenance. Use a persistent output directory on
+Colab. Every server launch must pass \verb|--provenance-dir|; the suite supplies
+this automatically.
+
+Report updates occur only on explicit request. Markdown remains the working
+experiment record. Before extending a report, freeze new input measurements,
+update statuses and evidence dates, preserve earlier snapshots, and regenerate
+tables from their numeric sources. New compiler build timestamps do not change
+the evidence cutoff.
+
+\section{Report Change History}
+\textbf{Version 01, 2026-10-22.} Initial experimental record: current four-model
+in-/out-of-distribution tables, cache pilot timings, deferred repeatability
+investigation, and pending shared-batch GPU measurements. No final conclusions
+are asserted.
