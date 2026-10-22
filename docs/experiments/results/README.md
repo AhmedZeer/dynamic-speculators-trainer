@@ -9,6 +9,7 @@ explain when new evidence changes them.
 | --- | --- | --- | --- |
 | GEN-001 | [Direct generator training: data pool size](GEN-001-direct-data-scaling.md) | Preliminary; one seed, visual evidence | Similar context-4 validation agreement and losses for 4K, 8K, and 16K training pools at 1,500 updates. |
 | GEN-002 | [HTTP token equality and repeatability](GEN-002-http-token-equality.md) | Failed exact equality; investigation deferred | Target-only repeat differs on 27/50 prompts; EAGLE3 repeat matches 50/50. Timing experiments proceed with an explicit correctness override. |
+| GEN-003 | [Generator suite throughput: in-/out-of-distribution](GEN-003-generator-suite-throughput.md) | Preliminary; supplied suite summary | Four-model comparison: generator gains are larger on Nemotron math/code/STEM than on the selected Red Hat categories. |
 
 Use [the results template](TEMPLATE.md) for further experiments. Report the
 comparison budget, validation membership, evidence quality, limitations, and

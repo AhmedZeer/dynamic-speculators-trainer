@@ -17,6 +17,24 @@ Generator conditioning uses the current prompt alone (context 1). Training still
 uses contexts 1–8 and its existing context-4 validation. No training changes or
 activation downloads are needed.
 
+### Why generator serving currently uses one active request
+
+Training contexts of 1–8 examples are pooled into **one** conditioning vector
+and produce one shared adapter, rather than one adapter per example. The
+deployment runtime generates an adapter from each request's own prompt, then
+copies the merged V/O weights into the shared drafter. It restores those weights
+when the request finishes. Two simultaneous requests needing different adapters
+cannot use that same merged weight tensor correctly. The controller therefore
+enforces one active request and the launcher sets `max_num_seqs=1`.
+
+Concurrent generator serving would require request-indexed adapter factors and
+adapter-aware draft projection operations, plus correct request/token mappings
+and KV-cache lifecycle handling. Increasing the sequence limit alone cannot
+provide this. Sharing one adapter across a group of requests is a different
+conditioning policy that needs a separate evaluation. The static LoRA uses one
+permanent merge; its current concurrency limit also follows the matched serial
+benchmark configuration.
+
 ## Environment and validation workload
 
 ### Direct throughput without a correctness run

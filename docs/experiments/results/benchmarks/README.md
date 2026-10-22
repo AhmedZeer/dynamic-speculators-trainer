@@ -1,5 +1,10 @@
 # Generation benchmark archive
 
+The current four-model `comparison-v2` tables are recorded in
+[GEN-003](../GEN-003-generator-suite-throughput.md), with separate Nemotron
+in-distribution and Red Hat out-of-distribution tables and
+[structured metrics](2026-10-22-comparison-v2/metrics.json).
+
 The [complete nemoall50 comparison](2026-10-21-nemoall50/README.md) contains
 the EAGLE3/LoRA/generator table across math, code, stem, and chat, with full native
 measurement files and available provenance archived alongside it. These are new
