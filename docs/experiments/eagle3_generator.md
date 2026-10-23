@@ -131,6 +131,13 @@ epoch-one scores, and their differences.
 
 ### Preliminary adaptation observations (2026-10-07)
 
+**2026-10-23 update:** Bank reconstruction warmup is retired; current generator
+training uses the original examples directly with the drafting loss. See
+[GEN-004](results/GEN-004-bank-warmup-adaptation.md) for the new supplied image,
+observations, and rationale. Its endpoint scale differs from the approximate
+older transcription below; retain these as separate visual records pending raw
+exports, rather than combining their numerical readings.
+
 The user-provided W&B screenshots show one-epoch adaptation on math-00001,
 with `last` conditioning, experiment seed 42, and training context sizes 1–8.
 The validation panel below is specifically for context size 8. Values are

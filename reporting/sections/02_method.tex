@@ -22,13 +22,50 @@ The set produces one adapter shared by its examples, rather than independent
 adapters for each example. Set conditioning therefore differs from the number
 of independently scheduled inference requests.
 
+\subsection{Generator Architecture}
+The generator is a full-factor hypernetwork: its outputs are the adapter's
+actual matrices, rather than indices into a stored adapter bank. For a prompt
+summary of dimension $d_h$, the shared example encoder takes
+$[h_i,\log(1+\ell_i)]$ through a $(d_h+1)\!\rightarrow\!512$ linear layer,
+GELU, a $512\!\rightarrow\!128$ layer, and LayerNorm. Pooling the 128-dimensional
+mean and population standard deviation with $\log(1+n)$ gives 257 features.
+A $257\!\rightarrow\!128\!\rightarrow\!64$ MLP with GELU produces the condition.
+Pooling makes the result invariant to the ordering of conditioning examples;
+the count feature distinguishes different set sizes.
+
+Each projection has a learned 32-dimensional module descriptor, alongside a
+32-dimensional layer descriptor. In the current single-layer drafter the layer
+embedding has one entry. Concatenating both with the condition gives 128
+features. A shared linear layer and GELU expand these to width 512, followed by
+two residual MLP blocks. Each block applies LayerNorm, linear, GELU, and linear
+before adding its input back.
+
+Separate linear output heads for each projection produce
+$A_p\in\mathbb{R}^{r\times d_{\mathrm{in},p}}$ and
+$B_p\in\mathbb{R}^{d_{\mathrm{out},p}\times r}$.
+The rank-32 generator used in the recorded logs has approximately 293 million
+parameters; the large full-factor heads dominate its size. The bottleneck
+condition is shared, while the factors depend on the projection descriptor.
+Initially the head weights are zero, the A biases receive Kaiming initialization,
+and the B biases are zero, so the initial adapter update is zero.
+
+This structure gives one representative LoRA for a conditioning set. An ordinary
+LoRA baseline instead learns one persistent pair of factors per projection.
+The generator's larger trainable capacity is a confound when comparing these
+approaches; matching rank alone does not match trainable parameter count.
+Architecture dimensions above follow the inspected implementation defaults;
+per-run configuration artifacts are needed to confirm historical overrides.
+
 \subsection{Training Interface}
 The target and base drafter remain frozen while generator parameters are
 optimized through generated factors. The current recipe uses
 \texttt{lk\_hybrid}, rank 32, and alpha 64. Conditioning-set sizes are sampled
 from 1--8; four episodes are accumulated per optimizer update in the documented
 recipe. Token-budget microbatches share the episode's factors. Context-4
-validation is a separate evaluation setting.
+validation is a separate evaluation setting. Gradients from the drafter loss
+flow through the generated A/B factors into the encoder, decoder, and output
+heads. Thus the generator learns adapters that serve the drafting objective
+directly, without requiring a previously trained adapter as a target.
 
 Training replays saved prompt/response token trajectories through an external
 vLLM activation extractor. Only activations needed by the upcoming work are

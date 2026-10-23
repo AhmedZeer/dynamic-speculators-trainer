@@ -101,3 +101,23 @@ completed benchmark.
 ## Updates
 
 - 2026-10-19: Initial qualitative result recorded from supplied W&B screenshots.
+
+### 2026-10-23 — Ordinary LoRA included in the scaling comparison
+
+![Fixed-update generator scaling and ordinary LoRA](assets/GEN-001-scaling-with-lora-2026-10-23.png)
+
+The newly supplied composite includes `scale-1-lora-gseed42` alongside all three
+generator scales. The intended baseline is ordinary LoRA on the 4K pool at the
+same 1,500-update budget; historical resolved configs remain unavailable to
+verify every matched setting. Generator agreement curves still largely overlap.
+Ordinary LoRA improves more slowly and finishes visibly lower on math, code,
+and STEM; the chat gap is smaller. Training loss is noisy, with lower final
+generator trends. These are qualitative readings, not new exported measurements.
+
+The observation supports limited sensitivity to pool size **at this update
+budget and on this split**, rather than a general claim that data quantity is
+unimportant. Epochs, processed tokens, compute, and wall time are not matched.
+The generator has substantially more trainable parameters than ordinary LoRA,
+so this comparison does not isolate conditioning from model capacity.
+This is a training ablation; it does not restore the retired scale-1 generator
+row to the current four-model serving comparison.

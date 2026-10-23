@@ -4,6 +4,12 @@
 Repository paths below identify the working records. The report's build manifest
 records hashes of the source files available when this PDF was built.
 \begin{description}[leftmargin=0pt]
+  \item[GEN-001] \path{docs/experiments/results/GEN-001-direct-data-scaling.md};
+  scaling screenshot copied unchanged into \path{reporting/assets/}.
+  \item[GEN-004] \path{docs/experiments/results/GEN-004-bank-warmup-adaptation.md};
+  adaptation screenshot copied unchanged into \path{reporting/assets/}.
+  \item[Architecture] \path{src/speculators/generator/model.py} and
+  \path{src/speculators/generator/config.py}, included in the source snapshot.
   \item[GEN-003] \path{docs/experiments/results/GEN-003-generator-suite-throughput.md};
   the copied numeric source is \path{reporting/data/comparison-v2.json}.
   \item[SYS-001] \path{docs/experiments/eagle3_activation_ram_cache.md}; the copied
@@ -18,10 +24,12 @@ records hashes of the source files available when this PDF was built.
   \item[Datasets] \path{docs/experiments/speculator_benchmarks_inventory.md}.
 \end{description}
 
-The historical data-size ablation is preserved separately as GEN-001 in the
-Markdown registry. Its qualitative screenshots and missing provenance have not
-been converted into additional numerical claims or added model rows here.
-Retired approaches remain outside this report's current model comparison.
+Historical training ablations appear separately from the four-model serving
+comparison. Screenshots preserve qualitative evidence without inventing raw
+metric exports. Bank reconstruction is retained as a historical decision record,
+not as an active experiment. The supplied adaptation image has a different
+endpoint scale from the older approximate transcription; numerical readings
+from these records are not pooled.
 
 \subsection{Reference Revisions and Artifact Requirements}
 The documented target reference is Qwen/Qwen3-8B at
@@ -71,3 +79,8 @@ the evidence cutoff.
 in-/out-of-distribution tables, cache pilot timings, deferred repeatability
 investigation, and pending shared-batch GPU measurements. No final conclusions
 are asserted.
+
+\textbf{Version 02, 2026-10-23.} Retitled \emph{Dynamic Speculators}; expanded
+the generator architecture; added fixed-update data scaling with the ordinary
+LoRA baseline and the adaptation figure; recorded the decision to retire bank
+warmup in favor of direct drafting-loss training. Version 01 is preserved.

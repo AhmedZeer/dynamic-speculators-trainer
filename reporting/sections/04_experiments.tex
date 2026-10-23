@@ -1,6 +1,111 @@
 \section{Experiments and Recorded Measurements}
 \label{sec:experiments}
 
+\subsection{GEN-001: Data Scaling at Fixed Optimizer Budget}
+\recordstatus{Preliminary; single-seed visual evidence.}
+\evidence{W\&B screenshots, including the comparison with ordinary LoRA supplied
+2026-10-23. Raw metric exports and immutable run configurations are unavailable.}
+
+\textbf{Question.} Does more training data improve validation agreement within
+the same number of optimizer updates?
+
+\textbf{Setup.} The direct generator arms use nested pools of 4K, 8K, and 16K
+examples: one, two, or four subsets per domain across math, code, STEM, and chat.
+All three run for 1,500 updates with seed 42. The documented recipe uses
+\texttt{lk\_hybrid}, four episodes per update, training context sizes 1--8,
+rank 32, alpha 64, and an 8,192-token microbatch budget. AdamW uses learning
+rate $10^{-4}$, weight decay 0.01, gradient clipping 0.85, and 100 learning-rate
+warmup updates. This scheduler warmup is distinct from bank reconstruction.
+Validation uses 100 held-out rows per domain from subset 00000, grouped at
+context size 4, every 250 updates including updates 0 and 1,500.
+The additional curve is labeled \texttt{scale-1-lora-gseed42}; its intended
+comparison is ordinary LoRA trained on the 4K pool at the same update budget.
+Historical configuration artifacts are needed to verify all matched settings.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{assets/GEN-001-scaling-with-lora-2026-10-23.png}
+\caption{GEN-001: supplied training-loss and domain-validation plots. The three
+direct generator arms use 4K, 8K, and 16K training examples with the same
+1,500-update budget. Ordinary scale-1 LoRA is included as a training baseline.
+Agreement is an offline validation metric, not measured serving acceptance.
+Curves are visual evidence; no raw values or uncertainty estimates are supplied.}
+\label{fig:scaling}
+\end{figure*}
+
+\textbf{Observed behavior.} In Figure~\ref{fig:scaling}, generator validation
+curves largely overlap across data scales. Most improvement occurs early, with
+smaller gains thereafter. The ordinary LoRA curve improves more slowly and
+finishes visibly below the generators on math, code, and STEM. Chat differences
+are smaller, with a late dip in the scale-1 generator curve. Training loss is
+noisy, while the generator trends finish below the ordinary LoRA trend.
+
+\textbf{Working interpretation.} On this split, seed, and update budget, pool
+size has a small observed effect compared with the gain from training itself.
+Increasing available data fourfold does not produce a correspondingly large
+validation gain in these curves. This is a fixed-update comparison: it neither
+matches epochs nor guarantees equal processed tokens, compute, or wall time.
+Larger pools receive less average reuse. The result therefore motivates asking
+whether longer training or broader validation would reveal additional data
+benefits, rather than concluding that data quantity is generally unimportant.
+
+\textbf{Limits.} Validation rows are held out, but their subset identity is
+represented in every training pool. One seed and screenshots cannot establish
+statistical equivalence or a precise ranking. Generator versus LoRA differences
+also include the much larger generator parameter count. These training curves
+do not add an older generator row to the current serving benchmark tables.
+
+\subsection{GEN-004: Bank Warmup and the Direct-Training Decision}
+\recordstatus{Preliminary adaptation observation; bank workflow retired.}
+\evidence{Adaptation screenshot supplied 2026-10-23; historical protocol recorded
+in the 2026-10-07 working notes. Exact execution date and raw exports unavailable.}
+
+\textbf{Question.} Does reconstructing previously trained bank LoRAs provide a
+useful lasting advantage over training a fresh generator on the original data?
+
+\textbf{Setup.} The historical study adapts four initializations on
+\texttt{math-00001}: a bank-pretrained generator, a fresh generator, a transferred
+ordinary LoRA, and a fresh ordinary LoRA. The recorded protocol uses seed 42,
+last-token conditioning, training context sizes 1--8, and one adaptation epoch.
+The supplied plot spans roughly 200 optimizer updates and evaluates context 8;
+this is distinct from GEN-001's context-4 validation. Both generator arms are
+optimized through the drafter loss during adaptation.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{assets/GEN-004-adaptation-2026-10-23.png}
+\caption{GEN-004: supplied adaptation curves for pretrained/fresh generators and
+transferred/fresh ordinary LoRAs. Bank pretraining improves the starting point,
+but the fresh generator reaches a similar final context-8 validation loss.
+The displayed comparison does not match total pretraining-plus-adaptation cost.}
+\label{fig:adaptation}
+\end{figure*}
+
+\textbf{Observed behavior.} The pretrained generator starts at a lower
+validation loss than the fresh generator. By the end of the displayed adaptation,
+the two generator validation curves meet at a similar loss. The transferred
+ordinary LoRA changes little, while the fresh ordinary LoRA improves but remains
+above the generators. Figure~\ref{fig:adaptation} therefore shows an initialization
+benefit from bank warmup without an observed final-loss advantage at this budget.
+
+\textbf{Design decision.} We retired the LoRA-bank approach as unhelpful for the
+current workflow. We use the original examples directly to train the generator
+with the drafting loss. Bank reconstruction first turns those examples into
+trained LoRA factors and then asks the generator to reproduce that proxy.
+Direct training optimizes the desired drafting objective itself and removes
+both bank construction and proxy reconstruction from the workflow. The observed
+fresh-generator catch-up supports choosing this simpler route; no further bank
+experiments are part of the current plan.
+
+\textbf{Scope of the claim.} Direct training is the chosen, more useful approach
+for this project, rather than a demonstrated universal ordering of the methods.
+This adaptation study is not a matched-total-budget comparison of using the same
+examples for bank warmup versus direct pretraining. It also mixes conditioning
+and parameter-capacity differences between generators and ordinary LoRA. Raw
+metrics, repeated seeds, and complete historical provenance are missing.
+We retain the new screenshot without reusing approximate endpoint values from
+older screenshots in the working notes.
+
 \subsection{GEN-003: Current Four-Model Throughput Record}
 \recordstatus{Measured; supplied summary, incomplete provenance.}
 \evidence{Suite \texttt{comparison-v2}; received 2026-10-22. Execution date

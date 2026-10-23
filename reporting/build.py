@@ -62,7 +62,7 @@ def table(caption, label, headings, rows):
 
 
 def prepare(work, metadata):
-    for name in ("main.tex", "sections", "data"):
+    for name in ("main.tex", "sections", "data", "assets"):
         source = ROOT / name
         if source.is_dir():
             shutil.copytree(source, work / name, dirs_exist_ok=True)
@@ -196,6 +196,12 @@ def main():
             "examples/eagle3-lora/generator_campaign_online.yaml",
             "examples/eagle3-lora/generator_training_recipe.yaml",
             "examples/eagle3-lora/benchmark_suite.yaml",
+            "src/speculators/generator/model.py",
+            "src/speculators/generator/config.py",
+            "docs/experiments/results/GEN-001-direct-data-scaling.md",
+            "docs/experiments/results/GEN-004-bank-warmup-adaptation.md",
+            "docs/experiments/results/assets/GEN-001-scaling-with-lora-2026-10-23.png",
+            "docs/experiments/results/assets/GEN-004-adaptation-2026-10-23.png",
             "docs/experiments/results/GEN-003-generator-suite-throughput.md",
             "docs/experiments/results/README.md",
             "docs/experiments/results/GEN-002-http-token-equality.md",
@@ -223,7 +229,8 @@ def main():
             "--",
             "reporting",
             "AGENTS.md",
-            "docs/experiments/results/README.md",
+            "docs/experiments/results",
+            "docs/experiments/eagle3_generator.md",
             ":(exclude)reporting/reports",
         )
     )

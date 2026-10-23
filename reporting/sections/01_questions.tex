@@ -4,10 +4,14 @@
 We investigate a generator that maps a set of prompt summaries to one shared
 adapter for a frozen EAGLE3 drafter. The current comparison comprises the original
 drafter, a trained static LoRA, and two generator checkpoints described as trained
-on 24K examples. Older benchmark models are outside this comparison.
+on 24K examples. Older benchmark models are outside this serving comparison. Historical training
+ablations are recorded separately: fixed-update data scaling and the decision
+to discontinue bank-based generator warmup.
 
 The working questions are:
 \begin{enumerate}[leftmargin=*]
+  \item How sensitive is generator validation behavior to training-pool size
+  under a fixed optimizer-update budget?
   \item How do generator checkpoints behave relative to the original drafter and
   a static trained adapter under a specified serving workload?
   \item How do recorded measurements differ between Nemotron validation prompts

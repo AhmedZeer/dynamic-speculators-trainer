@@ -13,11 +13,11 @@
 \newcommand{\recordstatus}[1]{\noindent\textbf{Status:} #1\par}
 \newcommand{\evidence}[1]{\noindent\textbf{Evidence:} #1\par}
 \input{generated/metadata}
-\icmltitlerunning{LoRA Generator Experimental Record}
+\icmltitlerunning{Dynamic Speculators}
 
 \begin{document}
 \twocolumn[
-  \icmltitle{Conditional LoRA Generators for EAGLE3:\\An Evolving Experimental Record}
+  \icmltitle{Dynamic Speculators}
   \begin{icmlauthorlist}
     \icmlauthor{Project Working Record}{project}
   \end{icmlauthorlist}
@@ -28,7 +28,7 @@
 ]
 \printAffiliationsAndNotice{}
 \hypersetup{
-  pdftitle={Conditional LoRA Generators for EAGLE3: An Evolving Experimental Record},
+  pdftitle={Dynamic Speculators},
   pdfsubject={Working experimental record; evidence through \evidencedate},
   pdfauthor={Project Working Record}
 }
@@ -36,7 +36,9 @@
 \begin{abstract}
 This document records ongoing experiments with a conditional generator that
 produces LoRA factors for an EAGLE3 drafter from sets of target hidden-state
-summaries. It describes the current training and serving interfaces, a supplied
+summaries. It details the set encoder, shared decoder, and full-factor output
+heads, and records fixed-update data scaling and the decision to retire
+LoRA-bank warmup. It describes the training and serving interfaces, a supplied
 four-model throughput comparison on in-distribution and out-of-distribution
 workloads, activation-cache measurements, and an unresolved output-repeatability
 investigation. A fixed-batch shared-adapter serving implementation is recorded
