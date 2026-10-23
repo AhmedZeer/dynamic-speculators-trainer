@@ -467,6 +467,65 @@ def test_suite_concurrency_sweep_separates_results_and_resumes(fake_suite):
     assert len(case.marker.read_text().splitlines()) == 8
 
 
+def test_add_concurrency_reuses_serial_results_without_launching_serial_servers(
+    fake_suite,
+):
+    case = fake_suite
+    suite.run_suite(case.config, case.output)
+    # Simulate artifacts created before concurrency-sweep fields existed.
+    saved_request = json.loads((case.output / "suite_request.json").read_text())
+    saved_request["settings"].pop("concurrencies")
+    saved_request["settings"].pop("batch_wait_ms")
+    write_json(case.output / "suite_request.json", saved_request)
+    saved_plan = json.loads((case.output / "suite.json").read_text())
+    for model in saved_plan["models"]:
+        model.pop("base_name")
+        model.pop("concurrency")
+    write_json(case.output / "suite.json", saved_plan)
+    original = json.loads((case.output / "state.json").read_text())
+    entry = original["tasks"]["base/nemotron/nemo-math"]
+    paths = {name: (case.output / name).read_bytes() for name in entry["checksums"]}
+    config = yaml.safe_load(case.config.read_text())
+    config["settings"]["concurrencies"] = [1, 2]
+    case.config.write_text(yaml.safe_dump(config))
+    result = suite.run_suite(case.config, case.output, resume=True)
+    assert result["completed"] == 8
+    assert result["failed"] == 0
+    assert case.launches == ["base", "other", "base-c2", "other-c2"]
+    assert len(case.marker.read_text().splitlines()) == 8
+    state = json.loads((case.output / "state.json").read_text())
+    reused = state["tasks"]["base-c1/nemotron/nemo-math"]
+    assert "base/nemotron/nemo-math" not in state["tasks"]
+    assert reused["output"] == entry["output"]
+    assert reused["checksums"] == entry["checksums"]
+    assert reused["reused_from_task"] == "base/nemotron/nemo-math"
+    assert all(
+        (case.output / name).read_bytes() == contents
+        for name, contents in paths.items()
+    )
+    archives = list((case.output / "suite_attempts").glob("*/previous_state.json"))
+    assert len(archives) == 1
+    assert json.loads(archives[0].read_text()) == original
+    suite.run_suite(case.config, case.output, resume=True)
+    assert len(case.launches) == 4
+    config["settings"]["max_tokens"] = 128
+    case.config.write_text(yaml.safe_dump(config))
+    with pytest.raises(ValueError, match="identical models, datasets"):
+        suite.run_suite(case.config, case.output, resume=True)
+
+
+def test_resume_rejects_removing_concurrency():
+    previous = {
+        "models": [{"name": "base", "type": "drafter", "model": "owner/model"}],
+        "benchmarks": [{"dataset": "nemotron"}],
+        "settings": {"concurrencies": [1, 2]},
+    }
+    config = Suite.model_validate(previous)
+    config.settings.concurrencies = [1]
+    with pytest.raises(ValueError, match="adding concurrency"):
+        suite.validate_resume_request(previous, config)
+
+
 def test_suite_client_failure_continues_then_resume_retries_only_failure(
     fake_suite, monkeypatch, capsys
 ):

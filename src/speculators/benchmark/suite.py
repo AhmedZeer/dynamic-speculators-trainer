@@ -3,6 +3,7 @@
 import csv
 import json
 import os
+import shutil
 import sys
 import tempfile
 import time
@@ -152,6 +153,58 @@ def valid_completed(output_root, entry):
         (output_root / name).is_file() and file_digest(output_root / name) == sha
         for name, sha in entry["checksums"].items()
     )
+
+
+def validate_resume_request(previous, config):
+    """Allow additive concurrency sweeps, keeping all other settings fixed."""
+    saved = Suite.model_validate(previous)
+    old, new = saved.model_dump(mode="json"), config.model_dump(mode="json")
+    for request in (old, new):
+        request["settings"].pop("concurrency")
+        request["settings"].pop("concurrencies")
+    if old != new or not set(saved.settings.concurrency_values) <= set(
+        config.settings.concurrency_values
+    ):
+        raise ValueError(
+            "Suite configuration changed; resume only permits adding concurrency "
+            "values with identical models, datasets, and other settings"
+        )
+
+
+def migrate_serial_tasks(state, models, previous_models):
+    """Relabel legacy C=1 tasks; retain original artifact paths and checksums."""
+    legacy_names = {
+        model["name"]
+        for model in previous_models
+        if model.get("concurrency", 1) == 1
+        and model["name"] == model.get("base_name", model["name"])
+    }
+    renames = {
+        model["base_name"]: model["name"]
+        for model in models
+        if model["concurrency"] == 1
+        and model["name"] != model["base_name"]
+        and model["base_name"] in legacy_names
+    }
+    updated = {}
+    for old_key, saved_entry in state["tasks"].items():
+        entry = saved_entry
+        name, _, suffix = old_key.partition("/")
+        new_key = old_key
+        if name in renames and not entry.get("reused_from_task"):
+            name = renames[name]
+            new_key = name + "/" + suffix
+            entry = {
+                **entry,
+                "key": new_key,
+                "model": name,
+                "reused_from_task": old_key,
+            }
+            report(f"Reusing serial task {old_key} as {new_key}; artifacts unchanged")
+        if new_key in updated:
+            raise ValueError(f"Ambiguous saved serial tasks: {old_key}, {new_key}")
+        updated[new_key] = entry
+    state["tasks"] = updated
 
 
 def write_summary(output, plan, state):
@@ -442,21 +495,27 @@ def run_suite(config_path, output_root, *, resume=False, dry_run=False):  # noqa
     ):
         request = config.model_dump(mode="json")
         request_path = output / "suite_request.json"
+        previous = None
         if request_path.exists():
             if not resume:
                 raise FileExistsError(
                     "Suite output exists; use --resume or a new output root"
                 )
-            if (
-                Suite.model_validate(json.loads(request_path.read_text())).model_dump(
-                    mode="json"
-                )
-                != request
-            ):
-                raise ValueError("Suite configuration changed; use a new output root")
-        write_json(request_path, request)
+            previous = json.loads(request_path.read_text())
+            validate_resume_request(previous, config)
         attempt_dir = output / "suite_attempts" / str(time.time_ns())
         attempt_dir.mkdir(parents=True)
+        if previous is not None and previous != request:
+            for name in (
+                "suite_request.json",
+                "suite.json",
+                "state.json",
+                "campaign_configuration.json",
+            ):
+                if (output / name).exists():
+                    shutil.copy2(output / name, attempt_dir / ("previous_" + name))
+            report(f"Preserved previous suite configuration/state in {attempt_dir}")
+        write_json(request_path, request)
         save_provenance(attempt_dir)
         settings = config.settings
         campaign_path = (
@@ -565,12 +624,19 @@ def run_suite(config_path, output_root, *, resume=False, dry_run=False):  # noqa
             "workloads": workloads,
         }
         plan["identity"] = digest(plan)
-        write_json(output / "suite.json", plan)
-        write_json(output / "campaign_configuration.json", cfg.model_dump(mode="json"))
+        prior_plan = (
+            json.loads((output / "suite.json").read_text())
+            if (output / "suite.json").exists()
+            else {"models": []}
+        )
         state_path = output / "state.json"
         state = (
             json.loads(state_path.read_text()) if state_path.exists() else {"tasks": {}}
         )
+        migrate_serial_tasks(state, models, prior_plan["models"])
+        write_json(state_path, state)
+        write_json(output / "suite.json", plan)
+        write_json(output / "campaign_configuration.json", cfg.model_dump(mode="json"))
         for model in models:
             for benchmark, workload in workloads.items():
                 for category in workload["groups"]:

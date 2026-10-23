@@ -21,7 +21,8 @@ attempt directory. A completed suite resumes without launching any servers.
 
 `--dry-run` validates and prints the configuration without downloads, exports,
 or processes. It does not check Hub availability, model compatibility, or GPU
-capacity. Changing the suite configuration requires a new output root.
+capacity. Adding concurrency values is supported with `--resume`; other
+configuration changes require a new output root.
 
 ## Model entries
 
@@ -89,7 +90,25 @@ settings:
 `concurrencies` overrides the single `concurrency` setting. Omit it and use
 `concurrency: 1` to retain serial-only behavior. Values must be distinct and
 between 1 and 8, and a generator's capacity must cover the chosen value.
-Start a new output root when changing the sweep configuration.
+You can extend an existing serial suite by adding concurrency values and using
+its original output root with `--resume`:
+
+```bash
+speculators benchmark suite \
+  --config examples/eagle3-lora/benchmark_suite.yaml \
+  --output-root /content/drive/MyDrive/dyn-spec-bench-v1/suites/comparison-v2 \
+  --resume
+```
+
+Keep model names/repositories/checkpoints, datasets/categories, and all other
+settings identical to the saved request. Completed C=1 entries are relabeled
+`-c1` in state and tables; original artifact paths, checksums, and provenance
+stay unchanged. No C=1 server or inference is launched for valid completed
+measurements. Missing/damaged/incomplete measurements still need to run.
+Only added concurrency values are otherwise executed. The previous suite
+configuration, plan, and state are archived under `suite_attempts/` before
+updating them. Removing concurrency values or changing workloads/models requires
+a new output root. The updated vLLM patch is still needed for new batched runs.
 
 At each concurrency, the server admits a closed group. It collects up to the
 configured capacity, allowing up to `batch_wait_ms` for collection at an idle
