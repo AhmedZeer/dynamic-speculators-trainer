@@ -4,8 +4,8 @@ Update this report **only when explicitly requested**. Markdown under
 `docs/experiments/` remains the working experiment record. There is no daily
 generation, scheduled task, or automatic reporting pipeline.
 
-Read [Version 02](reports/dynamic-speculators-2026-10-23-v02.pdf), with evidence
-through 2026-10-23. Version 01 remains preserved in [`reports/`](reports/).
+Read [Version 03](reports/dynamic-speculators-2026-10-23-v03.pdf), with evidence
+through 2026-10-23. Versions 01 and 02 remain preserved in [`reports/`](reports/).
 This update expands the generator architecture, adds both supplied training
 figures, and records the decision to retire bank warmup in favor of direct
 training on the original examples. It records observations and execution status, with no final

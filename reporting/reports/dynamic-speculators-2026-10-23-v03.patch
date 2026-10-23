@@ -1,0 +1,54 @@
+diff --git a/reporting/README.md b/reporting/README.md
+index 0cb8fba..cd0ed86 100644
+--- a/reporting/README.md
++++ b/reporting/README.md
+@@ -4,8 +4,8 @@ Update this report **only when explicitly requested**. Markdown under
+ `docs/experiments/` remains the working experiment record. There is no daily
+ generation, scheduled task, or automatic reporting pipeline.
+ 
+-Read [Version 02](reports/dynamic-speculators-2026-10-23-v02.pdf), with evidence
+-through 2026-10-23. Version 01 remains preserved in [`reports/`](reports/).
++Read [Version 03](reports/dynamic-speculators-2026-10-23-v03.pdf), with evidence
++through 2026-10-23. Versions 01 and 02 remain preserved in [`reports/`](reports/).
+ This update expands the generator architecture, adds both supplied training
+ figures, and records the decision to retire bank warmup in favor of direct
+ training on the original examples. It records observations and execution status, with no final
+diff --git a/reporting/report.json b/reporting/report.json
+index f4b1172..8b6925a 100644
+--- a/reporting/report.json
++++ b/reporting/report.json
+@@ -1,7 +1,7 @@
+ {
+-  "version": "02",
++  "version": "03",
+   "evidence_through": "2026-10-23",
+   "implementation_revision": "c0ee0e4b7c59ff8ff6ee8c201e591dceb0589635",
+-  "output_stem": "dynamic-speculators-2026-10-23-v02",
++  "output_stem": "dynamic-speculators-2026-10-23-v03",
+   "update_policy": "Update only when explicitly requested; Markdown remains the working experiment record."
+ }
+diff --git a/reporting/sections/04_experiments.tex b/reporting/sections/04_experiments.tex
+index fa10777..9c72763 100644
+--- a/reporting/sections/04_experiments.tex
++++ b/reporting/sections/04_experiments.tex
+@@ -73,7 +73,7 @@ optimized through the drafter loss during adaptation.
+ 
+ \begin{figure*}[t]
+ \centering
+-\includegraphics[width=\textwidth]{assets/GEN-004-adaptation-2026-10-23.png}
++\includegraphics[width=0.70\textwidth]{assets/GEN-004-adaptation-2026-10-23.png}
+ \caption{GEN-004: supplied adaptation curves for pretrained/fresh generators and
+ transferred/fresh ordinary LoRAs. Bank pretraining improves the starting point,
+ but the fresh generator reaches a similar final context-8 validation loss.
+diff --git a/reporting/sections/07_reproducibility.tex b/reporting/sections/07_reproducibility.tex
+index b8c3d0f..0b1b4d7 100644
+--- a/reporting/sections/07_reproducibility.tex
++++ b/reporting/sections/07_reproducibility.tex
+@@ -84,3 +84,7 @@ are asserted.
+ the generator architecture; added fixed-update data scaling with the ordinary
+ LoRA baseline and the adaptation figure; recorded the decision to retire bank
+ warmup in favor of direct drafting-loss training. Version 01 is preserved.
++
++\textbf{Version 03, 2026-10-23.} Reduced Figure 2 to 70\% of the text width
++for a more compact presentation of the supplied screenshot. Evidence unchanged;
++Version 02 is preserved.
