@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 MATRIX_NDIM = 2
 REQUEST_ID_SUFFIX_LENGTH = 8
 FINISHED_RECORD_LIMIT = 128
+MAX_BATCH_SIZE = 8
 
 
 def elapsed(device, operation):
@@ -46,9 +47,9 @@ def validate_runtime(config, metadata):
     checks = {
         "V1 model runner": not getattr(config, "use_v2_model_runner", False),
         "method=eagle3": spec.method == "eagle3",
-        "supported batch capacity": 1
-        <= scheduler.max_num_seqs
-        <= metadata["max_examples"],
+        "supported batch capacity": 1 <= scheduler.max_num_seqs <= MAX_BATCH_SIZE,
+        "generator conditioning capacity": metadata["kind"] != "generator"
+        or scheduler.max_num_seqs <= metadata["max_examples"],
         "fixed batch scheduler": scheduler.max_num_seqs == 1
         or (
             getattr(scheduler, "scheduler_cls", None)
@@ -270,7 +271,9 @@ class DraftAdapterController:
                 raise RuntimeError("New request entered an unfinished fixed batch")
             return
         count = len(request_ids)
-        if not 1 <= count <= self.metadata["max_examples"]:
+        if not 1 <= count <= MAX_BATCH_SIZE:
+            raise ValueError("Unsupported fixed batch size")
+        if self.generator is not None and count > self.metadata["max_examples"]:
             raise ValueError("Batch exceeds the generator's conditioning capacity")
         if (
             len(set(request_ids)) != count
@@ -292,11 +295,11 @@ class DraftAdapterController:
             ):
                 raise ValueError("Fixed batch requires complete target prefills")
             summaries.append(states[end - 1])
-        summary = torch.stack(summaries).float()
-        if summary.shape[1] != self.metadata["input_dim"]:
-            raise ValueError("Auxiliary layer order/width differs from training")
         factors, generation_seconds = self.factors, 0.0
         if self.generator is not None:
+            summary = torch.stack(summaries).float()
+            if summary.shape[1] != self.metadata["input_dim"]:
+                raise ValueError("Auxiliary layer order/width differs from training")
             factors, generation_seconds = elapsed(
                 self.device,
                 lambda: self.generator(

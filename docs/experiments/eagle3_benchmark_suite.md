@@ -153,6 +153,13 @@ original-source backups during upgrade. Restarting the servers is required.
 The suite remains an experimental pinned vLLM 0.31.0 integration; CPU lifecycle
 and HTTP tests do not substitute for GPU smoke testing of the new batched path.
 
+Static-LoRA exports intentionally omit generator-only `max_examples`,
+`input_dim`, and `architecture`. An initial batched-runtime bug required these
+fields for static LoRA and failed at startup with `KeyError: 'max_examples'`.
+The runtime now applies conditioning-capacity and summary-width checks only to
+generators. Existing LoRA bundles need no re-export; pull the fix and resume to
+retry failed LoRA measurements while retaining successful measurements.
+
 Nemotron uses the existing campaign's validation membership. Only the trajectory
 metadata and selected validation Parquet files are downloaded if missing.
 Red Hat uses its pinned JSONL sources and the recipe's target metadata. Neither

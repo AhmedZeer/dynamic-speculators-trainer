@@ -88,6 +88,9 @@ def write_bundle(path, kind="generator"):
     if kind == "generator":
         state = generator.state_dict()
     else:
+        # Match production static exports: these fields belong only to generators.
+        for field in ("max_examples", "input_dim", "architecture"):
+            metadata.pop(field)
         state = {
             f"{name}.{label}": torch.randn(*shape) * 0.02
             for name, (inputs, outputs) in SHAPES.items()

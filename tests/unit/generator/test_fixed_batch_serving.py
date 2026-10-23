@@ -18,6 +18,22 @@ from speculators.generator.serving.http import finish_http_request
 from tests.unit.generator.test_serving import draft, valid_config, write_bundle
 
 
+@pytest.mark.parametrize("concurrency", [1, 2, 4, 8])
+def test_static_runtime_needs_no_generator_metadata(tmp_path, monkeypatch, concurrency):
+    metadata, _ = write_bundle(tmp_path / "bundle", "static_lora")
+    assert "max_examples" not in metadata
+    assert "input_dim" not in metadata
+    config = valid_config(metadata)
+    config.scheduler_config.max_num_seqs = concurrency
+    config.scheduler_config.scheduler_cls = (
+        "speculators.generator.serving.scheduler.FixedBatchScheduler"
+    )
+    monkeypatch.setenv(
+        "SPECULATORS_SERVER_CONFIG", '{"batching_policy":"fixed_shared_adapter"}'
+    )
+    validate_runtime(config, metadata)
+
+
 @pytest.mark.parametrize("kind", ["generator", "static_lora"])
 def test_shared_adapter_is_generated_once_and_restored_only_after_last_member(
     tmp_path, monkeypatch, kind
@@ -139,6 +155,9 @@ def test_batch_runtime_requires_fixed_admission_and_reports_batch_counts(
         "speculators.generator.serving.scheduler.FixedBatchScheduler"
     )
     validate_runtime(config, metadata)
+    metadata["max_examples"] = 2
+    with pytest.raises(ValueError, match="generator conditioning capacity"):
+        validate_runtime(config, metadata)
     before = {
         "configuration": {"kind": "generator"},
         "workers": [
