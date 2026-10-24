@@ -293,6 +293,7 @@ def parse_args():
     serving.add_argument("--max-model-len", type=int, default=8192)
     serving.add_argument("--concurrency", type=int, default=1)
     serving.add_argument("--batch-wait-ms", type=float, default=50)
+    serving.add_argument("--conditioning-examples", type=int, default=None)
     serving.add_argument("--spec-tokens", type=int, default=3)
     serving.add_argument("--gpu-memory-utilization", type=float, default=0.85)
     serving.add_argument("--seed", type=int, default=42)

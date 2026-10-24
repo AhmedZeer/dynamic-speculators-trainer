@@ -59,14 +59,24 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
     metadata = read_bundle(args.adapter_bundle) if args.adapter_bundle else None
     concurrency = getattr(args, "concurrency", 1)
     batch_wait_ms = getattr(args, "batch_wait_ms", 50)
+    conditioning_examples = getattr(args, "conditioning_examples", None)
     if not 1 <= concurrency <= MAX_CONCURRENCY or batch_wait_ms < 0:
         raise ValueError("Concurrency must be 1–8 and batch wait must be nonnegative")
+    if conditioning_examples is not None and (
+        not metadata
+        or metadata["kind"] != "generator"
+        or not 1 <= conditioning_examples <= MAX_CONCURRENCY
+    ):
+        raise ValueError(
+            "conditioning-examples requires a generator and a value from 1 to 8"
+        )
     if (
         metadata
         and metadata["kind"] == "generator"
-        and concurrency > metadata["max_examples"]
+        and min(concurrency, conditioning_examples or concurrency)
+        > metadata["max_examples"]
     ):
-        raise ValueError("Concurrency exceeds the generator's trained context capacity")
+        raise ValueError("Requested conditioning size exceeds the generator capacity")
     if metadata is not None:
         if patch_sources()["state"] != "patched":
             raise ValueError(
@@ -125,7 +135,15 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
         "max_model_len": args.max_model_len,
         "speculative_tokens": args.spec_tokens if args.spec_model else None,
         "gpu_memory_utilization": args.gpu_memory_utilization,
-        "deployment_context_size": concurrency if kind == "generator" else None,
+        "deployment_context_size": min(
+            concurrency, conditioning_examples or concurrency
+        )
+        if kind == "generator"
+        else None,
+        "conditioning_examples": conditioning_examples,
+        "conditioning_selection": "seeded_uniform_subset"
+        if conditioning_examples
+        else "all_members",
         "seed": args.seed,
         "bundle_weights_sha256": metadata["weights_sha256"] if metadata else None,
         "source_job": metadata.get("source_job") if metadata else None,

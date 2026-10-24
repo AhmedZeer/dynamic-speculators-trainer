@@ -30,10 +30,10 @@
     ]
   },
   "missing_provenance": [
-    "native GuideLLM results and workload hashes",
+    "native GuideLLM request-level records and generation outputs",
     "exact model/checkpoint hashes and update counts",
     "hardware and environment identity for each execution",
-    "actual cohort sizes and acceptance metrics",
+    "per-cohort membership and within-cohort utilization",
     "command files and source patches",
     "repeated-run uncertainty"
   ],
@@ -250,5 +250,8 @@
         }
       ]
     }
-  ]
+  ],
+  "detailed_summary_archived": true,
+  "detailed_summary_file": "suite_summary_detailed.json",
+  "detailed_summary_sha256": "7b39e0f62c995a0d383107764ddb938523651092ce96a0ec68508f4b1ed01614"
 }

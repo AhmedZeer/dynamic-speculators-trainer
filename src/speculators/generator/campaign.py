@@ -100,6 +100,8 @@ def job_config(cfg, job, *, staging_dir=None):
             "pretraining": "experiment-1",
             "adaptation": "experiment-2",
         }[job["stage"]]
+        if cfg.training_cohort_size is not None and cfg.wandb.group:
+            values["wandb"].group = cfg.wandb.group
         return ExperimentConfig.model_validate(values)
     values["wandb"].group = f"{cfg.wandb.group or cfg.output_root.name}-{job['stage']}"
     if job["stage"] == "adaptation":

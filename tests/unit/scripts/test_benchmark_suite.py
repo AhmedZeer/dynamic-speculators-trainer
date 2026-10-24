@@ -71,6 +71,8 @@ def test_config_and_dry_run(tmp_path):
         Model(name="bad", type="lora", model="a/b", subfolder="../escape")
     with pytest.raises(ValidationError):
         Settings(concurrency=9)
+    with pytest.raises(ValidationError, match="only to generators"):
+        Model(name="bad", type="lora", model="owner/repo", conditioning_examples=2)
 
 
 def test_benchmark_diagnostics_include_failure_excerpt_and_heartbeats(tmp_path, capsys):
@@ -200,6 +202,12 @@ def test_command_builders_keep_provenance_and_skip_correctness(tmp_path):
     assert "--correctness-report" not in client
     assert "--server-provenance" in client
     assert client[client.index("--max-requests") + 1] == "0"
+    generator = {"type": "generator", "path": "/bundle", "conditioning_examples": 2}
+    command = suite.server_command(
+        tmp_path, generator, {}, Settings(concurrency=8), tmp_path
+    )
+    assert command[command.index("--concurrency") + 1] == "8"
+    assert command[command.index("--conditioning-examples") + 1] == "2"
 
 
 def test_fetches_only_metadata_and_selected_validation(tmp_path, monkeypatch):

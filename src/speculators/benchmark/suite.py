@@ -67,6 +67,8 @@ def server_command(root, model, target, settings, provenance):
         ]
     else:
         command += ["--adapter-bundle", model["path"]]
+    if model.get("conditioning_examples") is not None:
+        command += ["--conditioning-examples", str(model["conditioning_examples"])]
     return command
 
 
@@ -119,6 +121,10 @@ def verify_result(output, task, workload, model):
         raise ValueError("Client measured the wrong frozen workload")
     if identity.get("concurrency", 1) != model.get("concurrency", 1):
         raise ValueError("Client measured the wrong concurrency")
+    if identity["server"].get("conditioning_examples") != model.get(
+        "conditioning_examples"
+    ):
+        raise ValueError("Client measured the wrong conditioning size")
     expected_kind = {
         "lora": "static_lora",
         "generator": "generator",
@@ -540,6 +546,8 @@ def run_suite(config_path, output_root, *, resume=False, dry_run=False):  # noqa
                     output / "local_models",
                     pinned=previous["revision"] if previous else None,
                 )
+            if spec.conditioning_examples is not None:
+                model["conditioning_examples"] = spec.conditioning_examples
             report(f"Resolved {spec.name}: revision={model['revision']}")
             if previous and model_signature(model) != model_signature(previous):
                 raise ValueError(f"Model {spec.name} changed since the saved suite")

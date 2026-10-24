@@ -63,7 +63,7 @@ def termination_cleanup():
         signal.signal(signal.SIGTERM, previous)
 
 
-def wait_ready(process, target, model, manifest, timeout):
+def wait_ready(process, target, model, manifest, timeout):  # noqa: C901 -- pinned model and serving-policy checks
     deadline = time.monotonic() + timeout
     last = "server not responding"
     expected = {
@@ -84,6 +84,10 @@ def wait_ready(process, target, model, manifest, timeout):
             config = status["configuration"]
             if config.get("max_num_seqs", 1) != model.get("concurrency", 1):
                 raise ValueError("Connected server concurrency differs")
+            if config.get("conditioning_examples") != model.get(
+                "conditioning_examples"
+            ):
+                raise ValueError("Connected generator conditioning size differs")
             if config["kind"] != expected[model["type"]]:
                 raise ValueError("Connected server has the wrong model type")
             if model["type"] == "drafter":

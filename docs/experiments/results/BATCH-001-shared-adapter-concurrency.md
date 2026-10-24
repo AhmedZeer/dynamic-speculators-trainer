@@ -7,7 +7,7 @@
 - Evidence: completed user-supplied `comparison-v2` summary, four models × four concurrencies × seven categories = 112 values.
 - [Full transcribed table](benchmarks/2026-10-24-comparison-v2-concurrency/summary.md), [structured measurements](benchmarks/2026-10-24-comparison-v2-concurrency/metrics.json), and [derived comparisons](benchmarks/2026-10-24-comparison-v2-concurrency/derived_comparisons.json).
 - Concurrency-1 values are reused from [GEN-003](GEN-003-generator-suite-throughput.md); all 28 match exactly. They are not new repeat measurements.
-- Native GuideLLM results, actual cohort sizes, acceptance, timing breakdowns, exact checkpoint hashes, hardware identity, and per-run command/patch provenance have not been supplied for this record.
+- Initially, only the throughput table was supplied. The detailed suite summary received on 2026-10-24 now supplies workload hashes, aggregate acceptance, adapter counters/timings, and median latency. Native request-level GuideLLM files, exact checkpoint hashes, hardware identity, and full command/patch provenance remain unavailable.
 
 The initial failed LoRA rows were startup failures, not throughput observations.
 The reported `KeyError: 'max_examples'` came from applying generator-only metadata
@@ -120,9 +120,10 @@ request-specific behavior. Oracle category routing must be labeled as such.
 ## Evidence limits and current interpretation
 
 This is evidence for useful ID adaptation under the tested fixed-cohort setup,
-with a smaller incremental advantage over static LoRA at high concurrency.
-It is not yet evidence of robust OOD superiority, better acceptance, improved
-task quality, optimal production throughput, or verified lossless acceleration.
+with a smaller incremental throughput advantage over static LoRA at high concurrency.
+The detailed summary below additionally establishes aggregate acceptance gains on ID.
+It is not yet evidence of robust OOD superiority, improved task quality,
+optimal production throughput, or verified lossless acceleration.
 [GEN-002](GEN-002-http-token-equality.md) records unresolved output equality and
 repeatability issues. Continue exploratory timing as requested; restore a small
 controlled correctness/quality check before making lossless or quality claims.
@@ -131,3 +132,55 @@ controlled correctness/quality check before making lossless or quality claims.
 
 - 2026-10-24: Archived the complete supplied sweep, matched-concurrency ratios,
   hypothesis assessment, unresolved confounders, and proposed next controls.
+
+### 2026-10-24 — Detailed suite summary and experiment selection
+
+The supplied `/home/azeer/Downloads/summary.json` is archived unchanged as
+[suite_summary_detailed.json](benchmarks/2026-10-24-comparison-v2-concurrency/suite_summary_detailed.json),
+SHA256 `7b39e0f62c995a0d383107764ddb938523651092ce96a0ec68508f4b1ed01614`.
+[detail_analysis.json](benchmarks/2026-10-24-comparison-v2-concurrency/detail_analysis.json)
+records derived timing quantities and the source hash. All 112 measurements
+contain 50 successful requests; each category's workload checksum matches across
+all 16 model/concurrency variants. This verifies prompt-workload identity, not
+output equality or identical execution environments.
+
+The reported acceptance-length metric is `1 + accepted_tokens / draft_iterations`;
+it includes a baseline token and is not an acceptance probability.
+
+| Nemo category at C8 | EAGLE3 length | LoRA length | G4 length | G4 vs LoRA: length | G4 vs LoRA: throughput |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Math | 2.419 | 2.810 | 2.944 | +4.75% | +1.04% |
+| Code | 2.305 | 2.520 | 2.618 | +3.85% | +1.18% |
+| STEM | 2.233 | 2.471 | 2.537 | +2.66% | +0.15% |
+| Chat | 2.087 | 2.162 | 2.198 | +1.68% | +1.93% |
+
+The generator's aggregate drafting-quality advantage over static LoRA is clearer
+than its throughput margin suggests. Its timed generation/merge/restoration
+cost does not explain the remaining throughput discrepancy: summed recorded GPU
+times account for only **0.070–0.105% of wall time** across the supplied generator
+measurements. G4 generator execution is about 1.94–2.04 ms per invocation at C1,
+and 2.09–2.92 ms at C8 (about 0.29–0.41 ms per request at C8). These timers exclude
+uninstrumented CPU, scheduling, synchronization outside the measured operations,
+and any other overhead; they do not prove zero serving overhead.
+
+At C2/C4/C8, all supplied generator/static adapter records contain 25/13/7
+completed batches for 50 requests, respectively: the minimum possible batch
+counts. Mean C8 size is 50/7 = 7.143. Frequent extra partial cohorts are therefore
+not evident, but these totals do not reveal within-cohort vacant-slot time,
+individual cohort composition, or straggler effects.
+
+HumanEval is not simply a case of lower mean acceptance: G4's C8 length is 2.579
+versus EAGLE3's 2.541 (+1.53%), while throughput is 4.68% lower. Recorded adapter
+GPU work is about 0.074% of wall time there. Scheduling/cohort composition, cost
+per iteration, and execution variation remain possible explanations; these
+aggregates cannot identify the cause. Output token totals also vary slightly
+on Nemo chat/code/STEM across variants, so matching prompts do not establish
+matching output sequences. Correctness remains unchecked.
+
+The owner elected not to perform the repeated-run experiment. The next prepared
+study trains four separate fixed-conditioning generators (K=1/2/4/8) and a
+matched static LoRA on the 24K pool for 1,000 updates per arm, with fixed 8-example
+loss cohorts and an ID-only serving comparison at B=8. This is a combined
+training/serving K-policy comparison, rather than the originally proposed
+single-checkpoint inference-only ablation. See
+[BATCH-002 protocol and commands](../eagle3_conditioning_24k_1k.md).

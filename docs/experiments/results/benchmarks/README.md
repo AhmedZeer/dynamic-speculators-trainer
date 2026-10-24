@@ -5,8 +5,11 @@ The completed concurrency 1/2/4/8 comparison is recorded in
 [full supplied table](2026-10-24-comparison-v2-concurrency/summary.md),
 [112 measurements](2026-10-24-comparison-v2-concurrency/metrics.json), and
 [derived matched-concurrency comparisons](2026-10-24-comparison-v2-concurrency/derived_comparisons.json).
-Serial values are reused from the earlier comparison; native artifacts and
-acceptance metrics have not been archived for this sweep.
+Serial values are reused from the earlier comparison. The subsequently supplied
+[detailed suite summary](2026-10-24-comparison-v2-concurrency/suite_summary_detailed.json)
+and [derived acceptance/timing analysis](2026-10-24-comparison-v2-concurrency/detail_analysis.json)
+include aggregate acceptance and adapter counters. Native request-level GuideLLM
+records and full server/checkpoint provenance remain unavailable.
 
 The current four-model `comparison-v2` tables are recorded in
 [GEN-003](../GEN-003-generator-suite-throughput.md), with separate Nemotron

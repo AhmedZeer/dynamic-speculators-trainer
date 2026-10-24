@@ -44,6 +44,15 @@ Raw training checkpoints and generic PEFT folders must first be exported using
 the existing generator/LoRA export commands. Bundle downloads include training
 provenance and exclude optimizer `checkpoint.pt` files.
 
+Generator entries also accept `conditioning_examples: K` (1–8), independently
+of serving concurrency B. A seeded uniform subset of min(K, actual cohort size)
+prompt summaries generates one adapter shared by every cohort member. Omitting
+the field uses every member. The generator's conditioning capacity must cover
+min(K, B); K defaults to B. Non-generator entries reject this field. Standalone
+serving exposes `--conditioning-examples K`. Actual `mean_conditioning_size`
+is recorded separately from `mean_batch_size`. See the
+[matched 24K/1K-step study](eagle3_conditioning_24k_1k.md) for the five-model ID suite.
+
 Local drafter directories require a full `revision` SHA or Hub local-download
 metadata. The runner stages their files into a directory named by the SHA and
 records file checksums. Relative local paths, `settings.tokenizer_path`, and
@@ -89,7 +98,7 @@ settings:
 
 `concurrencies` overrides the single `concurrency` setting. Omit it and use
 `concurrency: 1` to retain serial-only behavior. Values must be distinct and
-between 1 and 8, and a generator's capacity must cover the chosen value.
+between 1 and 8; generator conditioning limits apply to K as described above.
 You can extend an existing serial suite by adding concurrency values and using
 its original output root with `--resume`:
 

@@ -56,6 +56,9 @@ class CampaignConfig(ExperimentConfig):
     """Three direct pretraining jobs and one ordinary-LoRA baseline."""
 
     training_recipe: Path | None = None
+    max_training_updates: int | None = Field(default=None, ge=1)
+    training_cohort_size: int | None = Field(default=None, ge=1, le=8)
+    training_conditioning_examples: int | None = Field(default=None, ge=1, le=8)
 
     bank_revision: str = "2305403f0f3b560fafb6c6d261c370ab3a95759d"
     activation_source: Literal["hub", "vllm"] = "hub"
@@ -88,6 +91,17 @@ class CampaignConfig(ExperimentConfig):
 
     @model_validator(mode="after")
     def campaign_contract(self):
+        if (
+            self.training_conditioning_examples is not None
+            and self.training_conditioning_examples > self.context.max_examples
+        ):
+            raise ValueError("Training conditioning size exceeds generator capacity")
+        if (
+            self.training_cohort_size is not None
+            and self.training_conditioning_examples is not None
+            and self.training_conditioning_examples > self.training_cohort_size
+        ):
+            raise ValueError("Training conditioning size exceeds the loss cohort size")
         if self.activation_source == "vllm" and self.trajectories_path is None:
             raise ValueError("Online campaign requires trajectories_path")
         if self.activation_source == "hub" and not re.fullmatch(

@@ -110,6 +110,13 @@ def validate_adapter_delta(before, after):
         delta["mean_batch_size"] = (
             delta["prepared_requests"] / delta["prepared_batches"]
         )
+        if (
+            before["configuration"]["kind"] == "generator"
+            and "conditioning_examples" in delta
+        ):
+            delta["mean_conditioning_size"] = (
+                delta["conditioning_examples"] / delta["prepared_batches"]
+            )
     return delta
 
 

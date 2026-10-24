@@ -19,6 +19,13 @@ class Model(Strict):
     model: str = Field(min_length=1)
     revision: str | None = None
     subfolder: str | None = None
+    conditioning_examples: int | None = Field(default=None, ge=1, le=MAX_CONCURRENCY)
+
+    @model_validator(mode="after")
+    def generator_conditioning_only(self):
+        if self.conditioning_examples is not None and self.type != "generator":
+            raise ValueError("conditioning_examples applies only to generators")
+        return self
 
     @field_validator("subfolder")
     @classmethod

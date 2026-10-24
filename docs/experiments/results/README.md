@@ -17,7 +17,8 @@ explain when new evidence changes them.
 | GEN-003 | [Generator suite throughput: in-/out-of-distribution](GEN-003-generator-suite-throughput.md) | Preliminary; supplied suite summary | Four-model comparison: generator gains are larger on Nemotron math/code/STEM than on the selected Red Hat categories. |
 | GEN-004 | [Bank warmup and direct-training decision](GEN-004-bank-warmup-adaptation.md) | Preliminary adaptation evidence; bank workflow retired | Fresh generator catches up to bank-pretrained generator; use original data directly with drafting loss. |
 | SYS-001 | [Activation RAM reuse](../eagle3_activation_ram_cache.md) | Measured console pilot; no repeated trials | Recorded validation wall times: 96.90 s on the first pass and 20.06 s on a warm pass; extraction/startup effects are included. |
-| BATCH-001 | [Shared-adapter concurrency sweep](BATCH-001-shared-adapter-concurrency.md) | Supplied GPU throughput summary; acceptance and repeated-run uncertainty unavailable | Generators consistently beat EAGLE3 on Nemotron; G4's mean ID gain over static LoRA narrows to 1.08% at C8, with mixed OOD results. |
+| BATCH-001 | [Shared-adapter concurrency sweep](BATCH-001-shared-adapter-concurrency.md) | Detailed supplied suite summary; correctness/repeat uncertainty unavailable | G4 has higher ID acceptance than LoRA; timed adapter GPU work is below 0.11% of wall time, while throughput gains narrow at C8. |
+| BATCH-002 | [Matched 24K, 1K-update conditioning-size study](../eagle3_conditioning_24k_1k.md) | Prepared; full GPU runs pending | Four separately trained K=1/2/4/8 generators and one matched static LoRA; fixed loss cohorts and B=8 ID-only serving. |
 
 Use [the results template](TEMPLATE.md) for further experiments. Report the
 comparison budget, validation membership, evidence quality, limitations, and

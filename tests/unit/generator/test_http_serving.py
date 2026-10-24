@@ -133,6 +133,7 @@ def test_server_builds_matched_independent_command(
         args.adapter_bundle = bundle
         args.model, args.revision = None, None
     args.concurrency = concurrency
+    args.conditioning_examples = min(2, concurrency) if kind == "generator" else None
     command = server.build_server(args, [])
     assert command[command.index("--max-num-seqs") + 1] == str(concurrency)
     assert ("--scheduler-cls" in command) == (concurrency > 1)
@@ -147,6 +148,7 @@ def test_server_builds_matched_independent_command(
     )
     configuration = json.loads((tmp_path / "server/server.json").read_text())
     assert configuration["kind"] == kind
+    assert configuration["conditioning_examples"] == args.conditioning_examples
     if kind == "target_only":
         assert "--speculative-config" not in command
     else:

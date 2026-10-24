@@ -18,6 +18,63 @@ from speculators.generator.serving.http import finish_http_request
 from tests.unit.generator.test_serving import draft, valid_config, write_bundle
 
 
+@pytest.mark.parametrize("conditioning_examples", [1, 2, 4, 8])
+def test_conditioning_size_is_independent_of_batch_size(
+    tmp_path, monkeypatch, conditioning_examples
+):
+    monkeypatch.setenv(
+        "SPECULATORS_SERVER_CONFIG",
+        json.dumps(
+            {
+                "conditioning_examples": conditioning_examples,
+                "seed": 42,
+            }
+        ),
+    )
+    write_bundle(tmp_path / "bundle")
+    controller = DraftAdapterController(tmp_path / "bundle", draft())
+    controller.metadata["max_examples"] = conditioning_examples
+    controller.generator.max_examples = conditioning_examples
+    calls = []
+    controller.generator.register_forward_pre_hook(lambda _, args: calls.append(args))
+    ids = [f"request-{index}" for index in range(8)]
+    states = torch.arange(8 * 2 * 12, dtype=torch.float32).reshape(16, 12)
+    controller.prepare_batch(
+        ids, [2] * 8, torch.tensor([0, 1] * 8), states, list(range(0, 17, 2))
+    )
+    assert len(calls) == 1
+    assert calls[0][0].shape == (conditioning_examples, 12)
+    assert controller.active_requests == set(ids)
+    assert controller.totals["conditioning_examples"] == conditioning_examples
+    assert controller.record["batch_size"] == 8
+    assert controller.record["deployment_context_size"] == conditioning_examples
+    for name in ids:
+        controller.finish(name)
+    assert controller.active is None
+    controller.prepare_batch(
+        ["tail-1", "tail-2"], [2, 2], torch.tensor([0, 1, 0, 1]), states[:4], [0, 2, 4]
+    )
+    assert calls[1][0].shape == (min(2, conditioning_examples), 12)
+    assert controller.totals["generator_invocations"] == 2
+    controller.finish("tail-1")
+    controller.finish("tail-2")
+    configuration = {"kind": "generator"}
+    before = {
+        "configuration": configuration,
+        "workers": [{"adapter_totals": dict.fromkeys(controller.totals, 0)}],
+    }
+    after = {
+        "configuration": configuration,
+        "workers": [{"adapter_totals": dict(controller.totals)}],
+    }
+    metrics = validate_adapter_delta(before, after)
+    assert metrics["mean_batch_size"] == 5
+    assert (
+        metrics["mean_conditioning_size"]
+        == (conditioning_examples + min(2, conditioning_examples)) / 2
+    )
+
+
 @pytest.mark.parametrize("concurrency", [1, 2, 4, 8])
 def test_static_runtime_needs_no_generator_metadata(tmp_path, monkeypatch, concurrency):
     metadata, _ = write_bundle(tmp_path / "bundle", "static_lora")

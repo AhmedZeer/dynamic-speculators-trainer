@@ -1,6 +1,7 @@
 """Update-based behavioral training on saved token episodes."""
 
 import json
+import random
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -45,8 +46,15 @@ def synchronize(runtime):
         torch.cuda.synchronize(runtime.device)
 
 
+def conditioning_subset(cohort, size, seed):
+    """Choose conditioning members without changing the supervised loss cohort."""
+    if size is None or size >= len(cohort):
+        return cohort
+    return random.Random(seed).sample(cohort, size)
+
+
 @torch.no_grad()
-def evaluate_subset(runtime, subset, generator):
+def evaluate_subset(runtime, subset, generator, conditioning_examples=None):
     synchronize(runtime)
     started = time.perf_counter()
     runtime.drafter.eval()
@@ -62,7 +70,17 @@ def evaluate_subset(runtime, subset, generator):
         runtime.corpus.cache.protect(refs)
         runtime.corpus.cache.prefetch(refs)
         factors = (
-            generator(*runtime.corpus.context(cohort, "last", runtime.device))
+            generator(
+                *runtime.corpus.context(
+                    conditioning_subset(
+                        cohort,
+                        conditioning_examples,
+                        runtime.cfg.seed + 9000 + position,
+                    ),
+                    "last",
+                    runtime.device,
+                )
+            )
             if generator is not None
             else None
         )
@@ -87,8 +105,11 @@ def evaluate_subset(runtime, subset, generator):
     }
 
 
-def evaluate(runtime, subsets, generator):
-    results = {name: evaluate_subset(runtime, name, generator) for name in subsets}
+def evaluate(runtime, subsets, generator, conditioning_examples=None):
+    results = {
+        name: evaluate_subset(runtime, name, generator, conditioning_examples)
+        for name in subsets
+    }
     by_category = {}
     for domain in sorted({s.rsplit("-", 1)[0] for s in subsets}):
         selected = [m for s, m in results.items() if s.rsplit("-", 1)[0] == domain]
@@ -108,7 +129,16 @@ def evaluate(runtime, subsets, generator):
     }
 
 
-def train_update(runtime, generator, optimizer, episodes, update, objective):
+def train_update(  # noqa: PLR0917 -- preserve the shared update API
+    runtime,
+    generator,
+    optimizer,
+    episodes,
+    update,
+    objective,
+    *,
+    conditioning_examples=None,
+):
     if objective != "direct":
         raise ValueError("Campaign training supports only the direct objective")
     cfg = runtime.cfg
@@ -121,6 +151,7 @@ def train_update(runtime, generator, optimizer, episodes, update, objective):
     data_seconds = 0.0
     response_tokens = 0
     examples = 0
+    conditioning_count = 0
     for episode, item in enumerate(episodes):
         cohort = item["indices"]
         started = time.perf_counter()
@@ -132,11 +163,21 @@ def train_update(runtime, generator, optimizer, episodes, update, objective):
         torch.manual_seed(cfg.seed + update * 100003 + episode * 1009)
         started = time.perf_counter()
         context = (
-            runtime.corpus.context(cohort, "last", runtime.device)
+            runtime.corpus.context(
+                conditioning_subset(
+                    cohort,
+                    conditioning_examples,
+                    cfg.seed + update * 100003 + episode * 1009,
+                ),
+                "last",
+                runtime.device,
+            )
             if generator is not None
             else None
         )
         data_seconds += time.perf_counter() - started
+        if context is not None:
+            conditioning_count += context[0].shape[0]
         with compute_timer(runtime, events):
             factors = generator(*context) if generator is not None else None
         leaves = detached_factors(factors) if factors is not None else None
@@ -175,6 +216,8 @@ def train_update(runtime, generator, optimizer, episodes, update, objective):
         "train/gpu_compute_seconds": compute_seconds,
         "train/response_tokens": response_tokens,
         "train/examples": examples,
+        "train/conditioning_examples": conditioning_count,
+        "train/conditioning_size_mean": conditioning_count / len(episodes),
         "train/lr": optimizer.param_groups[0]["lr"],
         **gradients,
     }
@@ -202,7 +245,7 @@ def source_weights(runtime, generator, job):
     generator.load_state_dict(state["model"])
 
 
-def _prefetch(runtime, schedule, step, updates, lookahead, objective):  # noqa: ARG001
+def _prefetch(runtime, schedule, step, updates, lookahead, objective):  # noqa: ARG001, PLR0917
     if hasattr(runtime.corpus, "set_training_window"):
         runtime.corpus.set_training_window(
             [
@@ -254,7 +297,13 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
             backup_checkpoint,
         )
 
-        schedule = EpochSchedule(cfg, runtime.corpus, job["subsets"], job["epochs"])
+        schedule = EpochSchedule(
+            cfg,
+            runtime.corpus,
+            job["subsets"],
+            job["epochs"],
+            cohort_size=job.get("training_cohort_size"),
+        )
         if schedule.epoch_ends != job["epoch_ends"]:
             raise ValueError("Epoch schedule differs from the saved training plan")
     else:
@@ -350,7 +399,12 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
             validation_started = time.perf_counter()
             report(f"{job['label']}: validation starting at update={progress}")
             runtime.corpus.cache.protect([])
-            metrics = evaluate(runtime, job["validation_subsets"], generator)
+            metrics = evaluate(
+                runtime,
+                job["validation_subsets"],
+                generator,
+                job.get("training_conditioning_examples"),
+            )
             synchronize(runtime)
             row = {
                 "update": progress,
@@ -411,6 +465,11 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
                 schedule.update(update),
                 update,
                 job["objective"],
+                **(
+                    {"conditioning_examples": job["training_conditioning_examples"]}
+                    if "training_conditioning_examples" in job
+                    else {}
+                ),
             )
             elapsed = time.perf_counter() - tick
             values["train/data_wait_seconds"] += scheduling_seconds
@@ -515,6 +574,13 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
             result["completed_epochs"] = schedule.completed_epochs(progress)
             result["hub_checkpoints"] = json.loads(
                 (output / "hub_checkpoints.json").read_text()
+            )
+        if "training_conditioning_examples" in job:
+            result["training_conditioning_examples"] = job[
+                "training_conditioning_examples"
+            ]
+            result["validation_conditioning_examples"] = min(
+                4, job["training_conditioning_examples"]
             )
         if job["stage"] == "adaptation":
             result["score_change"] = result["score"] - history[0]["score"]

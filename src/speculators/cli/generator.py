@@ -67,6 +67,11 @@ def train_lora_baseline_command(
     typer.echo(json.dumps(result, indent=2))
 
 
+class TrainingArm(str, Enum):
+    generator = "generator"
+    lora = "lora"
+
+
 @app.command(name="train-full-data")
 def train_full_data_command(  # noqa: PLR0917
     config: ConfigOption,
@@ -74,6 +79,13 @@ def train_full_data_command(  # noqa: PLR0917
     hub_repo: Annotated[str, typer.Option("--hub-repo")],
     provenance_dir: Annotated[Path, typer.Option("--vllm-provenance-dir")],
     epochs: Annotated[int, typer.Option("--epochs", min=1)] = 10,
+    max_updates: Annotated[
+        int | None,
+        typer.Option(
+            "--max-updates", min=1, help="Stop after this many optimizer updates"
+        ),
+    ] = None,
+    arm: Annotated[TrainingArm, typer.Option("--arm")] = TrainingArm.generator,
     save_every_epochs: Annotated[
         int, typer.Option("--save-every-epochs", min=1, hidden=True)
     ] = 2,
@@ -88,7 +100,7 @@ def train_full_data_command(  # noqa: PLR0917
     private: Annotated[bool, typer.Option("--private")] = False,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
 ):
-    """Train the generator on every local subset, with exact epochs and Hub backups."""
+    """Train a generator or static LoRA on all local subsets with Hub backups."""
     import json  # noqa: PLC0415
 
     from speculators.generator.campaign_config import CampaignConfig  # noqa: PLC0415
@@ -100,6 +112,8 @@ def train_full_data_command(  # noqa: PLR0917
         hub_repo,
         provenance_dir,
         epochs=epochs,
+        max_updates=max_updates,
+        arm=arm.value,
         save_every_epochs=save_every_epochs,
         hub_upload_interval=hub_upload_interval,
         private=private,

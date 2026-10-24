@@ -165,6 +165,10 @@ def export_run(cfg, run_dir, output, *, drafter_model_path=None):  # noqa: C901 
             architecture=identity["configuration"]["architecture"],
             max_examples=identity["configuration"]["context"]["max_examples"],
         )
+        if "training_conditioning_examples" in job:
+            metadata["training_conditioning_examples"] = job[
+                "training_conditioning_examples"
+            ]
         load_generator(metadata, state)
     else:
         for name in PROJECTIONS:

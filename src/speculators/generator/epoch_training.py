@@ -21,7 +21,7 @@ from speculators.generator.serving.bundle import PROVENANCE
 class EpochSchedule:
     """Shuffle every training row once per epoch, retaining single-subset episodes."""
 
-    def __init__(self, cfg, corpus, subsets, epochs):
+    def __init__(self, cfg, corpus, subsets, epochs, *, cohort_size=None):
         self.updates, self.epoch_ends = [], []
         for epoch in range(epochs):
             rng = random.Random(cfg.seed + epoch * 100003)
@@ -31,7 +31,7 @@ class EpochSchedule:
                 rng.shuffle(indices)
                 offset = 0
                 while offset < len(indices):
-                    size = rng.randint(
+                    size = cohort_size or rng.randint(
                         cfg.context.min_examples, cfg.context.max_examples
                     )
                     cohort = indices[offset : offset + size]
@@ -103,7 +103,7 @@ def backup_checkpoint(output, job, identity, epoch, progress):
     report(f"{job['label']}: {key} backed up at commit {published['commit_sha']}")
 
 
-def train_full_data(
+def train_full_data(  # noqa: C901 -- shared schedule, capped budget and durable Hub plan
     cfg,
     output_root,
     repo_id,
@@ -112,6 +112,8 @@ def train_full_data(
     epochs=10,
     save_every_epochs=2,
     hub_upload_interval=None,
+    max_updates=None,
+    arm="generator",
     private=False,
     dry_run=False,
 ):
@@ -122,6 +124,12 @@ def train_full_data(
         raise ValueError("Full-data training requires the online activation config")
     if epochs < 1 or save_every_epochs < 1:
         raise ValueError("Epoch counts must be positive")
+    if max_updates is None:
+        max_updates = cfg.max_training_updates
+    if arm not in ("generator", "lora"):
+        raise ValueError("Full-data arm must be generator or lora")
+    if max_updates is not None and max_updates < 1:
+        raise ValueError("max_updates must be positive")
     interval = (
         cfg.hub_upload_interval if hub_upload_interval is None else hub_upload_interval
     )
@@ -131,18 +139,30 @@ def train_full_data(
     inputs = load_local_inputs(cfg)
     subsets = sorted(inputs.subsets)
     corpus = SimpleNamespace(indices=lambda name: inputs.subsets[name]["train_indices"])
-    schedule = EpochSchedule(cfg, corpus, subsets, epochs)
+    schedule = EpochSchedule(
+        cfg, corpus, subsets, epochs, cohort_size=cfg.training_cohort_size
+    )
+    updates = len(schedule.updates)
+    if max_updates is not None:
+        updates = min(updates, max_updates)
+    label = f"all-data-{epochs}epochs"
+    if max_updates is not None:
+        label = f"all-data-{arm}-{updates}steps"
+    elif arm == "lora":
+        label = f"all-data-lora-{epochs}epochs"
+    if arm == "generator" and cfg.training_conditioning_examples is not None:
+        label += f"-k{cfg.training_conditioning_examples}"
     job = {
         "kind": "pretraining",
         "stage": "pretraining",
         "condition": "last",
-        "label": f"all-data-{epochs}epochs",
-        "arm": "direct",
+        "label": label,
+        "arm": "direct" if arm == "generator" else "fresh_lora",
         "objective": "direct",
         "subsets": subsets,
         "validation_subsets": [f"{domain}-00000" for domain in inputs.banks],
         "training_examples": sum(len(corpus.indices(name)) for name in subsets),
-        "updates": len(schedule.updates),
+        "updates": updates,
         "epochs": epochs,
         "epoch_ends": schedule.epoch_ends,
         # save_every_epochs remains accepted for old notebook commands;
@@ -153,6 +173,13 @@ def train_full_data(
         "vllm_provenance_dir": str(Path(provenance_dir).resolve()),
         "drafter_model_path": str(cfg.online.drafter_model_path.resolve()),
     }
+    if max_updates is not None:
+        job["max_updates"] = max_updates
+    if cfg.training_cohort_size is not None:
+        job["training_cohort_size"] = cfg.training_cohort_size
+        job["epoch_schedule_version"] = 2
+    if arm == "generator" and cfg.training_conditioning_examples is not None:
+        job["training_conditioning_examples"] = cfg.training_conditioning_examples
     cfg = cfg.model_copy(deep=True)
     cfg.output_root = Path(output_root)
     cfg.optimization.pretraining_updates = job["updates"]

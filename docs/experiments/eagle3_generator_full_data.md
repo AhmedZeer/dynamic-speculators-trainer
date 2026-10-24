@@ -1,5 +1,13 @@
 # Full-data generator training with epoch checkpoints on Hugging Face
 
+For the capped 1,000-update study with four conditioning-size generators and a
+matched 24K static LoRA, use the
+[conditioning-size protocol and commands](eagle3_conditioning_24k_1k.md).
+`train-full-data --arm lora` selects ordinary LoRA; `--arm generator` is the
+default. `--max-updates` (or config `max_training_updates`) caps the planned epoch
+schedule without changing its prefix. Existing configs without a cap retain
+their exact-epoch behavior.
+
 This trains a fresh generator on every training subset in the local pinned
 trajectory release. The current release has six subsets per domain across
 math/code/stem/chat: **24,000 training examples**. Validation rows are excluded

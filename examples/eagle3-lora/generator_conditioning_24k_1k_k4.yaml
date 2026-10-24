@@ -1,0 +1,63 @@
+# Same 24K pool, fixed 8-example loss cohorts, four episodes/update, and seed across all five arms.
+# train-full-data --epochs 2 --max-updates 1000 caps this arm at 1000 updates.
+training_recipe: generator_training_recipe.yaml
+input_root: output/conditioning-size-24k-inputs
+output_root: output/conditioning-24k-1k/generator-k4
+staging_dir: /tmp/speculators-conditioning-24k-1k
+condition: last
+seed: 42
+device: cuda
+dtype: bfloat16
+n_workers: 1
+heatmap_n_workers: 1
+activation_prefetch_workers: 2
+preprocessing_workers: 4
+factor_cache_mib: 256
+context:
+  min_examples: 1
+  max_examples: 8
+  evaluation_sizes:
+  - 4
+optimization:
+  loss_fn: lk_hybrid
+  lr: 0.0001
+  weight_decay: 0.01
+  max_grad_norm: 0.85
+  warmup_updates: 100
+  pretraining_updates: 1000
+  pretraining_validation_interval: 500
+  episodes_per_update: 4
+  checkpoint_interval: 250
+  log_interval: 10
+  token_budget: 8192
+adaptation_updates: 1000
+hub_upload_interval: 1000
+pilot:
+  updates: 100
+wandb:
+  enabled: true
+  mode: online
+  pretraining_project: eagle3-generator-ablations-v3
+  layout: sections
+  projects:
+    conditioning: eagle3-generator-conditioning
+    heatmap: eagle3-generator-heatmap
+    adaptation: eagle3-generator-adaptation
+  group: conditioning-size-24k-1k
+activation_source: vllm
+trajectories_path: ./trajectories
+online:
+  ram_cache_gib: 96
+  summary_cache_dir: output/generator-summary-cache
+  compiler_cache_dir: output/generator-compiler-cache
+  lookahead_updates: 2
+  endpoint: http://127.0.0.1:8000/v1
+  shared_dir: /tmp/speculators-online
+  concurrency: 16
+  buffered_examples: 64
+  target_model_path: models/qwen3-8b
+  drafter_model_path: models/qwen3-8b-eagle3
+  reserve_gib: 8
+max_training_updates: 1000
+training_cohort_size: 8
+training_conditioning_examples: 4

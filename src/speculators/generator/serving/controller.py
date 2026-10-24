@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import random
 import time
 from pathlib import Path
 
@@ -44,12 +45,17 @@ def validate_runtime(config, metadata):
     spec = config.speculative_config
     scheduler = config.scheduler_config
     parallel = config.parallel_config
+    serving = json.loads(os.environ.get("SPECULATORS_SERVER_CONFIG", "{}"))
+    conditioning_limit = min(
+        scheduler.max_num_seqs,
+        serving.get("conditioning_examples") or scheduler.max_num_seqs,
+    )
     checks = {
         "V1 model runner": not getattr(config, "use_v2_model_runner", False),
         "method=eagle3": spec.method == "eagle3",
         "supported batch capacity": 1 <= scheduler.max_num_seqs <= MAX_BATCH_SIZE,
         "generator conditioning capacity": metadata["kind"] != "generator"
-        or scheduler.max_num_seqs <= metadata["max_examples"],
+        or conditioning_limit <= metadata["max_examples"],
         "fixed batch scheduler": scheduler.max_num_seqs == 1
         or (
             getattr(scheduler, "scheduler_cls", None)
@@ -172,6 +178,8 @@ class DraftAdapterController:
                 for name in self.metadata["shapes"]
             }
         serving = json.loads(os.environ.get("SPECULATORS_SERVER_CONFIG", "{}"))
+        self.conditioning_examples = serving.get("conditioning_examples")
+        self.conditioning_seed = serving.get("seed", 42)
         self.permanent_static = (
             self.generator is None
             and serving.get("static_adapter_policy") == "merged_once"
@@ -273,7 +281,11 @@ class DraftAdapterController:
         count = len(request_ids)
         if not 1 <= count <= MAX_BATCH_SIZE:
             raise ValueError("Unsupported fixed batch size")
-        if self.generator is not None and count > self.metadata["max_examples"]:
+        conditioning_count = min(count, self.conditioning_examples or count)
+        if (
+            self.generator is not None
+            and conditioning_count > self.metadata["max_examples"]
+        ):
             raise ValueError("Batch exceeds the generator's conditioning capacity")
         if (
             len(set(request_ids)) != count
@@ -297,13 +309,21 @@ class DraftAdapterController:
             summaries.append(states[end - 1])
         factors, generation_seconds = self.factors, 0.0
         if self.generator is not None:
-            summary = torch.stack(summaries).float()
+            selected = list(range(count))
+            if conditioning_count < count:
+                selected = sorted(
+                    random.Random(
+                        self.conditioning_seed + self.totals["prepared_batches"]
+                    ).sample(selected, conditioning_count)
+                )
+            summary = torch.stack([summaries[index] for index in selected]).float()
+            selected_lengths = [prompt_lengths[index] for index in selected]
             if summary.shape[1] != self.metadata["input_dim"]:
                 raise ValueError("Auxiliary layer order/width differs from training")
             factors, generation_seconds = elapsed(
                 self.device,
                 lambda: self.generator(
-                    summary, torch.tensor(prompt_lengths, device=self.device)
+                    summary, torch.tensor(selected_lengths, device=self.device)
                 ),
             )
         merge_seconds = 0.0
@@ -320,13 +340,14 @@ class DraftAdapterController:
                 "generator_seconds": generation_seconds if index == 0 else 0.0,
                 "merge_seconds": merge_seconds if index == 0 else 0.0,
                 "restore_seconds": 0.0,
-                "deployment_context_size": count,
+                "deployment_context_size": conditioning_count,
+                "batch_size": count,
             }
         self.record = self.records[self.active]
         self.last_record = {}
         self.totals["prepared_requests"] += count
         self.totals["prepared_batches"] += 1
-        self.totals["conditioning_examples"] += count
+        self.totals["conditioning_examples"] += conditioning_count
         self.totals["generator_invocations"] += int(self.generator is not None)
         self.totals["generator_seconds"] += generation_seconds
         self.totals["merge_seconds"] += merge_seconds
