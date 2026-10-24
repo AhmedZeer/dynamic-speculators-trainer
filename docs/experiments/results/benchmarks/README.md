@@ -1,5 +1,13 @@
 # Generation benchmark archive
 
+The completed concurrency 1/2/4/8 comparison is recorded in
+[BATCH-001](../BATCH-001-shared-adapter-concurrency.md), with its
+[full supplied table](2026-10-24-comparison-v2-concurrency/summary.md),
+[112 measurements](2026-10-24-comparison-v2-concurrency/metrics.json), and
+[derived matched-concurrency comparisons](2026-10-24-comparison-v2-concurrency/derived_comparisons.json).
+Serial values are reused from the earlier comparison; native artifacts and
+acceptance metrics have not been archived for this sweep.
+
 The current four-model `comparison-v2` tables are recorded in
 [GEN-003](../GEN-003-generator-suite-throughput.md), with separate Nemotron
 in-distribution and Red Hat out-of-distribution tables and

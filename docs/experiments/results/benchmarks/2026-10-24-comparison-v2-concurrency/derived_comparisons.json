@@ -1,0 +1,403 @@
+{
+  "record_id": "BATCH-001",
+  "percent_formula": "100 * (candidate_tokens_per_second / reference_tokens_per_second - 1)",
+  "group_aggregation": "unweighted arithmetic mean of per-category percentage changes; not aggregate workload throughput",
+  "relative_to_baselines": {
+    "trained-lora": {
+      "1": {
+        "eagle3-base": {
+          "per_category_percent": {
+            "nemo-math": 12.682623562325146,
+            "nemo-code": 6.335138683735453,
+            "nemo-stem": 8.35020242914981,
+            "nemo-chat": 2.5104602510460206,
+            "specbench-humaneval": -1.5807962529273967,
+            "specbench-math-reasoning": 0.9616829451540188,
+            "specbench-summarization": 0.01715560130381988
+          },
+          "id_category_mean_percent": 7.469606231564107,
+          "ood_category_mean_percent": -0.20065256882318602
+        },
+        "trained-lora": {
+          "per_category_percent": {
+            "nemo-math": 0.0,
+            "nemo-code": 0.0,
+            "nemo-stem": 0.0,
+            "nemo-chat": 0.0,
+            "specbench-humaneval": 0.0,
+            "specbench-math-reasoning": 0.0,
+            "specbench-summarization": 0.0
+          },
+          "id_category_mean_percent": 0.0,
+          "ood_category_mean_percent": 0.0
+        }
+      },
+      "2": {
+        "eagle3-base": {
+          "per_category_percent": {
+            "nemo-math": 16.456996148908875,
+            "nemo-code": 10.686885097933008,
+            "nemo-stem": 9.407858328721641,
+            "nemo-chat": 8.60366713681242,
+            "specbench-humaneval": -4.4276191259978726,
+            "specbench-math-reasoning": -1.1286681715575675,
+            "specbench-summarization": -1.0220994475138134
+          },
+          "id_category_mean_percent": 11.288851678093986,
+          "ood_category_mean_percent": -2.1927955816897513
+        },
+        "trained-lora": {
+          "per_category_percent": {
+            "nemo-math": 0.0,
+            "nemo-code": 0.0,
+            "nemo-stem": 0.0,
+            "nemo-chat": 0.0,
+            "specbench-humaneval": 0.0,
+            "specbench-math-reasoning": 0.0,
+            "specbench-summarization": 0.0
+          },
+          "id_category_mean_percent": 0.0,
+          "ood_category_mean_percent": 0.0
+        }
+      },
+      "4": {
+        "eagle3-base": {
+          "per_category_percent": {
+            "nemo-math": 16.338370841716188,
+            "nemo-code": 10.852058063233262,
+            "nemo-stem": 9.271261069608672,
+            "nemo-chat": 3.7909575819151664,
+            "specbench-humaneval": -3.2249359060855576,
+            "specbench-math-reasoning": -0.448639268633344,
+            "specbench-summarization": -0.523244113503718
+          },
+          "id_category_mean_percent": 10.063161889118321,
+          "ood_category_mean_percent": -1.3989397627408733
+        },
+        "trained-lora": {
+          "per_category_percent": {
+            "nemo-math": 0.0,
+            "nemo-code": 0.0,
+            "nemo-stem": 0.0,
+            "nemo-chat": 0.0,
+            "specbench-humaneval": 0.0,
+            "specbench-math-reasoning": 0.0,
+            "specbench-summarization": 0.0
+          },
+          "id_category_mean_percent": 0.0,
+          "ood_category_mean_percent": 0.0
+        }
+      },
+      "8": {
+        "eagle3-base": {
+          "per_category_percent": {
+            "nemo-math": 20.66684665226781,
+            "nemo-code": 13.068115773567346,
+            "nemo-stem": 10.689213282817022,
+            "nemo-chat": 3.142157590146888,
+            "specbench-humaneval": -5.005567496180452,
+            "specbench-math-reasoning": 3.227267310213322,
+            "specbench-summarization": 6.191449757407463
+          },
+          "id_category_mean_percent": 11.891583324699766,
+          "ood_category_mean_percent": 1.4710498571467776
+        },
+        "trained-lora": {
+          "per_category_percent": {
+            "nemo-math": 0.0,
+            "nemo-code": 0.0,
+            "nemo-stem": 0.0,
+            "nemo-chat": 0.0,
+            "specbench-humaneval": 0.0,
+            "specbench-math-reasoning": 0.0,
+            "specbench-summarization": 0.0
+          },
+          "id_category_mean_percent": 0.0,
+          "ood_category_mean_percent": 0.0
+        }
+      }
+    },
+    "generator-24k-2000step": {
+      "1": {
+        "eagle3-base": {
+          "per_category_percent": {
+            "nemo-math": 20.578178427105986,
+            "nemo-code": 11.784014442803215,
+            "nemo-stem": 12.17948717948718,
+            "nemo-chat": 4.748044387847905,
+            "specbench-humaneval": 1.3466042154566704,
+            "specbench-math-reasoning": 2.163786626596531,
+            "specbench-summarization": 0.8920912677989445
+          },
+          "id_category_mean_percent": 12.322431109311072,
+          "ood_category_mean_percent": 1.467494036617382
+        },
+        "trained-lora": {
+          "per_category_percent": {
+            "nemo-math": 7.006896551724129,
+            "nemo-code": 5.124247569069285,
+            "nemo-stem": 3.534174061964812,
+            "nemo-chat": 2.18278615794143,
+            "specbench-humaneval": 2.974419988102328,
+            "specbench-math-reasoning": 1.1906533710373424,
+            "specbench-summarization": 0.8747855917667247
+          },
+          "id_category_mean_percent": 4.462026085174914,
+          "ood_category_mean_percent": 1.679952983635465
+        }
+      },
+      "2": {
+        "eagle3-base": {
+          "per_category_percent": {
+            "nemo-math": 19.135643988018835,
+            "nemo-code": 12.591389114541007,
+            "nemo-stem": 11.01272827891533,
+            "nemo-chat": 8.65068171133052,
+            "specbench-humaneval": -2.0821331577647983,
+            "specbench-math-reasoning": 0.18542405675587847,
+            "specbench-summarization": -1.298342541436459
+          },
+          "id_category_mean_percent": 12.847610773201422,
+          "ood_category_mean_percent": -1.0650172141484597
+        },
+        "trained-lora": {
+          "per_category_percent": {
+            "nemo-math": 2.300117577895344,
+            "nemo-code": 1.7206230123134603,
+            "nemo-stem": 1.4668689934243861,
+            "nemo-chat": 0.043290043290045155,
+            "specbench-humaneval": 2.4541462154482163,
+            "specbench-math-reasoning": 1.329093281148075,
+            "specbench-summarization": -0.2790957298353325
+          },
+          "id_category_mean_percent": 1.382724906730809,
+          "ood_category_mean_percent": 1.1680479222536528
+        }
+      },
+      "4": {
+        "eagle3-base": {
+          "per_category_percent": {
+            "nemo-math": 19.79600430449635,
+            "nemo-code": 13.531517200238618,
+            "nemo-stem": 8.667689110968201,
+            "nemo-chat": 4.78790957581916,
+            "specbench-humaneval": -2.2983852831376828,
+            "specbench-math-reasoning": 1.1893173064714047,
+            "specbench-summarization": -2.103038840813032
+          },
+          "id_category_mean_percent": 11.695780047880582,
+          "ood_category_mean_percent": -1.0707022724931032
+        },
+        "trained-lora": {
+          "per_category_percent": {
+            "nemo-math": 2.9720490649507436,
+            "nemo-code": 2.417148751065068,
+            "nemo-stem": -0.5523611173993692,
+            "nemo-chat": 0.9605383909452536,
+            "specbench-humaneval": 0.9574270310466648,
+            "specbench-math-reasoning": 1.645338208409508,
+            "specbench-summarization": -1.5881043900465186
+          },
+          "id_category_mean_percent": 1.449343772390424,
+          "ood_category_mean_percent": 0.33822028313655145
+        }
+      },
+      "8": {
+        "eagle3-base": {
+          "per_category_percent": {
+            "nemo-math": 20.969222462203028,
+            "nemo-code": 15.378356387306757,
+            "nemo-stem": 10.77000222866058,
+            "nemo-chat": 3.0679626057278364,
+            "specbench-humaneval": -6.095760934303551,
+            "specbench-math-reasoning": 0.6006435466571203,
+            "specbench-summarization": 4.458210002746332
+          },
+          "id_category_mean_percent": 12.54638592097455,
+          "ood_category_mean_percent": -0.34563579496669955
+        },
+        "trained-lora": {
+          "per_category_percent": {
+            "nemo-math": 0.25058731401723655,
+            "nemo-code": 2.043229072965125,
+            "nemo-stem": 0.07298718948984817,
+            "nemo-chat": -0.0719346833075507,
+            "specbench-humaneval": -1.1476392977864958,
+            "specbench-math-reasoning": -2.5445057609272848,
+            "specbench-summarization": -1.632183908045981
+          },
+          "id_category_mean_percent": 0.5737172232911647,
+          "ood_category_mean_percent": -1.7747763222532538
+        }
+      }
+    },
+    "generator-4000step": {
+      "1": {
+        "eagle3-base": {
+          "per_category_percent": {
+            "nemo-math": 22.95617034504196,
+            "nemo-code": 14.606925980633513,
+            "nemo-stem": 14.574898785425106,
+            "nemo-chat": 2.7651446243405653,
+            "specbench-humaneval": 1.6393442622950838,
+            "specbench-math-reasoning": 2.6596543951915796,
+            "specbench-summarization": 0.6862240521530172
+          },
+          "id_category_mean_percent": 13.725784933860286,
+          "ood_category_mean_percent": 1.6617409032132269
+        },
+        "trained-lora": {
+          "per_category_percent": {
+            "nemo-math": 9.117241379310336,
+            "nemo-code": 7.778978237382295,
+            "nemo-stem": 5.74497898178421,
+            "nemo-chat": 0.248447204968949,
+            "specbench-humaneval": 3.271861986912561,
+            "specbench-math-reasoning": 1.6817978865902639,
+            "specbench-summarization": 0.6689536878216051
+          },
+          "id_category_mean_percent": 5.722411450861447,
+          "ood_category_mean_percent": 1.8742045204414766
+        }
+      },
+      "2": {
+        "eagle3-base": {
+          "per_category_percent": {
+            "nemo-math": 21.994009413778357,
+            "nemo-code": 16.301110208502557,
+            "nemo-stem": 12.045748016971046,
+            "nemo-chat": 8.262811471556187,
+            "specbench-humaneval": 1.152168545798693,
+            "specbench-math-reasoning": 3.6117381489842115,
+            "specbench-summarization": 0.5985267034990915
+          },
+          "id_category_mean_percent": 14.650919777702036,
+          "ood_category_mean_percent": 1.787477799427332
+        },
+        "trained-lora": {
+          "per_category_percent": {
+            "nemo-math": 4.754556143445021,
+            "nemo-code": 5.072168311179981,
+            "nemo-stem": 2.4110605294216825,
+            "nemo-chat": -0.3138528138528218,
+            "specbench-humaneval": 5.838284680960992,
+            "specbench-math-reasoning": 4.794520547945202,
+            "specbench-summarization": 1.637361615033961
+          },
+          "id_category_mean_percent": 2.980983042548466,
+          "ood_category_mean_percent": 4.090055614646719
+        }
+      },
+      "4": {
+        "eagle3-base": {
+          "per_category_percent": {
+            "nemo-math": 23.136667758386764,
+            "nemo-code": 17.960827202227094,
+            "nemo-stem": 10.903873744619785,
+            "nemo-chat": 7.537465074930161,
+            "specbench-humaneval": -0.8455898889038971,
+            "specbench-math-reasoning": -0.672958902950016,
+            "specbench-summarization": -0.9307707788287378
+          },
+          "id_category_mean_percent": 14.884708445040951,
+          "ood_category_mean_percent": -0.8164398568942169
+        },
+        "trained-lora": {
+          "per_category_percent": {
+            "nemo-math": 5.843555198069583,
+            "nemo-code": 6.412843625274678,
+            "nemo-stem": 1.4940915470638805,
+            "nemo-chat": 3.609666564698699,
+            "specbench-humaneval": 2.4586354340955463,
+            "specbench-math-reasoning": -0.2253305556736529,
+            "specbench-summarization": -0.4096702407444863
+          },
+          "id_category_mean_percent": 4.34003923377671,
+          "ood_category_mean_percent": 0.6078782125591357
+        }
+      },
+      "8": {
+        "eagle3-base": {
+          "per_category_percent": {
+            "nemo-math": 21.91954643628511,
+            "nemo-code": 14.401952807160301,
+            "nemo-stem": 10.859148651660355,
+            "nemo-chat": 5.134292921798478,
+            "specbench-humaneval": -4.67669679156848,
+            "specbench-math-reasoning": 1.8805863425098268,
+            "specbench-summarization": 3.39019254828965
+          },
+          "id_category_mean_percent": 13.07873520422606,
+          "ood_category_mean_percent": 0.19802736641033233
+        },
+        "trained-lora": {
+          "per_category_percent": {
+            "nemo-math": 1.038147443785653,
+            "nemo-code": 1.179675653447787,
+            "nemo-stem": 0.15352477789243313,
+            "nemo-chat": 1.9314462468078997,
+            "specbench-humaneval": 0.346199978192141,
+            "specbench-math-reasoning": -1.304578724976324,
+            "specbench-summarization": -2.6379310344827656
+          },
+          "id_category_mean_percent": 1.0756985304834432,
+          "ood_category_mean_percent": -1.198769927088983
+        }
+      }
+    }
+  },
+  "generator_checkpoint_comparison": {
+    "1": {
+      "per_category_percent": {
+        "nemo-math": 1.9721577726218076,
+        "nemo-code": 2.5253266774335703,
+        "nemo-stem": 2.135338345864657,
+        "nemo-chat": -1.8930184091698443,
+        "specbench-humaneval": 0.2888503755055005,
+        "specbench-math-reasoning": 0.4853654949257269,
+        "specbench-summarization": -0.20404693079408842
+      },
+      "id_category_mean_percent": 1.1849510966875476,
+      "ood_category_mean_percent": 0.19005631321237967
+    },
+    "2": {
+      "per_category_percent": {
+        "nemo-math": 2.3992529272322427,
+        "nemo-code": 3.294853294853284,
+        "nemo-stem": 0.9305417082087208,
+        "nemo-chat": -0.3569883167459986,
+        "specbench-humaneval": 3.303076147251627,
+        "specbench-math-reasoning": 3.4199726402188935,
+        "specbench-summarization": 1.9218210653978884
+      },
+      "id_category_mean_percent": 1.5669149033870622,
+      "ood_category_mean_percent": 2.8816232842894696
+    },
+    "4": {
+      "per_category_percent": {
+        "nemo-math": 2.7886267770660833,
+        "nemo-code": 3.9013924161485303,
+        "nemo-stem": 2.0578192579103094,
+        "nemo-chat": 2.623924372803277,
+        "specbench-humaneval": 1.4869717337261612,
+        "specbench-math-reasoning": -1.8403881545926093,
+        "specbench-summarization": 1.1974509199300876
+      },
+      "id_category_mean_percent": 2.84294070598205,
+      "ood_category_mean_percent": 0.28134483302121316
+    },
+    "8": {
+      "per_category_percent": {
+        "nemo-math": 0.7855915370366118,
+        "nemo-code": -0.8462623413258097,
+        "nemo-stem": 0.0804788491524544,
+        "nemo-chat": 2.0048230932584676,
+        "specbench-humaneval": 1.5111821967294548,
+        "specbench-math-reasoning": 1.2723008031843008,
+        "specbench-summarization": -1.022435148399159
+      },
+      "id_category_mean_percent": 0.506157784530431,
+      "ood_category_mean_percent": 0.5870159505048655
+    }
+  }
+}
