@@ -1,5 +1,12 @@
 # Generation benchmark archive
 
+The per-request continuous-batching comparison is recorded in
+[BATCH-003](../BATCH-003-per-request-continuous.md), with
+[24 supplied measurements](2026-10-25-per-request-4000-v1/summary.json) and
+[derived throughput/acceptance/latency comparisons](2026-10-25-per-request-4000-v1/analysis.json).
+The upload contains C1/C2/C4 only; full runtime provenance, request-level records,
+correctness verification and C8 results are unavailable.
+
 The completed concurrency 1/2/4/8 comparison is recorded in
 [BATCH-001](../BATCH-001-shared-adapter-concurrency.md), with its
 [full supplied table](2026-10-24-comparison-v2-concurrency/summary.md),
