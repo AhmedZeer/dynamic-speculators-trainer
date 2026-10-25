@@ -208,3 +208,26 @@ does not separate queueing from prefill or other TTFT components. The measured
 2–3 ms generator invocation cannot by itself explain this first-token delay.
 These latency numbers belong to BATCH-001 and must not be reused for the new
 1K-update K1/K2/K4 checkpoints in BATCH-002.
+
+For comparison, the same previous suite's **C1 median TTFT in milliseconds** is:
+
+| Previous-suite model | Nemo math | Nemo code | Nemo STEM | Nemo chat | HumanEval | Math reasoning | Summarization |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| EAGLE3 | 43.5 | 48.1 | 43.6 | 43.9 | 43.3 | 43.8 | 61.1 |
+| Trained LoRA | 45.0 | 50.8 | 45.0 | 44.9 | 44.8 | 44.0 | 62.4 |
+| Generator, 2K-step label | 47.6 | 53.7 | 48.4 | 47.8 | 47.4 | 47.1 | 66.6 |
+| Generator, 4K-step label | 46.7 | 53.0 | 47.3 | 49.6 | 47.3 | 47.1 | 65.7 |
+
+EAGLE3 has the lowest reported median TTFT in every C1 category. Both generators
+add roughly 3–6 ms over EAGLE3 while their larger throughput/acceptance benefits
+occur during subsequent decoding. These are observations from the archived
+summary, without repeated-run uncertainty or a component-level TTFT breakdown.
+
+The owner's working assessment is **limited practical usefulness of the current
+fixed-cohort, shared-generator-adapter batching technique**. The earlier C8
+generator-versus-LoRA throughput margin was small on ID, first-token latency
+increased substantially with concurrency, and the newer partial K-policy study
+does not show a consistent advantage for conditioning on more examples. This
+assessment applies to our shared-adapter technique and scheduler; ordinary GPU
+batching still produced large aggregate-throughput gains. See the
+[qualified BATCH-002 assessment](../eagle3_conditioning_24k_1k.md#working-assessment-of-shared-adapter-batching).

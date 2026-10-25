@@ -167,3 +167,23 @@ K2 leads math, K1 leads code/STEM, and K4 leads chat. Larger K does not improve
 throughput monotonically in this partial table. K8, native acceptance/latency,
 actual conditioning counts, hashes and run provenance are still unavailable;
 no significance or complete K ranking is established.
+
+## Working assessment of shared-adapter batching
+
+**The current evidence does not show enough consistent incremental benefit to
+justify treating our fixed-cohort, shared-adapter batching technique as a strong
+practical advantage.** The owner requested recording this limitation explicitly.
+
+- Increasing conditioning size from K1 to K2/K4 does not consistently improve the new matched-budget throughput. K1 leads code/STEM, K2 math, and K4 chat; the latter differences are small. K8 has not been reported.
+- In the earlier study, G4's C8 ID mean throughput advantage over static LoRA was only 1.08%, despite larger acceptance-length gains. Recorded adapter generation/merge/restoration was already below 0.11% of wall time, limiting the benefit available from amortizing those timed operations further.
+- The earlier C1/C8 comparison shows a substantial TTFT cost under our fixed-cohort setup: for example, the old G4 chat median rose from 49.6 to 1447.6 ms. This comparison changes concurrency and execution conditions together; it does not isolate scheduling as the sole cause.
+
+This is a preliminary engineering assessment of **our added sharing/admission
+policy**, not evidence that GPU batching itself is useless. Ordinary batching
+clearly increased aggregate throughput. The new fixed-B=8 K1/K2/K4 results also
+do not test per-request adapters or standard continuous batching: every arm still
+uses one shared adapter for its complete serving cohort. Consequently they show
+limited evidence for using *more conditioning examples*, not a causal proof that
+all adapter sharing is ineffective. Separate training trajectories, missing K8,
+and absent repeated-run uncertainty limit the conclusion. No benchmark code or
+historical measurements are removed by this assessment.
