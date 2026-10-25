@@ -18,7 +18,7 @@ explain when new evidence changes them.
 | GEN-004 | [Bank warmup and direct-training decision](GEN-004-bank-warmup-adaptation.md) | Preliminary adaptation evidence; bank workflow retired | Fresh generator catches up to bank-pretrained generator; use original data directly with drafting loss. |
 | SYS-001 | [Activation RAM reuse](../eagle3_activation_ram_cache.md) | Measured console pilot; no repeated trials | Recorded validation wall times: 96.90 s on the first pass and 20.06 s on a warm pass; extraction/startup effects are included. |
 | BATCH-001 | [Shared-adapter concurrency sweep](BATCH-001-shared-adapter-concurrency.md) | Detailed supplied suite summary; correctness/repeat uncertainty unavailable | G4 has higher ID acceptance than LoRA; timed adapter GPU work is below 0.11% of wall time, while throughput gains narrow at C8. |
-| BATCH-002 | [Matched 24K, 1K-update conditioning-size study](../eagle3_conditioning_24k_1k.md) | Prepared; full GPU runs pending | Four separately trained K=1/2/4/8 generators and one matched static LoRA; fixed loss cohorts and B=8 ID-only serving. |
+| BATCH-002 | [Matched 24K, 1K-update conditioning-size study](../eagle3_conditioning_24k_1k.md) | Partial supplied throughput; K8 and native metrics pending | K1/K2/K4 exceed static LoRA on all four ID categories; the best reported K varies by category. |
 
 Use [the results template](TEMPLATE.md) for further experiments. Report the
 comparison budget, validation membership, evidence quality, limitations, and

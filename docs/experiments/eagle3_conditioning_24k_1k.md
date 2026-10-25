@@ -1,7 +1,9 @@
 # BATCH-002 — Matched 24K, 1K-update conditioning-size study
 
-Status: configs and implementation prepared; full GPU runs have not been executed
-by the agent. Seed 42, one training run per arm and one ID benchmark pass.
+Status: partial user-supplied GPU throughput results received 2026-10-25 for
+static LoRA and K1/K2/K4; K8 has not been reported. The agent did not execute
+these GPU runs. Intended protocol: seed 42, one training run per arm and one
+ID benchmark pass; effective run provenance remains to be supplied.
 
 The owner selected **four separately trained generators**, rather than four
 inference settings applied to one checkpoint. Each generator is trained and
@@ -145,3 +147,23 @@ study measures their combined policy effect across separately optimized models;
 it does not isolate inference K while holding one model's weights fixed. Native
 continuous-batching baselines and verified output correctness remain separate
 open questions.
+
+## Partial results received 2026-10-25
+
+The supplied table reports aggregate output tokens/s at C8. It does not include
+TTFT or acceptance for these new checkpoints. The previous study's latency
+values must not be assigned to these models.
+[Structured transcription](results/benchmarks/2026-10-25-conditioning-24k-1k-partial/metrics.json).
+
+| Model | Nemo math | Nemo code | Nemo STEM | Nemo chat |
+| --- | ---: | ---: | ---: | ---: |
+| Static LoRA, 24K/1K label | 429.55 | 386.78 | 392.63 | 282.77 |
+| Generator K1, 24K/1K label | 453.27 | 407.25 | 404.92 | 287.20 |
+| Generator K2, 24K/1K label | 456.32 | 403.75 | 399.54 | 287.52 |
+| Generator K4, 24K/1K label | 455.18 | 401.66 | 395.86 | 287.62 |
+
+All three reported generator arms exceed static LoRA in all four categories.
+K2 leads math, K1 leads code/STEM, and K4 leads chat. Larger K does not improve
+throughput monotonically in this partial table. K8, native acceptance/latency,
+actual conditioning counts, hashes and run provenance are still unavailable;
+no significance or complete K ranking is established.

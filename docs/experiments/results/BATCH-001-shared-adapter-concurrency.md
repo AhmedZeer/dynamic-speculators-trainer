@@ -184,3 +184,27 @@ loss cohorts and an ID-only serving comparison at B=8. This is a combined
 training/serving K-policy comparison, rather than the originally proposed
 single-checkpoint inference-only ablation. See
 [BATCH-002 protocol and commands](../eagle3_conditioning_24k_1k.md).
+
+### 2026-10-25 — TTFT extracted from the existing detailed summary
+
+These are additional readings from the same archived JSON, not new benchmark
+runs. TTFT is time from request initiation to the first streamed token as
+measured by the benchmark client. It includes queueing/admission, prefill, and
+first-token serving work. The available summary reports medians, not p95.
+Lower is better; all values below are **milliseconds at C8**.
+
+| Previous-suite model | Nemo math | Nemo code | Nemo STEM | Nemo chat | HumanEval | Math reasoning | Summarization |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| EAGLE3 | 676.8 | 930.9 | 369.4 | 1584.7 | 559.6 | 332.0 | 755.7 |
+| Trained LoRA | 373.0 | 662.5 | 407.8 | 1410.8 | 521.4 | 296.1 | 636.9 |
+| Generator, 2K-step label | 350.3 | 659.0 | 393.7 | 1382.6 | 733.7 | 303.5 | 650.6 |
+| Generator, 4K-step label | 399.3 | 713.2 | 392.7 | 1447.6 | 586.4 | 268.9 | 652.1 |
+
+For the previous G4 model, C1 TTFT is 46.7/53.0/47.3/49.6 ms across Nemo
+math/code/STEM/chat. At C8 it is 399.3/713.2/392.7/1447.6 ms. Chat median whole
+request latency rises from 4.207 s to 5.965 s while aggregate throughput rises.
+The fixed-cohort admission policy can contribute queueing delay, but the JSON
+does not separate queueing from prefill or other TTFT components. The measured
+2–3 ms generator invocation cannot by itself explain this first-token delay.
+These latency numbers belong to BATCH-001 and must not be reused for the new
+1K-update K1/K2/K4 checkpoints in BATCH-002.
