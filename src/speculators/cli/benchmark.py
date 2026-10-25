@@ -23,3 +23,19 @@ def suite_command(
     typer.echo(json.dumps(result, indent=2))
     if result.get("failed", 0):
         raise typer.Exit(code=1)
+
+
+@app.command(name="profile")
+def profile_command(
+    config: Annotated[Path, typer.Option("--config", exists=True, dir_okay=False)],
+    output_root: Annotated[Path, typer.Option("--output-root")],
+    resume: Annotated[bool, typer.Option("--resume")] = False,
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+):
+    """Run an unprofiled suite, then a separate bounded CPU/CUDA trace suite."""
+    from speculators.benchmark.profiling import run_profile  # noqa: PLC0415
+
+    result = run_profile(config, output_root, resume=resume, dry_run=dry_run)
+    typer.echo(json.dumps(result, indent=2))
+    if result.get("failed", 0):
+        raise typer.Exit(code=1)

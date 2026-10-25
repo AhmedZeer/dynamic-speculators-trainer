@@ -68,7 +68,12 @@ def workload(tmp_path):
 @pytest.fixture
 def http_server(request):  # noqa: C901 -- small mock protocol implementation
     counts = SimpleNamespace(
-        completions=0, streaming=0, output_tokens=getattr(request, "param", 4)
+        completions=0,
+        streaming=0,
+        output_tokens=getattr(request, "param", 4),
+        profile_actions=[],
+        trace_dir=None,
+        status=None,
     )
 
     class Handler(BaseHTTPRequestHandler):
@@ -84,7 +89,9 @@ def http_server(request):  # noqa: C901 -- small mock protocol implementation
             self.wfile.write(payload)
 
         def do_GET(self):
-            if self.path == "/v1/models":
+            if self.path == "/speculators/status" and counts.status is not None:
+                self.reply(counts.status)
+            elif self.path == "/v1/models":
                 self.reply({"data": [{"id": "speculators", "object": "model"}]})
             elif self.path == "/health":
                 self.reply({"status": "ok"})
@@ -102,7 +109,38 @@ def http_server(request):  # noqa: C901 -- small mock protocol implementation
                 self.reply({"error": "not found"}, status=404)
 
         def do_POST(self):
-            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            raw = self.rfile.read(int(self.headers["Content-Length"]))
+            body = json.loads(raw) if raw else {}
+            if self.path in ("/start_profile", "/stop_profile"):
+                counts.profile_actions.append((self.path, counts.completions))
+                if self.path == "/stop_profile":
+                    write_json(
+                        counts.trace_dir / "worker.pt.trace.json",
+                        {
+                            "traceEvents": [
+                                {
+                                    "name": "execute_context_0(0)_generation_2(2)",
+                                    "cat": "user_annotation",
+                                    "ph": "X",
+                                    "pid": 1,
+                                    "tid": 1,
+                                    "ts": 0,
+                                    "dur": 100,
+                                },
+                                {
+                                    "name": "mock_kernel",
+                                    "cat": "kernel",
+                                    "ph": "X",
+                                    "pid": 2,
+                                    "tid": 1,
+                                    "ts": 20,
+                                    "dur": 50,
+                                },
+                            ]
+                        },
+                    )
+                self.reply(b"")
+                return
             if self.path == "/tokenize":
                 assert body["prompt"] == "one two"
                 assert body["add_special_tokens"] is False
@@ -276,3 +314,54 @@ def test_incomplete_guidellm_results_are_rejected(tmp_path):
     )
     with pytest.raises(ValueError, match="Incomplete or failed"):
         native_summary(path, 2)
+
+
+def test_profile_capture_wraps_real_guidellm_after_warmup(
+    workload, http_server, tmp_path, perf_utils, monkeypatch
+):
+    if importlib.util.find_spec("guidellm") is None:
+        pytest.skip("GuideLLM integration dependency unavailable")
+    manifest, tokenizer_path = workload
+    target, counts = http_server
+    counts.trace_dir = tmp_path / "native-traces"
+    counts.status = {
+        "configuration": {
+            "kind": "eagle3_base",
+            "models": json.loads(manifest.read_text())["models"],
+            "max_num_seqs": 2,
+            "profiler": {"torch_profiler_dir": str(counts.trace_dir)},
+        },
+        "workers": [{"use_v2_model_runner": False}],
+    }
+    args = Namespace(
+        target=target,
+        validation_manifest=manifest,
+        correctness_report=None,
+        subsets="all",
+        max_requests=0,
+        max_concurrency=2,
+        mode="throughput",
+        gen_kwargs="",
+        output_dir=str(tmp_path / "profiled"),
+        warmups=1,
+        seed=42,
+        sweep_rate=2,
+        server_provenance=None,
+        tokenizer_path=tokenizer_path,
+        allow_output_mismatch=False,
+        capture_profile=True,
+    )
+    monkeypatch.setenv(
+        "PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"]
+    )
+    result = benchmark_endpoint(args, perf_utils)
+    assert counts.profile_actions == [("/start_profile", 1), ("/stop_profile", 3)]
+    assert counts.streaming == 2
+    assert result["math"]["measurement_kind"] == "profiled_diagnostic"
+    assert result["math"]["acceptance"]["num_drafts"] == 2
+    assert (tmp_path / "profiled/profile_capture.json").is_file()
+    assert (tmp_path / "profiled/profile_summary.md").is_file()
+    assert (
+        json.loads((tmp_path / "profiled/results.json").read_text())["measurement_kind"]
+        == "profiled_diagnostic"
+    )

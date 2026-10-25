@@ -2,6 +2,8 @@
 
 import torch
 
+from speculators.generator.serving.ranges import trace_range, traced
+
 
 class NativeDraftLoRA:
     def __init__(self, draft, metadata, config):
@@ -42,6 +44,7 @@ class NativeDraftLoRA:
             )
         self.map_tokens([], [])
 
+    @traced("speculators.adapter_load")
     def activate(self, requests):
         """Only scheduled requests occupy GPU slots; paused factors stay on CPU."""
         from vllm.lora.lora_model import LoRAModel  # noqa: PLC0415
@@ -69,12 +72,15 @@ class NativeDraftLoRA:
                     a.to(dtype=torch.bfloat16, copy=True),
                     b.to(dtype=torch.bfloat16, copy=True),
                 )
-            self.manager.add_adapter(
-                LoRAModel(adapter_id, self.metadata["rank"], layers)
-            )
-            self.manager.activate_adapter(adapter_id)
+            with trace_range("speculators.adapter_pack"):
+                self.manager.add_adapter(
+                    LoRAModel(adapter_id, self.metadata["rank"], layers)
+                )
+            with trace_range("speculators.adapter_upload"):
+                self.manager.activate_adapter(adapter_id)
             self.resident[request_id] = adapter_id
 
+    @traced("speculators.token_mapping")
     def map_tokens(self, token_ids, request_ids):
         from vllm.lora.layers import LoRAMapping  # noqa: PLC0415
 

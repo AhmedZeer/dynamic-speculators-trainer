@@ -303,6 +303,7 @@ def parse_args():
         "--adapter-policy", choices=["shared", "per_request"], default="shared"
     )
     serving.add_argument("--vanilla-vllm", action="store_true")
+    serving.add_argument("--profiler-config", type=json.loads, default=None)
     serving.add_argument("--spec-tokens", type=int, default=3)
     serving.add_argument("--gpu-memory-utilization", type=float, default=0.85)
     serving.add_argument("--seed", type=int, default=42)
@@ -617,6 +618,9 @@ def main():  # noqa: C901 -- explicit independent launch modes
             {
                 "VLLM_USE_V2_MODEL_RUNNER": "0",
                 "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+                "SPECULATORS_TRACE_RANGES": os.environ.get(
+                    "SPECULATORS_TRACE_RANGES", "0"
+                ),
                 "SPECULATORS_SERVER_CONFIG": json.loads(
                     os.environ["SPECULATORS_SERVER_CONFIG"]
                 ),

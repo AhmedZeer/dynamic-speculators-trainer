@@ -58,7 +58,7 @@ def _local_drafter(source, revision, output):  # noqa: C901 -- validate and stag
     return destination, revision, hashes
 
 
-def resolve_model(spec, base, output, pinned=None):
+def resolve_model(spec, base, output, pinned=None):  # noqa: C901 -- pin local/remote model and serving policy
     source = local_source(spec.model, base)
     local = source.is_dir()
     if not local and (spec.model.startswith((".", "/", "~"))):
@@ -77,6 +77,8 @@ def resolve_model(spec, base, output, pinned=None):
         result.update(adapter_policy="per_request", conditioning_examples=1)
     if spec.vanilla_vllm:
         result["vanilla_vllm"] = True
+    if spec.batching_policy is not None:
+        result["batching_policy"] = spec.batching_policy
     if spec.type == "drafter":
         if spec.subfolder:
             raise ValueError(

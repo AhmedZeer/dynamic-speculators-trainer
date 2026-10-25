@@ -1,5 +1,8 @@
 # Per-request generated adapters with native continuous admission
 
+For runtime traces and the serial merged/unmerged control, use the
+[profiling runbook](eagle3_runtime_profiling.md).
+
 Implementation date: 2026-10-25. Status: implemented with CPU routing/lifecycle
 checks; the native CUDA kernels and full A100 serving run have not been executed
 in the development environment. This is a new serving policy, separate from

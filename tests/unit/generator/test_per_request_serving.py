@@ -383,8 +383,9 @@ def test_installed_patch_routes_every_draft_forward_and_profiles(tmp_path, monke
 
 
 @pytest.mark.parametrize("baseline", [True, False])
+@pytest.mark.parametrize("profile_enabled", [True, False])
 def test_continuous_launch_uses_native_scheduler_and_explicit_source_policy(
-    tmp_path, monkeypatch, baseline
+    tmp_path, monkeypatch, baseline, profile_enabled
 ):
     import importlib.metadata  # noqa: PLC0415
     from argparse import Namespace  # noqa: PLC0415
@@ -432,12 +433,19 @@ def test_continuous_launch_uses_native_scheduler_and_explicit_source_policy(
         }
         write_json(tmp_path / "bundle/bundle.json", metadata)
         args.adapter_bundle = tmp_path / "bundle"
+    if profile_enabled:
+        from speculators.benchmark.config import Settings  # noqa: PLC0415
+        from speculators.benchmark.profiling import profiler_config  # noqa: PLC0415
+
+        args.profiler_config = profiler_config(Settings(), tmp_path / "server")
     command = server.build_server(args, [])
+    assert ("--profiler-config" in command) == profile_enabled
     assert "--scheduler-cls" not in command
     assert "--enable-lora" not in command
     speculative = json.loads(command[command.index("--speculative-config") + 1])
     assert ("draft_adapter_path" in speculative) is not baseline
     saved = json.loads((tmp_path / "server/server.json").read_text())
+    assert ("profiler" in saved) == profile_enabled
     assert saved["batching_policy"] == "continuous"
     assert saved["batch_wait_ms"] == 0
     assert saved["vllm_sources"] == ("vanilla" if baseline else "installed")

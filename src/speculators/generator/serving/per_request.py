@@ -13,6 +13,7 @@ from speculators.generator.serving.controller import (
     elapsed,
 )
 from speculators.generator.serving.multilora import NativeDraftLoRA
+from speculators.generator.serving.ranges import attach_ranges, trace_range, traced
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +48,12 @@ class PerRequestAdapterController(DraftAdapterController):
         for name, (a, b) in factors.items():
             if not torch.isfinite(a).all() or not torch.isfinite(b).all():
                 raise ValueError("Non-finite generated adapter")
-            retained[name] = (a.detach().cpu(), b.detach().cpu())
+            with trace_range("speculators.adapter_to_cpu"):
+                retained[name] = (a.detach().cpu(), b.detach().cpu())
         return retained
 
     @torch.inference_mode()
+    @traced("speculators.adapter_prepare")
     def prepare_scheduled(self, ids, lengths, positions, states, offsets):
         """Generate only for new requests; cached adapters survive KV recomputation."""
         count = len(ids)
@@ -121,6 +124,7 @@ class PerRequestAdapterController(DraftAdapterController):
         self.active = next(iter(self.active_requests), None)
         self.record = self.records.get(self.active, {})
 
+    @traced("speculators.token_mapping_build")
     def map_forward(self, metadata):
         """Map each forward's final query layout, including later draft steps."""
         offsets = metadata.query_start_loc_cpu.tolist()
@@ -137,6 +141,7 @@ class PerRequestAdapterController(DraftAdapterController):
         self.totals["draft_forward_requests"] += len(ids)
         self.totals["draft_forward_tokens"] += len(tokens)
 
+    @traced("speculators.adapter_cleanup")
     def finish(self, request_id):
         if request_id in self.adapters:
             self.backend.release(request_id)
@@ -186,7 +191,12 @@ def create_controller(proposer):
     bundle = proposer.speculative_config.draft_adapter_path
     serving = json.loads(os.environ.get("SPECULATORS_SERVER_CONFIG", "{}"))
     if serving.get("adapter_policy") == "per_request":
-        return PerRequestAdapterController(bundle, proposer.model, proposer.vllm_config)
+        return attach_ranges(
+            PerRequestAdapterController(bundle, proposer.model, proposer.vllm_config),
+            proposer.model,
+        )
     from speculators.generator.serving import controller  # noqa: PLC0415
 
-    return controller.DraftAdapterController(bundle, proposer.model)
+    return attach_ranges(
+        controller.DraftAdapterController(bundle, proposer.model), proposer.model
+    )

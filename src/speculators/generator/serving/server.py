@@ -63,6 +63,11 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
     batching = getattr(args, "batching_policy", "fixed_shared_adapter")
     adapter_policy = getattr(args, "adapter_policy", "shared")
     vanilla = getattr(args, "vanilla_vllm", False)
+    profiler = getattr(args, "profiler_config", None)
+    if profiler is not None:
+        from speculators.benchmark.profiling import validate_profiler_config  # noqa: PLC0415
+
+        validate_profiler_config(profiler)
     if vanilla and (metadata is not None or batching != "continuous"):
         raise ValueError("Vanilla vLLM requires a base model and continuous batching")
     if adapter_policy == "per_request":
@@ -171,6 +176,8 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
         "bundle_weights_sha256": metadata["weights_sha256"] if metadata else None,
         "source_job": metadata.get("source_job") if metadata else None,
     }
+    if profiler is not None:
+        configuration["profiler"] = profiler
     output = Path(args.provenance_dir)
     output.mkdir(parents=True, exist_ok=True)
     previous = output / "server.json"
@@ -186,6 +193,7 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
     atomic_write(output / "speculators.patch", source_patch)
     os.environ["VLLM_USE_V2_MODEL_RUNNER"] = "0"
     os.environ["SPECULATORS_SERVER_CONFIG"] = json.dumps(configuration)
+    os.environ["SPECULATORS_TRACE_RANGES"] = "1" if profiler else "0"
     if vanilla:
         from speculators.generator.serving.vanilla import vanilla_source_view  # noqa: PLC0415
 
@@ -243,6 +251,8 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
                 "fcfs",
             ]
         )
+    if profiler is not None:
+        command.extend(["--profiler-config", json.dumps(profiler)])
     if args.spec_model:
         speculative = {
             "model": args.spec_model,

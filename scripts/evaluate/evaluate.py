@@ -511,7 +511,14 @@ def main() -> None:
         help="Group frozen validation measurements by category or individual subset",
     )
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--capture-profile",
+        action="store_true",
+        help="Capture bounded native worker traces after warmup; diagnostic run only",
+    )
     args = parser.parse_args()
+    if args.capture_profile and not args.validation_manifest:
+        parser.error("--capture-profile requires --validation-manifest")
 
     if args.output_dir is None:
         model_name = _fetch_model_name(args.target)

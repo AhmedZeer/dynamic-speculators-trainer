@@ -1,0 +1,31 @@
+# C4 uses native continuous admission for both arms; baseline sources are original.
+models:
+  - name: eagle3-vanilla
+    type: drafter
+    model: RedHatAI/Qwen3-8B-speculator.eagle3
+    revision: 08610ffa01dd9f16731fe8f627b85905b6aa51c4
+    vanilla_vllm: true
+  - name: generator-4000-per-request
+    type: generator
+    model: azeeer/eagle3-generator-all24k-10ep-v1
+    revision: bf3fb2818dc1c09f3324b7193d00ceb292a8a854
+    subfolder: step-00004000
+    adapter_policy: per_request
+    conditioning_examples: 1
+benchmarks:
+  - dataset: nemotron
+    categories: [math, chat]
+settings:
+  batching_policy: continuous
+  concurrency: 4
+  max_samples: 16
+  max_tokens: 128
+  seed: 42
+  warmups: 3
+  gpu: 0
+  continue_on_error: false
+  profiling:
+    max_iterations: 30
+    with_stack: false
+    record_shapes: false
+    with_memory: false

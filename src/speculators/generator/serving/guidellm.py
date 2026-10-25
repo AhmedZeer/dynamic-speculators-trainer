@@ -3,6 +3,7 @@
 import csv
 import json
 import shutil
+from contextlib import nullcontext
 from importlib.metadata import version
 from pathlib import Path
 from urllib.request import urlopen
@@ -31,6 +32,23 @@ MAPPER = {
         "output_tokens_count_column": "output_tokens_count",
     },
 }
+
+
+def copy_server_provenance(source, output):
+    """Copy launch evidence without duplicating installed packages or old traces."""
+    shutil.copytree(
+        source, output, ignore=shutil.ignore_patterns("traces", "vanilla-vllm")
+    )
+    manifest = source / "vanilla_source.json"
+    if manifest.is_file():
+        originals = json.loads(manifest.read_text())["original_sha256"]
+        for relative, expected in originals.items():
+            path = source / "vanilla-vllm" / relative
+            if file_digest(path) != expected:
+                raise ValueError(f"Baseline original source changed: {relative}")
+            destination = output / "vanilla-vllm" / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, destination)
 
 
 def native_summary(path, expected_requests):
@@ -131,6 +149,19 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
         }
     status = server_status(args.target)
     validate_status(status, manifest)
+    capture = getattr(args, "capture_profile", False)
+    if capture and (
+        len(groups) != 1
+        or status is None
+        or not status["configuration"].get("profiler")
+        or args.mode != "throughput"
+    ):
+        raise ValueError(
+            "Trace capture requires throughput mode, one category "
+            "and a profiler-enabled server"
+        )
+    if not capture and status and status["configuration"].get("profiler"):
+        raise ValueError("Use --capture-profile or launch a server without profiling")
     capacity = (
         status["configuration"].get("max_num_seqs", 1)
         if status
@@ -162,6 +193,7 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
         raise FileExistsError("Choose a new measurement output directory")
     output.mkdir(parents=True, exist_ok=True)
     identity = {
+        "measurement_kind": "profiled_diagnostic" if capture else "benchmark",
         "validation": manifest["identity"],
         "guidellm_version": "0.7.1",
         "target": args.target,
@@ -201,7 +233,7 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
             raise ValueError("Server provenance does not describe the connected server")
         if source == output.resolve() or source in output.resolve().parents:
             raise ValueError("Use distinct server-provenance and benchmark directories")
-        shutil.copytree(source, output / "server_provenance")
+        copy_server_provenance(source, output / "server_provenance")
     save_provenance(output)
     model = http_json(endpoint_root(args.target) + "/v1/models")["data"][0]["id"]
     all_results, performance = {}, []
@@ -232,29 +264,37 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
         before = server_status(args.target)
         validate_status(before, manifest)
         native_output = directory / "guidellm.json"
-        utils.run_guidellm(
-            target=args.target,
-            dataset=str(dataset),
-            subset=None,
-            data_column_mapper=json.dumps(MAPPER),
-            profile=args.mode,
-            rate=args.sweep_rate,
-            max_requests=len(rows),
-            max_concurrency=args.max_concurrency,
-            output_path=native_output,
-            max_tokens=manifest["max_tokens"],
-            model=model,
-            tokenizer_path=tokenizer_path,
-            request_format="/v1/completions",
-            deterministic_seed=args.seed,
-            command_path=directory / "guidellm_command.json",
-            gen_kwargs={
-                "temperature": 0,
-                "seed": args.seed,
-                "add_special_tokens": False,
-                "ignore_eos": False,
-            },
+        from speculators.benchmark.profiling import capture_profile  # noqa: PLC0415
+
+        tracing = (
+            capture_profile(args.target, output, status["configuration"]["profiler"])
+            if capture
+            else nullcontext()
         )
+        with tracing:
+            utils.run_guidellm(
+                target=args.target,
+                dataset=str(dataset),
+                subset=None,
+                data_column_mapper=json.dumps(MAPPER),
+                profile=args.mode,
+                rate=args.sweep_rate,
+                max_requests=len(rows),
+                max_concurrency=args.max_concurrency,
+                output_path=native_output,
+                max_tokens=manifest["max_tokens"],
+                model=model,
+                tokenizer_path=tokenizer_path,
+                request_format="/v1/completions",
+                deterministic_seed=args.seed,
+                command_path=directory / "guidellm_command.json",
+                gen_kwargs={
+                    "temperature": 0,
+                    "seed": args.seed,
+                    "add_special_tokens": False,
+                    "ignore_eos": False,
+                },
+            )
         after_text = read_metrics(args.target)
         after = server_status(args.target)
         validate_status(after, manifest)
@@ -281,6 +321,7 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
             for row in summaries
         )
         all_results[category] = {
+            "measurement_kind": identity["measurement_kind"],
             "correctness_status": correctness_status,
             "output_mismatch_override": overridden,
             "performance": summaries,
@@ -319,6 +360,7 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
     write_json(
         output / "results.json",
         {
+            "measurement_kind": identity["measurement_kind"],
             "identity": digest(identity),
             "correctness_status": correctness_status,
             "output_mismatch_override": overridden,

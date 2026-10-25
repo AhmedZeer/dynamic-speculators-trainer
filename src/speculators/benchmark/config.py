@@ -22,6 +22,7 @@ class Model(Strict):
     conditioning_examples: int | None = Field(default=None, ge=1, le=MAX_CONCURRENCY)
     adapter_policy: Literal["shared", "per_request"] = "shared"
     vanilla_vllm: bool = False
+    batching_policy: Literal["fixed_shared_adapter", "continuous"] | None = None
 
     @model_validator(mode="after")
     def generator_conditioning_only(self):
@@ -65,6 +66,13 @@ class Benchmark(Strict):
         return self.name or ("nemotron" if self.dataset == "nemotron" else "specbench")
 
 
+class Profiling(Strict):
+    max_iterations: int = Field(default=30, ge=1, le=200)
+    with_stack: bool = False
+    record_shapes: bool = False
+    with_memory: bool = False
+
+
 class Settings(Strict):
     campaign_config: Path | None = None
     tokenizer_path: Path | None = None
@@ -87,6 +95,7 @@ class Settings(Strict):
     client_timeout_seconds: float = Field(default=3600, gt=0)
     shutdown_timeout_seconds: float = Field(default=30, gt=0)
     continue_on_error: bool = True
+    profiling: Profiling | None = None
 
     @field_validator("concurrencies")
     @classmethod
@@ -116,7 +125,9 @@ class Suite(Strict):
         if len({b.label for b in self.benchmarks}) != len(self.benchmarks):
             raise ValueError("Repeated datasets require distinct benchmark names")
         for model in self.models:
-            continuous = self.settings.batching_policy == "continuous"
+            continuous = (
+                model.batching_policy or self.settings.batching_policy
+            ) == "continuous"
             if model.adapter_policy == "per_request" and not continuous:
                 raise ValueError("per_request requires continuous batching")
             if model.vanilla_vllm and not continuous:

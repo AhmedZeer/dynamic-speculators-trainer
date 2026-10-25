@@ -15,6 +15,7 @@ from speculators.generator.serving.bundle import (
     load_generator,
     read_bundle,
 )
+from speculators.generator.serving.ranges import traced
 
 logger = logging.getLogger(__name__)
 MATRIX_NDIM = 2
@@ -156,6 +157,7 @@ class AdapterMerger:
         self.device = output.device
 
     @torch.inference_mode()
+    @traced("speculators.adapter_merge")
     def apply(self, factors):
         for name, weight in self.weights.items():
             a, b = factors[name]
@@ -173,6 +175,7 @@ class AdapterMerger:
             weight.copy_(merged)
 
     @torch.inference_mode()
+    @traced("speculators.adapter_restore")
     def restore(self):
         for name, weight in self.weights.items():
             weight.copy_(self.base[name])

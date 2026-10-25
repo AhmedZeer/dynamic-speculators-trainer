@@ -74,13 +74,20 @@ def server_command(root, model, target, settings, provenance):
         command += ["--adapter-policy", "per_request"]
     if model.get("vanilla_vllm"):
         command += ["--vanilla-vllm"]
+    if settings.profiling is not None:
+        from speculators.benchmark.profiling import profiler_config  # noqa: PLC0415
+
+        command += [
+            "--profiler-config",
+            json.dumps(profiler_config(settings, provenance)),
+        ]
     return command
 
 
 def client_command(  # noqa: PLR0917 -- explicit subprocess inputs
     root, task, workload, settings, tokenizer, provenance, output
 ):
-    return [
+    command = [
         sys.executable,
         str(root / "scripts/evaluate/evaluate.py"),
         "throughput",
@@ -105,6 +112,9 @@ def client_command(  # noqa: PLR0917 -- explicit subprocess inputs
         "--output-dir",
         str(output),
     ]
+    if settings.profiling is not None:
+        command += ["--capture-profile"]
+    return command
 
 
 def model_signature(model):
@@ -112,11 +122,16 @@ def model_signature(model):
 
 
 def result_files(output, category):
-    return [
+    paths = [
         output / "results.json",
         output / "benchmark_identity.json",
         output / category / "guidellm.json",
     ]
+    if (output / "profile_capture.json").exists():
+        from speculators.benchmark.profiling import profile_artifacts  # noqa: PLC0415
+
+        paths += profile_artifacts(output)
+    return paths
 
 
 def verify_result(output, task, workload, model):  # noqa: C901 -- independent result identity checks
@@ -229,6 +244,11 @@ def migrate_serial_tasks(state, models, previous_models):
 
 
 def write_summary(output, plan, state):
+    if plan.get("configuration", {}).get("settings", {}).get("profiling") is not None:
+        from speculators.benchmark.profiling import write_profile_summary  # noqa: PLC0415
+
+        write_profile_summary(output, plan, state)
+        return
     columns = []
     for benchmark, workload in plan["workloads"].items():
         # Keep the familiar Nemotron order; other groups retain stable file order.
@@ -421,6 +441,13 @@ def _measure_model(root, output, model, plan, state, settings, tokenizer):  # no
                                     f"see {destination / 'client.log'}"
                                 )
                         group = verify_result(destination, task, workload, model)
+                        if (
+                            settings.profiling is not None
+                            and not (destination / "profile_summary.json").is_file()
+                        ):
+                            raise ValueError(
+                                "Profiling client did not produce a trace summary"
+                            )
                         entry.update(
                             status="completed",
                             checksums={
@@ -490,10 +517,20 @@ def _measure_model(root, output, model, plan, state, settings, tokenizer):  # no
                 time.sleep(0.2)
 
 
-def run_suite(config_path, output_root, *, resume=False, dry_run=False):  # noqa: C901
+def run_suite(  # noqa: C901 -- resolve, launch and resume the complete suite
+    config_path, output_root, *, resume=False, dry_run=False, profile_mode=None
+):
     session_started = time.monotonic()
     config_path = Path(config_path).resolve()
     config = Suite.load(config_path)
+    if profile_mode is None and config.settings.profiling is not None:
+        raise ValueError("Use speculators benchmark profile for profiling configs")
+    if profile_mode is not None:
+        from speculators.benchmark.config import Profiling  # noqa: PLC0415
+
+        config.settings.profiling = (
+            (config.settings.profiling or Profiling()) if profile_mode else None
+        )
     if dry_run:
         return {
             "dry_run": True,
@@ -681,7 +718,14 @@ def run_suite(config_path, output_root, *, resume=False, dry_run=False):  # noqa
                     model,
                     plan,
                     state,
-                    settings.model_copy(update={"concurrency": model["concurrency"]}),
+                    settings.model_copy(
+                        update={
+                            "concurrency": model["concurrency"],
+                            "batching_policy": model.get(
+                                "batching_policy", settings.batching_policy
+                            ),
+                        }
+                    ),
                     tokenizer,
                 )
         finally:
