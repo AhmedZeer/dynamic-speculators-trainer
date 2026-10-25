@@ -50,13 +50,21 @@ def validate_runtime(config, metadata):
         scheduler.max_num_seqs,
         serving.get("conditioning_examples") or scheduler.max_num_seqs,
     )
+    continuous = serving.get("adapter_policy") == "per_request"
+    if continuous:
+        conditioning_limit = 1
     checks = {
         "V1 model runner": not getattr(config, "use_v2_model_runner", False),
         "method=eagle3": spec.method == "eagle3",
         "supported batch capacity": 1 <= scheduler.max_num_seqs <= MAX_BATCH_SIZE,
         "generator conditioning capacity": metadata["kind"] != "generator"
         or conditioning_limit <= metadata["max_examples"],
-        "fixed batch scheduler": scheduler.max_num_seqs == 1
+        "fixed batch scheduler": (
+            continuous
+            and getattr(scheduler, "scheduler_cls", None)
+            in (None, "vllm.v1.core.sched.scheduler.Scheduler")
+        )
+        or scheduler.max_num_seqs == 1
         or (
             getattr(scheduler, "scheduler_cls", None)
             == "speculators.generator.serving.scheduler.FixedBatchScheduler"
@@ -84,6 +92,15 @@ def validate_runtime(config, metadata):
         "unquantized draft": spec.quantization is None
         and not getattr(spec.draft_model_config.hf_config, "quantization_config", None),
         "sequential drafting": not spec.parallel_drafting,
+        "per-request singleton conditioning": not continuous
+        or (
+            metadata["kind"] == "generator"
+            and serving.get("conditioning_examples") == 1
+        ),
+        "padded draft batches": not continuous
+        or not getattr(spec, "disable_padded_drafter_batch", False),
+        "target without LoRA": not continuous
+        or getattr(config, "lora_config", None) is None,
     }
     failed = [name for name, valid in checks.items() if not valid]
     if failed:
@@ -189,6 +206,9 @@ class DraftAdapterController:
             _, self.setup_merge_seconds = elapsed(
                 self.device, lambda: self.merger.apply(self.factors)
             )
+        self._initialize_tracking()
+
+    def _initialize_tracking(self):
         self.active = None
         self.active_requests = set()
         self.records = {}
@@ -205,6 +225,7 @@ class DraftAdapterController:
             "prepared_batches": 0,
             "completed_batches": 0,
             "conditioning_examples": 0,
+            "adapter_load_seconds": 0.0,
         }
 
     @torch.inference_mode()
@@ -429,6 +450,17 @@ def initialize_proposer(proposer, runner):
 def prepare_proposer(proposer, positions, states, attention_metadata=None):
     runner = proposer.adapter_runner
     ids = runner.input_batch.req_ids
+    if getattr(proposer.draft_adapter, "continuous", False):
+        if attention_metadata is None:
+            raise ValueError("Continuous drafting requires attention token boundaries")
+        proposer.draft_adapter.prepare_scheduled(
+            list(ids),
+            [runner.requests[name].num_prompt_tokens for name in ids],
+            positions,
+            states,
+            attention_metadata.query_start_loc_cpu.tolist(),
+        )
+        return
     if proposer.draft_adapter.active is not None:
         if not set(ids) <= proposer.draft_adapter.active_requests:
             raise RuntimeError("New request entered an unfinished fixed batch")

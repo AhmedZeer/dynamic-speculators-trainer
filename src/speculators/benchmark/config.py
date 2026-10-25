@@ -20,11 +20,19 @@ class Model(Strict):
     revision: str | None = None
     subfolder: str | None = None
     conditioning_examples: int | None = Field(default=None, ge=1, le=MAX_CONCURRENCY)
+    adapter_policy: Literal["shared", "per_request"] = "shared"
+    vanilla_vllm: bool = False
 
     @model_validator(mode="after")
     def generator_conditioning_only(self):
         if self.conditioning_examples is not None and self.type != "generator":
             raise ValueError("conditioning_examples applies only to generators")
+        if self.adapter_policy == "per_request" and (
+            self.type != "generator" or self.conditioning_examples not in (None, 1)
+        ):
+            raise ValueError("per_request requires a singleton-conditioned generator")
+        if self.vanilla_vllm and self.type != "drafter":
+            raise ValueError("vanilla_vllm is available for original drafters only")
         return self
 
     @field_validator("subfolder")
@@ -67,6 +75,9 @@ class Settings(Strict):
     concurrency: int = Field(default=1, ge=1, le=8)
     concurrencies: list[int] | None = None
     batch_wait_ms: float = Field(default=50, ge=0)
+    batching_policy: Literal["fixed_shared_adapter", "continuous"] = (
+        "fixed_shared_adapter"
+    )
     port: int = Field(default=8000, ge=1024, le=65535)
     gpu: str | int = 0
     gpu_memory_utilization: float = Field(default=0.85, gt=0, lt=1)
@@ -104,6 +115,20 @@ class Suite(Strict):
             raise ValueError("Model names must be unique")
         if len({b.label for b in self.benchmarks}) != len(self.benchmarks):
             raise ValueError("Repeated datasets require distinct benchmark names")
+        for model in self.models:
+            continuous = self.settings.batching_policy == "continuous"
+            if model.adapter_policy == "per_request" and not continuous:
+                raise ValueError("per_request requires continuous batching")
+            if model.vanilla_vllm and not continuous:
+                raise ValueError("Vanilla baseline requires continuous batching")
+            if (
+                continuous
+                and model.type != "drafter"
+                and model.adapter_policy != "per_request"
+            ):
+                raise ValueError(
+                    "Continuous adapter serving requires a per_request generator"
+                )
         return self
 
     @classmethod

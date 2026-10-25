@@ -33,7 +33,11 @@ include the normal model/bundle arguments and `--provenance-dir`. The default
 remains concurrency 1. The [suite runbook](eagle3_benchmark_suite.md) describes
 the 1/2/4/8 sweep, partial groups, patch upgrade, artifacts, and memory limits.
 Concurrent requests requiring independent per-request adapters would still need
-adapter-aware projections; that is a separate serving policy.
+adapter-aware projections; that is a separate serving policy. The
+[2026-10-25 feasibility audit](eagle3_per_request_lora_feasibility.md) identifies
+reusable native multi-LoRA components and the missing draft routing. It is a
+source audit. The separate [per-request serving mode](eagle3_per_request_lora.md)
+is now implemented with CPU checks; its full-model GPU validation remains pending.
 
 ## Environment and validation workload
 

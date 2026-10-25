@@ -73,6 +73,10 @@ def resolve_model(spec, base, output, pinned=None):
         "revision": revision,
         "subfolder": spec.subfolder,
     }
+    if spec.adapter_policy == "per_request":
+        result.update(adapter_policy="per_request", conditioning_examples=1)
+    if spec.vanilla_vllm:
+        result["vanilla_vllm"] = True
     if spec.type == "drafter":
         if spec.subfolder:
             raise ValueError(

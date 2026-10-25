@@ -43,7 +43,7 @@ def server_status(target):
         raise
 
 
-def validate_status(status, manifest):
+def validate_status(status, manifest):  # noqa: C901 -- validate runner, model and baseline source identity
     if status is None:
         return
     configuration = status["configuration"]
@@ -56,6 +56,16 @@ def validate_status(status, manifest):
     ):
         raise ValueError("Server drafter revision differs from validation manifest")
     workers = status["workers"]
+    if configuration.get("vllm_sources") == "vanilla":
+        from speculators.generator.serving.patch import PATCH_DIR  # noqa: PLC0415
+
+        original = json.loads((PATCH_DIR / "manifest.json").read_text())["files"]
+        for worker in workers:
+            actual = worker.get("vllm_source_sha256", {})
+            for relative, record in original.items():
+                name = relative.removesuffix(".py").replace("/", ".")
+                if actual.get(name) != record["before_sha256"]:
+                    raise ValueError(f"Vanilla baseline worker source differs: {name}")
     adapter = configuration["kind"] in ("generator", "static_lora")
     if (
         len(workers) != 1
@@ -76,7 +86,7 @@ def validate_status(status, manifest):
         raise ValueError("Benchmark requires an idle server with no other clients")
 
 
-def validate_adapter_delta(before, after):
+def validate_adapter_delta(before, after):  # noqa: C901 -- historical/shared and per-request adapter accounting
     if before is not None and (
         after is None or before["configuration"] != after["configuration"]
     ):
@@ -100,10 +110,12 @@ def validate_adapter_delta(before, after):
         )
     if before["configuration"]["kind"] == "generator" and delta[
         "generator_invocations"
-    ] != delta.get("prepared_batches", delta["prepared_requests"]):
-        raise ValueError(
-            "Generator must execute exactly once per prepared batch adapter"
-        )
+    ] != (
+        delta["prepared_requests"]
+        if before["configuration"].get("adapter_policy") == "per_request"
+        else delta.get("prepared_batches", delta["prepared_requests"])
+    ):
+        raise ValueError("Generator must execute exactly once per prepared adapter")
     if "prepared_batches" in delta:
         if delta["prepared_batches"] != delta["completed_batches"]:
             raise ValueError("A shared-adapter batch was not completely finished")
@@ -116,6 +128,14 @@ def validate_adapter_delta(before, after):
         ):
             delta["mean_conditioning_size"] = (
                 delta["conditioning_examples"] / delta["prepared_batches"]
+            )
+    if before["configuration"].get("adapter_policy") == "per_request":
+        # A prepared unit is now one request's adapter, not a scheduled GPU batch.
+        delta.pop("mean_batch_size", None)
+        delta["mean_requests_per_adapter"] = 1.0
+        if delta.get("draft_forward_calls", 0):
+            delta["mean_draft_batch_size"] = (
+                delta["draft_forward_requests"] / delta["draft_forward_calls"]
             )
     return delta
 

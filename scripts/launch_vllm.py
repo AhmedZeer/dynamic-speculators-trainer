@@ -294,6 +294,15 @@ def parse_args():
     serving.add_argument("--concurrency", type=int, default=1)
     serving.add_argument("--batch-wait-ms", type=float, default=50)
     serving.add_argument("--conditioning-examples", type=int, default=None)
+    serving.add_argument(
+        "--batching-policy",
+        choices=["fixed_shared_adapter", "continuous"],
+        default="fixed_shared_adapter",
+    )
+    serving.add_argument(
+        "--adapter-policy", choices=["shared", "per_request"], default="shared"
+    )
+    serving.add_argument("--vanilla-vllm", action="store_true")
     serving.add_argument("--spec-tokens", type=int, default=3)
     serving.add_argument("--gpu-memory-utilization", type=float, default=0.85)
     serving.add_argument("--seed", type=int, default=42)
@@ -607,6 +616,7 @@ def main():  # noqa: C901 -- explicit independent launch modes
             destination / "server_environment.json",
             {
                 "VLLM_USE_V2_MODEL_RUNNER": "0",
+                "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
                 "SPECULATORS_SERVER_CONFIG": json.loads(
                     os.environ["SPECULATORS_SERVER_CONFIG"]
                 ),
@@ -617,6 +627,8 @@ def main():  # noqa: C901 -- explicit independent launch modes
                 destination / "vllm.patch",
                 (PATCH_DIR / "vllm-0.31.0-generator.patch").read_text(),
             )
+        elif args.vanilla_vllm:
+            atomic_write(destination / "vllm.patch", "")
 
     if not args.dry_run:
         # Bound frontend CPU threads for data generation; eval keeps its settings.

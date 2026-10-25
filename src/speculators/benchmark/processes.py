@@ -90,6 +90,13 @@ def wait_ready(process, target, model, manifest, timeout):  # noqa: C901 -- pinn
                 raise ValueError("Connected generator conditioning size differs")
             if config["kind"] != expected[model["type"]]:
                 raise ValueError("Connected server has the wrong model type")
+            if (
+                model.get("adapter_policy") == "per_request"
+                and config.get("adapter_policy") != "per_request"
+            ):
+                raise ValueError("Connected server does not use per-request adapters")
+            if model.get("vanilla_vllm") and config.get("vllm_sources") != "vanilla":
+                raise ValueError("Connected baseline does not use vanilla vLLM")
             if model["type"] == "drafter":
                 if config["models"]["drafter"] != {
                     "id": model["path"],

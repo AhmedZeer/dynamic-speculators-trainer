@@ -4,6 +4,8 @@ import asyncio
 import json
 import logging
 import os
+import sys
+from pathlib import Path
 from uuid import uuid4
 
 import anyio
@@ -20,6 +22,18 @@ def worker_status(worker):
         "adapter_controller_present": getattr(drafter, "draft_adapter", None)
         is not None,
     }
+    if os.environ.get("SPECULATORS_SERVER_CONFIG"):
+        from speculators.bank.artifacts import file_digest  # noqa: PLC0415
+
+        result["vllm_source_sha256"] = {
+            name: file_digest(Path(module.__file__))
+            for name in (
+                "vllm.config.speculative",
+                "vllm.v1.spec_decode.eagle",
+                "vllm.v1.worker.gpu_model_runner",
+            )
+            if (module := sys.modules.get(name)) is not None
+        }
     controller = getattr(
         getattr(worker.model_runner, "drafter", None), "draft_adapter", None
     )

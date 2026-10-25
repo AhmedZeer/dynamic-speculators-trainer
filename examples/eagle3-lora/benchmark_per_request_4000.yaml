@@ -1,0 +1,26 @@
+# Native continuous admission for both arms. Baseline uses verified original vLLM.
+models:
+  - name: eagle3-vanilla
+    type: drafter
+    model: RedHatAI/Qwen3-8B-speculator.eagle3
+    revision: 08610ffa01dd9f16731fe8f627b85905b6aa51c4
+    vanilla_vllm: true
+  - name: generator-4000-per-request
+    type: generator
+    model: azeeer/eagle3-generator-all24k-10ep-v1
+    revision: bf3fb2818dc1c09f3324b7193d00ceb292a8a854
+    subfolder: step-00004000
+    adapter_policy: per_request
+    conditioning_examples: 1
+benchmarks:
+  - dataset: nemotron
+    categories: [math, code, stem, chat]
+settings:
+  batching_policy: continuous
+  max_samples: 50
+  max_tokens: 256
+  seed: 42
+  warmups: 3
+  concurrencies: [1, 2, 4, 8]
+  gpu: 0
+  continue_on_error: false

@@ -69,6 +69,11 @@ def server_command(root, model, target, settings, provenance):
         command += ["--adapter-bundle", model["path"]]
     if model.get("conditioning_examples") is not None:
         command += ["--conditioning-examples", str(model["conditioning_examples"])]
+    command += ["--batching-policy", settings.batching_policy]
+    if model.get("adapter_policy") == "per_request":
+        command += ["--adapter-policy", "per_request"]
+    if model.get("vanilla_vllm"):
+        command += ["--vanilla-vllm"]
     return command
 
 
@@ -114,7 +119,7 @@ def result_files(output, category):
     ]
 
 
-def verify_result(output, task, workload, model):
+def verify_result(output, task, workload, model):  # noqa: C901 -- independent result identity checks
     result = json.loads((output / "results.json").read_text())
     identity = json.loads((output / "benchmark_identity.json").read_text())
     if identity["validation"] != workload["identity"]:
@@ -132,6 +137,16 @@ def verify_result(output, task, workload, model):
     }
     if identity["server"]["kind"] != expected_kind[model["type"]]:
         raise ValueError("Client measured the wrong server kind")
+    if (
+        model.get("adapter_policy") == "per_request"
+        and identity["server"].get("adapter_policy") != "per_request"
+    ):
+        raise ValueError("Client did not measure per-request adapters")
+    if (
+        model.get("vanilla_vllm")
+        and identity["server"].get("vllm_sources") != "vanilla"
+    ):
+        raise ValueError("Baseline did not use vanilla vLLM sources")
     if (
         model["type"] != "drafter"
         and identity["server"]["bundle_weights_sha256"] != model["weights_sha256"]
@@ -236,8 +251,14 @@ def write_summary(output, plan, state):
         "| --- | " + " | ".join("---:" for _ in columns) + " |",
     ]
     if any(model.get("concurrency", 1) > 1 for model in plan["models"]):
+        continuous = (
+            plan.get("configuration", {}).get("settings", {}).get("batching_policy")
+            == "continuous"
+        )
         table[4:4] = [
-            "-cN denotes concurrency N; fixed batches never refill active groups.",
+            "-cN denotes concurrency N; native continuous admission is enabled."
+            if continuous
+            else "-cN denotes concurrency N; fixed batches never refill active groups.",
             "",
         ]
     for model in plan["models"]:

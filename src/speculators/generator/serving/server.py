@@ -60,6 +60,25 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
     concurrency = getattr(args, "concurrency", 1)
     batch_wait_ms = getattr(args, "batch_wait_ms", 50)
     conditioning_examples = getattr(args, "conditioning_examples", None)
+    batching = getattr(args, "batching_policy", "fixed_shared_adapter")
+    adapter_policy = getattr(args, "adapter_policy", "shared")
+    vanilla = getattr(args, "vanilla_vllm", False)
+    if vanilla and (metadata is not None or batching != "continuous"):
+        raise ValueError("Vanilla vLLM requires a base model and continuous batching")
+    if adapter_policy == "per_request":
+        if batching != "continuous" or not metadata or metadata["kind"] != "generator":
+            raise ValueError("per_request requires a generator and continuous batching")
+        if conditioning_examples not in (None, 1):
+            raise ValueError("Per-request generators condition on one prompt")
+        conditioning_examples = 1
+    elif batching == "continuous" and metadata and metadata["kind"] == "generator":
+        raise ValueError(
+            "Continuous generator serving requires --adapter-policy per_request"
+        )
+    if batching == "continuous" and metadata and metadata["kind"] == "static_lora":
+        raise ValueError(
+            "Continuous mode currently supports base EAGLE3 and per-request generators"
+        )
     if not 1 <= concurrency <= MAX_CONCURRENCY or batch_wait_ms < 0:
         raise ValueError("Concurrency must be 1–8 and batch wait must be nonnegative")
     if conditioning_examples is not None and (
@@ -130,8 +149,12 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
         "vllm_version": VLLM_VERSION,
         "model_runner": "V1",
         "max_num_seqs": concurrency,
-        "batching_policy": "fixed_shared_adapter" if concurrency > 1 else "serial",
-        "batch_wait_ms": batch_wait_ms,
+        "batching_policy": batching
+        if batching == "continuous" or concurrency > 1
+        else "serial",
+        "adapter_policy": adapter_policy if kind == "generator" else None,
+        "vllm_sources": "vanilla" if vanilla else "installed",
+        "batch_wait_ms": batch_wait_ms if batching != "continuous" else 0,
         "max_model_len": args.max_model_len,
         "speculative_tokens": args.spec_tokens if args.spec_model else None,
         "gpu_memory_utilization": args.gpu_memory_utilization,
@@ -163,6 +186,13 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
     atomic_write(output / "speculators.patch", source_patch)
     os.environ["VLLM_USE_V2_MODEL_RUNNER"] = "0"
     os.environ["SPECULATORS_SERVER_CONFIG"] = json.dumps(configuration)
+    if vanilla:
+        from speculators.generator.serving.vanilla import vanilla_source_view  # noqa: PLC0415
+
+        view = vanilla_source_view(output)
+        os.environ["PYTHONPATH"] = (
+            str(view) + os.pathsep + os.environ.get("PYTHONPATH", "")
+        )
     command = [
         sys.executable,
         "-m",
@@ -204,7 +234,7 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
         "--worker-extension-cls",
         WORKER_EXTENSION,
     ]
-    if concurrency > 1:
+    if concurrency > 1 and batching == "fixed_shared_adapter":
         command.extend(
             [
                 "--scheduler-cls",
