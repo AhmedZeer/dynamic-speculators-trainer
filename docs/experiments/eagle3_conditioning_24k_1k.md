@@ -14,13 +14,15 @@ vLLM activation extractor.
 
 ## Controlled setup
 
-| Arm | Config under `examples/eagle3-lora/` | Conditioning summaries K | Loss examples per episode | Optimizer updates |
-| --- | --- | ---: | ---: | ---: |
-| Generator K1 | `generator_conditioning_24k_1k_k1.yaml` | 1 | 8 | 1,000 |
-| Generator K2 | `generator_conditioning_24k_1k_k2.yaml` | 2 | 8 | 1,000 |
-| Generator K4 | `generator_conditioning_24k_1k_k4.yaml` | 4 | 8 | 1,000 |
-| Generator K8 | `generator_conditioning_24k_1k_k8.yaml` | 8 | 8 | 1,000 |
-| Static LoRA | `lora_conditioning_24k_1k.yaml` | not used | 8 | 1,000 |
+
+| Arm          | Config under `examples/eagle3-lora/`    | Conditioning summaries K | Loss examples per episode | Optimizer updates |
+| ------------ | --------------------------------------- | ------------------------ | ------------------------- | ----------------- |
+| Generator K1 | `generator_conditioning_24k_1k_k1.yaml` | 1                        | 8                         | 1,000             |
+| Generator K2 | `generator_conditioning_24k_1k_k2.yaml` | 2                        | 8                         | 1,000             |
+| Generator K4 | `generator_conditioning_24k_1k_k4.yaml` | 4                        | 8                         | 1,000             |
+| Generator K8 | `generator_conditioning_24k_1k_k8.yaml` | 8                        | 8                         | 1,000             |
+| Static LoRA  | `lora_conditioning_24k_1k.yaml`         | not used                 | 8                         | 1,000             |
+
 
 All five arms share the 24K pool (`00000`–`00005`, math/code/STEM/chat), epoch
 permutations, four loss episodes per update, seed, frozen models, rank-32/alpha-64
@@ -155,12 +157,14 @@ TTFT or acceptance for these new checkpoints. The previous study's latency
 values must not be assigned to these models.
 [Structured transcription](results/benchmarks/2026-10-25-conditioning-24k-1k-partial/metrics.json).
 
-| Model | Nemo math | Nemo code | Nemo STEM | Nemo chat |
-| --- | ---: | ---: | ---: | ---: |
-| Static LoRA, 24K/1K label | 429.55 | 386.78 | 392.63 | 282.77 |
-| Generator K1, 24K/1K label | 453.27 | 407.25 | 404.92 | 287.20 |
-| Generator K2, 24K/1K label | 456.32 | 403.75 | 399.54 | 287.52 |
-| Generator K4, 24K/1K label | 455.18 | 401.66 | 395.86 | 287.62 |
+
+| Model                      | Nemo math | Nemo code | Nemo STEM | Nemo chat |
+| -------------------------- | --------- | --------- | --------- | --------- |
+| Static LoRA, 24K/1K label  | 429.55    | 386.78    | 392.63    | 282.77    |
+| Generator K1, 24K/1K label | 453.27    | 407.25    | 404.92    | 287.20    |
+| Generator K2, 24K/1K label | 456.32    | 403.75    | 399.54    | 287.52    |
+| Generator K4, 24K/1K label | 455.18    | 401.66    | 395.86    | 287.62    |
+
 
 All three reported generator arms exceed static LoRA in all four categories.
 K2 leads math, K1 leads code/STEM, and K4 leads chat. Larger K does not improve

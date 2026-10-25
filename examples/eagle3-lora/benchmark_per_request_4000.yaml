@@ -21,6 +21,6 @@ settings:
   max_tokens: 256
   seed: 42
   warmups: 3
-  concurrencies: [1, 2, 4, 8]
+  concurrencies: [1, 2, 4]
   gpu: 0
   continue_on_error: false
