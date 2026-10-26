@@ -13,7 +13,7 @@ class StudyTracking(BaseModel):
     enabled: bool = True
     project: str = "eagle3-generator-reference-train-v4"
     entity: str | None = None
-    group: str = "4k-1500steps"
+    group: str = "4k-1000steps"
     mode: Literal["online", "offline"] = "online"
 
 
@@ -32,7 +32,7 @@ class GeneratorStudy(BaseModel):
     arm: Literal["generator", "lora"] = "generator"
     loss: Literal["lk_hybrid", "kl_div", "ce"] = "lk_hybrid"
     loss_implementation: Literal["fused", "eager"] = "fused"
-    steps: int = Field(default=1500, ge=1)
+    steps: int = Field(default=1000, ge=1)
     examples_per_update: int = Field(default=8, ge=1)
     validation_interval: int = Field(default=500, ge=1)
     checkpoint_interval: int = Field(default=500, ge=1)

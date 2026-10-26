@@ -1,6 +1,6 @@
 extends: ../common/training.yaml
 name: replay_prefix_lk
-repo_id: azeeer/eagle3-replay-prefix-lk-4k-1500-v4
+repo_id: azeeer/eagle3-replay-prefix-lk-4k-1000-v4
 wandb:
   project: eagle3-generator-refresh-train-v4
 replay: true

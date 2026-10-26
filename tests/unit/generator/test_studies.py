@@ -45,13 +45,12 @@ def test_all_study_configs_are_independent_and_budgets_are_explicit(
         GeneratorStudy.load(path) for path in sorted((root / "training").glob("*.yaml"))
     ]
     assert len(configs) == 7
-    assert {c.steps for c in configs if c.arm == "generator"} == {1500}
-    assert {c.steps for c in configs if c.arm == "lora"} == {1000}
+    assert {c.steps for c in configs} == {1000}
     assert {c.train_per_category for c in configs} == {1000}
     assert {c.examples_per_update for c in configs} == {8}
     assert (
         sum(c.steps - (c.initial_step if c.initial_checkpoint else 0) for c in configs)
-        == 8500
+        == 5500
     )
     assert len({c.repo_id for c in configs}) == 7
     for path in (root / "inference").rglob("*.yaml"):
@@ -75,13 +74,13 @@ def test_config_inheritance_replaces_lists_and_rejects_cycles(tmp_path):
         load_experiment_yaml(tmp_path / "child.yaml")
 
 
-def test_schedule_visits_the_4k_pool_three_times_without_shared_adapters(tmp_path):
+def test_schedule_visits_the_4k_pool_twice_without_shared_adapters(tmp_path):
     cfg = GeneratorStudy(workspace=tmp_path)
     members = {
         d: {"train": list(range(k * 1000, (k + 1) * 1000))}
         for k, d in enumerate(sorted(("math", "code", "stem", "chat")))
     }
-    for first in (0, 500, 1000):
+    for first in (0, 500):
         indices = [
             e["indices"][0]
             for step in range(first, first + 500)

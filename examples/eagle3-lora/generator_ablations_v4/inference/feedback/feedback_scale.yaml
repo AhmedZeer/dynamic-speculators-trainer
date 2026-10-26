@@ -2,7 +2,7 @@ extends: ../../common/inference.yaml
 models:
 - name: feedback_scale
   type: generator
-  model: ${SPECULATORS_STUDY_ROOT}/training/replay_prefix_feedback_lk/checkpoints/step-00001500/bundle
+  model: ${SPECULATORS_STUDY_ROOT}/training/replay_prefix_feedback_lk/checkpoints/step-00001000/bundle
   conditioning_examples: 1
   adapter_experiment:
     scale: 2.0
