@@ -9,7 +9,7 @@ from huggingface_hub import HfApi
 from huggingface_hub.utils import validate_repo_id
 
 from speculators.bank.artifacts import file_digest, write_json
-from speculators.generator.serving.bundle import export_run
+from speculators.generator.serving.bundle import export_run, read_bundle
 
 EXTRACTION_FILES = (
     "vllm_command.txt",
@@ -40,6 +40,17 @@ def extraction_provenance(run_dir, explicit=None):
     return None
 
 
+def snapshot_checksum(run_dir, result):
+    checksum = result.get("checkpoint_sha256")
+    if checksum is None and result.get("status") == "training_snapshot":
+        # Early study snapshots omitted this field. The already-exported bundle
+        # records the original checkpoint hash, so recovery still verifies it.
+        checksum = read_bundle(run_dir / "bundle")["source_checkpoint_sha256"]
+    if not checksum:
+        raise ValueError("Missing checkpoint checksum in result.json")
+    return checksum
+
+
 def push_run(
     run_dir,
     repo_id,
@@ -57,7 +68,8 @@ def push_run(
     run_dir = Path(run_dir).resolve()
     result = json.loads((run_dir / "result.json").read_text())
     checkpoint = run_dir / "checkpoint.pt"
-    if file_digest(checkpoint) != result["checkpoint_sha256"]:
+    expected_checksum = snapshot_checksum(run_dir, result)
+    if file_digest(checkpoint) != expected_checksum:
         raise ValueError("Completed checkpoint checksum differs from result.json")
     identity = json.loads((run_dir / "resolved_experiment.json").read_text())
     provenance = extraction_provenance(run_dir, provenance_dir)
@@ -74,7 +86,7 @@ def push_run(
         metadata = export_run(
             cfg, run_dir, folder, drafter_model_path=drafter_model_path
         )
-        if metadata["source_checkpoint_sha256"] != result["checkpoint_sha256"]:
+        if metadata["source_checkpoint_sha256"] != expected_checksum:
             raise ValueError("Checkpoint changed during export; retry after training")
         if provenance is not None:
             destination = folder / "provenance" / "vllm"

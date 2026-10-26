@@ -245,7 +245,12 @@ def save_snapshot(  # noqa: PLR0917 -- immutable training snapshot and portable 
                 shutil.copytree(source, pending / name)
         write_json(
             pending / "result.json",
-            {"status": "training_snapshot", "completed_updates": progress, "job": job},
+            {
+                "status": "training_snapshot",
+                "completed_updates": progress,
+                "job": job,
+                "checkpoint_sha256": file_digest(pending / "checkpoint.pt"),
+            },
         )
         export_run(
             None,

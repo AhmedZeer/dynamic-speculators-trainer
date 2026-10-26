@@ -142,3 +142,25 @@ def test_colocated_extraction_provenance(tmp_path):
     for name in ("vllm_command.txt", "vllm.patch", "checkpoint_sha256.txt"):
         (tmp_path / name).write_text(name)
     assert publish.extraction_provenance(run) == tmp_path
+
+
+def test_legacy_study_snapshot_upload_recovers_verified_checksum(completed_run):
+    _, run, drafter, provenance, _ = completed_run
+    publish.export_run(None, run, run / "bundle", drafter_model_path=drafter)
+    result = json.loads((run / "result.json").read_text())
+    result.pop("checkpoint_sha256")
+    result["status"] = "training_snapshot"
+    write_json(run / "result.json", result)
+    report = publish.push_run(
+        run,
+        "example/recovered-snapshot",
+        drafter_model_path=drafter,
+        provenance_dir=provenance,
+        include_training_checkpoint=True,
+        dry_run=True,
+    )
+    assert "checkpoint.pt" in report["files"]
+    with (run / "checkpoint.pt").open("ab") as handle:
+        handle.write(b"corrupted")
+    with pytest.raises(ValueError, match="checksum"):
+        publish.push_run(run, "example/corrupted", dry_run=True)
