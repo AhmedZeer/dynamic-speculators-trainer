@@ -45,12 +45,13 @@ def test_all_study_configs_are_independent_and_budgets_are_explicit(
         GeneratorStudy.load(path) for path in sorted((root / "training").glob("*.yaml"))
     ]
     assert len(configs) == 7
-    assert {c.steps for c in configs} == {1500}
+    assert {c.steps for c in configs if c.arm == "generator"} == {1500}
+    assert {c.steps for c in configs if c.arm == "lora"} == {1000}
     assert {c.train_per_category for c in configs} == {1000}
     assert {c.examples_per_update for c in configs} == {8}
     assert (
         sum(c.steps - (c.initial_step if c.initial_checkpoint else 0) for c in configs)
-        == 9000
+        == 8500
     )
     assert len({c.repo_id for c in configs}) == 7
     for path in (root / "inference").rglob("*.yaml"):

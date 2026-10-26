@@ -12,7 +12,8 @@ Run commands from the repository root.
 - Ordinary training: 1,500 optimizer updates, eight independent request examples
   per update, one conditioning example per generated adapter. This gives 12,000
   example presentations, or three passes over the 4K pool. The static LoRA uses
-  the same examples and updates. Backbone, vocabulary, LoRA rank/targets and
+  the same examples but stops at 1,000 updates (8,000 presentations, two passes).
+  Its budget therefore differs from the 1,500-update generators. Backbone, vocabulary, LoRA rank/targets and
   three speculative tokens remain those of the existing recipe.
 - Replay branches restore the prompt-LK checkpoint at update 500, including Adam
   moments and RNG; they add 1,000 updates to reach 1,500 total. The feedback
@@ -101,7 +102,7 @@ All other commands can be selected and ordered manually.
 | Configuration | Training | New updates | W&B project |
 | --- | --- | ---: | --- |
 | `prompt_lk` | Generator, prompt states, existing LK objective | 1500 | `eagle3-generator-objectives-train-v4` |
-| `static_lora_lk` | Static LoRA, matched data and LK objective | 1500 | `eagle3-generator-objectives-train-v4` |
+| `static_lora_lk` | Static LoRA, same data and LK objective; shorter budget | 1000 | `eagle3-generator-objectives-train-v4` |
 | `prompt_kl` | Generator, prompt states, KL objective | 1500 | `eagle3-generator-objectives-train-v4` |
 | `prompt_ce` | Generator, prompt states, CE objective | 1500 | `eagle3-generator-objectives-train-v4` |
 | `replay_prompt_lk` | Prompt-only generator with on-policy replay | 1000 | `eagle3-generator-replay-train-v4` |
@@ -138,7 +139,9 @@ speculators generator train-experiment --config "$CFG/training/replay_prefix_fee
 
 Every run saves full optimizer/RNG checkpoints and a serving bundle every 500
 updates. The configured distinct Hugging Face repository receives step 1,000 and
-step 1,500, including the full training checkpoint and provenance. Change `repo_id`
+the final step, including the full training checkpoint and provenance. The static
+LoRA ends at 1,000 updates and uses `azeeer/eagle3-static-lora-lk-4k-1000-v4`;
+generators end at 1,500. Change `repo_id`
 in an individual YAML before starting if a different destination is wanted.
 `--resume` restores local durable checkpoints and skips completed runs; without it
 an existing output directory is refused. Put the workspace on persistent Drive in
@@ -159,7 +162,8 @@ The first conditioning study uses the existing step-4000 remote checkpoint, so i
 can run immediately after preparation, before new training. Same-category donors
 are deterministic training prompts different from the evaluated prompt;
 cross-category donors swap math and chat; fixed uses one training donor throughout.
-All other studies use the newly trained step-1500 local bundles.
+All other studies use the newly trained step-1500 local generator bundles; the
+static-LoRA reference uses its final step-1000 bundle.
 
 | Family | Question | W&B project |
 | --- | --- | --- |

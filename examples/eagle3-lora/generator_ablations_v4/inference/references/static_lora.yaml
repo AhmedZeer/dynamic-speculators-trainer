@@ -2,6 +2,6 @@ extends: ../../common/inference.yaml
 models:
 - name: static-lora-lk
   type: lora
-  model: ${SPECULATORS_STUDY_ROOT}/training/static_lora_lk/checkpoints/step-00001500/bundle
+  model: ${SPECULATORS_STUDY_ROOT}/training/static_lora_lk/checkpoints/step-00001000/bundle
 wandb:
   project: eagle3-generator-reference-bench-v4
