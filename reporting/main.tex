@@ -41,8 +41,11 @@ heads, and records fixed-update data scaling and the decision to retire
 LoRA-bank warmup. It describes the training and serving interfaces, a supplied
 four-model throughput comparison on in-distribution and out-of-distribution
 workloads, activation-cache measurements, and an unresolved output-repeatability
-investigation. A fixed-batch shared-adapter serving implementation is recorded
-separately from its pending GPU measurements. Every experiment states its
+investigation. Completed shared-adapter concurrency measurements, a partial matched-budget
+conditioning-size study, and per-request continuous-batching results distinguish
+acceptance gains from serving throughput. A screenshot-based rank study records
+adapter variation, category separation, acceptance and token rate. Bounded runtime
+profiling is implemented, with GPU diagnostic evidence still pending. Every experiment states its
 available evidence, execution status, and missing information. The document
 is extended on request and does not present final conclusions.
 \end{abstract}
@@ -57,4 +60,5 @@ is extended on request and does not present final conclusions.
 \appendix
 \small
 \input{sections/07_reproducibility}
+\input{sections/08_numeric_appendix}
 \end{document}

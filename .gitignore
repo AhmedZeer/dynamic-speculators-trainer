@@ -197,3 +197,5 @@ hs_connectors/pip-log.txt
 hs_connectors/pip-delete-this-directory.txt
 
 tmp/
+*.zip
+*.tar.gz

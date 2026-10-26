@@ -1,0 +1,63 @@
+{
+  "record_id": "BATCH-002",
+  "received_date": "2026-10-25",
+  "execution_date": null,
+  "status": "partial_user_supplied_throughput_table",
+  "metric": "aggregate_output_tokens_per_second",
+  "includes_prefill_and_serving_overhead": true,
+  "correctness_status": "not_checked",
+  "reported_concurrency": 8,
+  "native_summary_available": false,
+  "checkpoint_and_training_budget_provenance_verified": false,
+  "pending_models": [
+    "generator-24k-1k-k8-c8"
+  ],
+  "categories": [
+    "nemo-math",
+    "nemo-code",
+    "nemo-stem",
+    "nemo-chat"
+  ],
+  "models": [
+    {
+      "name": "static-lora-24k-1k-c8",
+      "reported_conditioning_examples": null,
+      "output_tokens_per_second": {
+        "nemo-math": 429.55,
+        "nemo-code": 386.78,
+        "nemo-stem": 392.63,
+        "nemo-chat": 282.77
+      }
+    },
+    {
+      "name": "generator-24k-1k-k1-c8",
+      "reported_conditioning_examples": 1,
+      "output_tokens_per_second": {
+        "nemo-math": 453.27,
+        "nemo-code": 407.25,
+        "nemo-stem": 404.92,
+        "nemo-chat": 287.2
+      }
+    },
+    {
+      "name": "generator-24k-1k-k2-c8",
+      "reported_conditioning_examples": 2,
+      "output_tokens_per_second": {
+        "nemo-math": 456.32,
+        "nemo-code": 403.75,
+        "nemo-stem": 399.54,
+        "nemo-chat": 287.52
+      }
+    },
+    {
+      "name": "generator-24k-1k-k4-c8",
+      "reported_conditioning_examples": 4,
+      "output_tokens_per_second": {
+        "nemo-math": 455.18,
+        "nemo-code": 401.66,
+        "nemo-stem": 395.86,
+        "nemo-chat": 287.62
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
-  "version": "03",
-  "evidence_through": "2026-10-23",
-  "implementation_revision": "c0ee0e4b7c59ff8ff6ee8c201e591dceb0589635",
-  "output_stem": "dynamic-speculators-2026-10-23-v03",
+  "version": "04",
+  "evidence_through": "2026-10-25",
+  "implementation_revision": "dc872c505499a50358d3a74e7c07ad68498adbac",
+  "output_stem": "dynamic-speculators-2026-10-25-v04",
   "update_policy": "Update only when explicitly requested; Markdown remains the working experiment record."
 }

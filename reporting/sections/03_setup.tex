@@ -3,7 +3,7 @@
 
 \subsection{Models and Data}
 The documented model family is Qwen3-8B with the Red Hat EAGLE3 drafter. The
-current suite compares the original drafter, a trained ordinary LoRA, and
+historical shared-cohort suite compares the original drafter, a trained ordinary LoRA, and
 generator snapshots labeled 2,000 and 4,000 steps. Generator data size is
 reported as 24K examples. Exact training progress must ultimately come from
 checkpoint metadata; labels are retained without treating them as verification.
@@ -29,7 +29,10 @@ We keep the following quantities distinct:
   \item \textbf{Offline agreement:} drafter/target argmax agreement in offline
   evaluation, not measured speculative acceptance.
   \item \textbf{Serving acceptance:} native speculative-decoding counters during
-  actual generation; absent from the supplied current suite summary.
+  actual generation. For BATCH-001/003, acceptance length is
+  $L=1+A/D$, where $A$ counts accepted draft tokens and $D$ draft cycles.
+  Acceptance rate is $A/P$ for $P$ proposed draft tokens; with three proposals
+  per cycle, $L=1+3A/P$. Neither quantity measures output accuracy.
   \item \textbf{Throughput:} aggregate generated output tokens divided by
   measured wall seconds, including prefill and serving overhead.
   \item \textbf{Latency and systems timings:} request latency, first-token time,
@@ -41,6 +44,10 @@ The independent serving implementation fixes BF16, eager execution, the V1
 runner, and a pinned vLLM 0.31.0 integration. Suite defaults specify a seed,
 sample limit, output budget, and warmup count. These defaults must not be
 substituted for missing metadata from the supplied throughput summary.
-For that summary, hardware, concurrency, sample counts, seed, workload hashes,
-and exact checkpoint identities remain unverified. The cache pilot separately
-reports an A100 80 GB. Neither source establishes repeated-run uncertainty.
+The later BATCH-001/003 summaries establish 50 successful requests per
+measurement and matched category workload hashes. They still omit full hardware,
+launch/source and checkpoint provenance. BATCH-002 supplies only a throughput
+table, and GEN-005 supplies screenshots with unknown workload/runtime settings.
+The cache pilot separately reports an A100 80 GB. None establishes repeated-run
+uncertainty. Native continuous admission in BATCH-003 must not be conflated with
+the fixed-cohort policy used for every BATCH-001 arm.

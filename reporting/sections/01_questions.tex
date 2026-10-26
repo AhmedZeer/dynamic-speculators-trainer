@@ -2,9 +2,10 @@
 \label{sec:questions}
 
 We investigate a generator that maps a set of prompt summaries to one shared
-adapter for a frozen EAGLE3 drafter. The current comparison comprises the original
-drafter, a trained static LoRA, and two generator checkpoints described as trained
-on 24K examples. Older benchmark models are outside this serving comparison. Historical training
+adapter for a frozen EAGLE3 drafter. Separate serving studies compare the
+original drafter, trained static LoRA,
+shared-adapter generators and per-request generators. Checkpoint labels and
+protocol changes are retained within each study rather than pooled. Historical training
 ablations are recorded separately: fixed-update data scaling and the decision
 to discontinue bank-based generator warmup.
 
@@ -18,6 +19,12 @@ The working questions are:
   and selected Red Hat benchmark categories?
   \item What changes when one generated adapter is shared by a fixed batch of
   requests at different concurrencies?
+  \item Does conditioning on more examples improve a shared adapter when
+  training data and optimizer updates are matched?
+  \item Do per-request adapters preserve acceptance while permitting native
+  continuous admission, and does better acceptance yield higher throughput?
+  \item How does LoRA rank relate to adapter variation, category separation,
+  acceptance and serving token rate?
   \item What time and memory costs arise from obtaining and reusing target
   activations during training?
 \end{enumerate}

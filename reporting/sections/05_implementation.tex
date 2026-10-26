@@ -31,10 +31,52 @@ a partial group after a 50 ms collection window in the example configuration.
 The runtime rejects KV preemption or incomplete initial group admission rather
 than reuse draft cache entries under a different generated adapter. Larger
 concurrency also increases the prefill/profile token budget and may change
-GPU memory requirements. These are implementation constraints awaiting the
-GPU experiment in BATCH-001.
+GPU memory requirements. These constraints define BATCH-001
+and the shared-adapter BATCH-002 protocol. GPU summary measurements are now
+recorded, while detailed scheduling traces remain unavailable.
 
 Collection, queueing, uneven request completion, and partial tails are part of
 the measured serving protocol. Closed groups are not equivalent to unrestricted
 continuous batching. Batch membership may vary with arrival/completion order,
 even when the same prompt list is reused across model variants.
+
+\subsection{Per-Request Multi-LoRA and Native Baseline}
+The per-request controller generates factors once from complete target prefill,
+retains a request-specific CPU copy, and activates only scheduled request IDs in
+the draft-only native LoRA manager. Token mappings follow actual query offsets
+on every draft forward, including speculative rejection and later one-token
+steps. Request completion releases that request's adapter; paused request factors
+remain available. The native scheduler can refill free slots without changing
+other requests' adapters. CPU tests cover lifecycle and mapping invariants;
+aggregate BATCH-003 counters are not a full isolation or correctness test.
+
+Baseline launches can create an isolated package view containing the original,
+checksum-verified copies of the three integration-patched vLLM files. The global
+installation is left intact, and worker status can report imported source hashes.
+This supports original-source EAGLE3 with native admission. Such source hashes
+were not included in the supplied BATCH-003 upload, so this capability must not
+be presented as independently verified provenance for those measurements.
+
+\subsection{Bounded Profiling: Implemented, Measurements Pending}
+Revision \texttt{dc872c5} adds a two-phase profiling command. An unprofiled pass
+provides ordinary timing; fresh servers then collect bounded native CPU/CUDA
+traces after warmup on the same frozen models and workload. The serial example
+compares original EAGLE3, singleton-conditioned merged adapters and singleton
+native multi-LoRA; the continuous example compares baseline and per-request
+adapters at C4. Example captures use math/chat, 16 prompts per category,
+128-token caps and at most 30 worker iterations.
+
+Custom ranges cover generation, packing/loading, mapping and draft/projection
+execution. Analysis records CPU inclusive/self time, GPU kernels and transfers,
+union activity and gaps, and captured request occupancy. Projection ranges
+include base GEMM work; isolated LoRA kernels require their own kernel rows.
+The native execute-model scope includes target work and preparation rather than
+providing an isolated verification timer. Unattributed activity remains unknown.
+A bounded trace may miss refills or completions, and whole-workload acceptance
+counters cannot supply captured-window accepted-token denominators.
+
+CPU lifecycle tests, synthetic CUDA-event analysis, a real CPU profiler export
+and mocked HTTP/GuideLLM orchestration checks were performed locally. CUDA/vLLM
+profiling has not been executed locally and no user GPU traces have been supplied.
+Profiler timings are diagnostic and excluded from ordinary throughput tables.
+Thus recurring adapter kernels/routing remain hypotheses, not diagnosed causes.

@@ -1,0 +1,306 @@
+{
+  "recorded_date": "2026-10-25",
+  "execution_date": null,
+  "source_sha256": "bab7d74f187a752a41d9ce2eba986a22579f9c4c814473ba787df2a3b6a3acf9",
+  "suite_identity": "0c7387248170de558e7465d4d126e6e4220e56b29b8208b7da3afe607e772644",
+  "correctness_status": "not_checked",
+  "evidence": "User-supplied aggregate summaries only; no server provenance or native request-level records.",
+  "comparisons": [
+    {
+      "concurrency": 1,
+      "category": "math",
+      "dataset_sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28",
+      "successful_requests_per_arm": 50,
+      "baseline_output_tokens_per_second": 62.98076688286085,
+      "generator_output_tokens_per_second": 67.02476007434446,
+      "throughput_change_percent": 6.420997062492284,
+      "baseline_acceptance_length": 2.4227427276161695,
+      "generator_acceptance_length": 2.9552479815455595,
+      "acceptance_length_change_percent": 21.97943875177133,
+      "baseline_ttft_median_ms": 44.17991638183594,
+      "generator_ttft_median_ms": 55.06539344787598,
+      "ttft_median_difference_ms": 10.885477066040039,
+      "output_tokens": [
+        12800.0,
+        12800.0
+      ],
+      "mean_draft_batch_size": 1.0,
+      "generator_ms_per_request": 3.2675513696670544,
+      "adapter_load_ms_per_request": 1.0888255977630619,
+      "timed_oneoff_fraction_of_measurement_percent": 0.11405668790445464
+    },
+    {
+      "concurrency": 1,
+      "category": "code",
+      "dataset_sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748",
+      "successful_requests_per_arm": 50,
+      "baseline_output_tokens_per_second": 59.49019130800558,
+      "generator_output_tokens_per_second": 60.23832543641601,
+      "throughput_change_percent": 1.2575755968526448,
+      "baseline_acceptance_length": 2.298472596585804,
+      "generator_acceptance_length": 2.6272577996715927,
+      "acceptance_length_change_percent": 14.304508288424778,
+      "baseline_ttft_median_ms": 48.81620407104492,
+      "generator_ttft_median_ms": 60.47487258911133,
+      "ttft_median_difference_ms": 11.658668518066406,
+      "output_tokens": [
+        12785.0,
+        12785.0
+      ],
+      "mean_draft_batch_size": 1.0,
+      "generator_ms_per_request": 3.299287042617797,
+      "adapter_load_ms_per_request": 1.0921452808380128,
+      "timed_oneoff_fraction_of_measurement_percent": 0.10345425476430488
+    },
+    {
+      "concurrency": 1,
+      "category": "stem",
+      "dataset_sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757",
+      "successful_requests_per_arm": 50,
+      "baseline_output_tokens_per_second": 57.57482360046313,
+      "generator_output_tokens_per_second": 57.91695910533202,
+      "throughput_change_percent": 0.5942449902115454,
+      "baseline_acceptance_length": 2.225558659217877,
+      "generator_acceptance_length": 2.5307661770543866,
+      "acceptance_length_change_percent": 13.71374852657301,
+      "baseline_ttft_median_ms": 45.0749397277832,
+      "generator_ttft_median_ms": 55.084943771362305,
+      "ttft_median_difference_ms": 10.010004043579102,
+      "output_tokens": [
+        12751.0,
+        12751.0
+      ],
+      "mean_draft_batch_size": 1.0,
+      "generator_ms_per_request": 3.248239359855647,
+      "adapter_load_ms_per_request": 1.0840140748023992,
+      "timed_oneoff_fraction_of_measurement_percent": 0.09838873225983226
+    },
+    {
+      "concurrency": 1,
+      "category": "chat",
+      "dataset_sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f",
+      "successful_requests_per_arm": 50,
+      "baseline_output_tokens_per_second": 53.430673931912246,
+      "generator_output_tokens_per_second": 49.55824575429121,
+      "throughput_change_percent": -7.2475750213365275,
+      "baseline_acceptance_length": 2.0820445115050923,
+      "generator_acceptance_length": 2.1888624653190645,
+      "acceptance_length_change_percent": 5.1304356474470625,
+      "baseline_ttft_median_ms": 44.59047317504883,
+      "generator_ttft_median_ms": 55.35578727722168,
+      "ttft_median_difference_ms": 10.765314102172852,
+      "output_tokens": [
+        11032.0,
+        11032.0
+      ],
+      "mean_draft_batch_size": 1.0,
+      "generator_ms_per_request": 3.2899039888381947,
+      "adapter_load_ms_per_request": 1.0979059123992918,
+      "timed_oneoff_fraction_of_measurement_percent": 0.0985551855550397
+    },
+    {
+      "concurrency": 2,
+      "category": "math",
+      "dataset_sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28",
+      "successful_requests_per_arm": 50,
+      "baseline_output_tokens_per_second": 123.4964466578458,
+      "generator_output_tokens_per_second": 130.229814346359,
+      "throughput_change_percent": 5.452276458745731,
+      "baseline_acceptance_length": 2.4197810494526237,
+      "generator_acceptance_length": 2.9570835256114445,
+      "acceptance_length_change_percent": 22.204590629402745,
+      "baseline_ttft_median_ms": 76.56240463256836,
+      "generator_ttft_median_ms": 93.56236457824707,
+      "ttft_median_difference_ms": 16.99995994567871,
+      "output_tokens": [
+        12800.0,
+        12800.0
+      ],
+      "mean_draft_batch_size": 1.957142857142857,
+      "generator_ms_per_request": 3.1586758708953857,
+      "adapter_load_ms_per_request": 1.0797459220886245,
+      "timed_oneoff_fraction_of_measurement_percent": 0.21561284500854283
+    },
+    {
+      "concurrency": 2,
+      "category": "code",
+      "dataset_sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748",
+      "successful_requests_per_arm": 50,
+      "baseline_output_tokens_per_second": 117.15880230819384,
+      "generator_output_tokens_per_second": 114.71547958558328,
+      "throughput_change_percent": -2.0854794300331325,
+      "baseline_acceptance_length": 2.3017101710171017,
+      "generator_acceptance_length": 2.6222631471250253,
+      "acceptance_length_change_percent": 13.926730660718878,
+      "baseline_ttft_median_ms": 80.83820343017578,
+      "generator_ttft_median_ms": 98.86407852172852,
+      "ttft_median_difference_ms": 18.025875091552734,
+      "output_tokens": [
+        12785.0,
+        12794.0
+      ],
+      "mean_draft_batch_size": 1.9529272151898733,
+      "generator_ms_per_request": 3.195296001434327,
+      "adapter_load_ms_per_request": 1.0915027260780332,
+      "timed_oneoff_fraction_of_measurement_percent": 0.19218468497477276
+    },
+    {
+      "concurrency": 2,
+      "category": "stem",
+      "dataset_sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757",
+      "successful_requests_per_arm": 50,
+      "baseline_output_tokens_per_second": 113.0574349342438,
+      "generator_output_tokens_per_second": 111.67809601202714,
+      "throughput_change_percent": -1.2200338023049206,
+      "baseline_acceptance_length": 2.2187010273376284,
+      "generator_acceptance_length": 2.5187821273230524,
+      "acceptance_length_change_percent": 13.525080499264552,
+      "baseline_ttft_median_ms": 76.90072059631348,
+      "generator_ttft_median_ms": 93.80936622619629,
+      "ttft_median_difference_ms": 16.908645629882812,
+      "output_tokens": [
+        12751.0,
+        12751.0
+      ],
+      "mean_draft_batch_size": 1.9593402378212506,
+      "generator_ms_per_request": 3.145713930130003,
+      "adapter_load_ms_per_request": 1.071469435691833,
+      "timed_oneoff_fraction_of_measurement_percent": 0.18467846005355454
+    },
+    {
+      "concurrency": 2,
+      "category": "chat",
+      "dataset_sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f",
+      "successful_requests_per_arm": 50,
+      "baseline_output_tokens_per_second": 105.32578752818958,
+      "generator_output_tokens_per_second": 95.6477984508671,
+      "throughput_change_percent": -9.188622562857407,
+      "baseline_acceptance_length": 2.082450832072617,
+      "generator_acceptance_length": 2.1927662957074725,
+      "acceptance_length_change_percent": 5.297386230485968,
+      "baseline_ttft_median_ms": 77.9581069946289,
+      "generator_ttft_median_ms": 93.89209747314453,
+      "ttft_median_difference_ms": 15.933990478515625,
+      "output_tokens": [
+        11006.0,
+        11018.0
+      ],
+      "mean_draft_batch_size": 1.9478727481793792,
+      "generator_ms_per_request": 3.264603519439697,
+      "adapter_load_ms_per_request": 1.1314272046089175,
+      "timed_oneoff_fraction_of_measurement_percent": 0.19081079173970833
+    },
+    {
+      "concurrency": 4,
+      "category": "math",
+      "dataset_sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28",
+      "successful_requests_per_arm": 50,
+      "baseline_output_tokens_per_second": 234.24938634156356,
+      "generator_output_tokens_per_second": 256.09422900718266,
+      "throughput_change_percent": 9.325464201544031,
+      "baseline_acceptance_length": 2.4164150943396225,
+      "generator_acceptance_length": 2.953842603277175,
+      "acceptance_length_change_percent": 22.240694911915583,
+      "baseline_ttft_median_ms": 77.28385925292969,
+      "generator_ttft_median_ms": 92.46325492858887,
+      "ttft_median_difference_ms": 15.17939567565918,
+      "output_tokens": [
+        12800.0,
+        12800.0
+      ],
+      "mean_draft_batch_size": 3.8079930495221546,
+      "generator_ms_per_request": 3.1171110486984275,
+      "adapter_load_ms_per_request": 1.0690419125556918,
+      "timed_oneoff_fraction_of_measurement_percent": 0.41876938090566723
+    },
+    {
+      "concurrency": 4,
+      "category": "code",
+      "dataset_sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748",
+      "successful_requests_per_arm": 50,
+      "baseline_output_tokens_per_second": 222.769152607654,
+      "generator_output_tokens_per_second": 221.2112380263562,
+      "throughput_change_percent": -0.6993403543809507,
+      "baseline_acceptance_length": 2.2988671102319724,
+      "generator_acceptance_length": 2.623847572218808,
+      "acceptance_length_change_percent": 14.136548412928596,
+      "baseline_ttft_median_ms": 89.71786499023438,
+      "generator_ttft_median_ms": 105.26371002197266,
+      "ttft_median_difference_ms": 15.545845031738281,
+      "output_tokens": [
+        12785.0,
+        12794.0
+      ],
+      "mean_draft_batch_size": 3.766997708174179,
+      "generator_ms_per_request": 3.1576179265975934,
+      "adapter_load_ms_per_request": 1.0748614478111258,
+      "timed_oneoff_fraction_of_measurement_percent": 0.3659027678341294
+    },
+    {
+      "concurrency": 4,
+      "category": "stem",
+      "dataset_sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757",
+      "successful_requests_per_arm": 50,
+      "baseline_output_tokens_per_second": 222.86305800468784,
+      "generator_output_tokens_per_second": 221.02867056485564,
+      "throughput_change_percent": -0.8231007221455311,
+      "baseline_acceptance_length": 2.230015742522302,
+      "generator_acceptance_length": 2.521936758893281,
+      "acceptance_length_change_percent": 13.09053612513047,
+      "baseline_ttft_median_ms": 78.02057266235352,
+      "generator_ttft_median_ms": 92.37861633300781,
+      "ttft_median_difference_ms": 14.358043670654297,
+      "output_tokens": [
+        12754.0,
+        12768.0
+      ],
+      "mean_draft_batch_size": 3.8449962377727616,
+      "generator_ms_per_request": 3.1192992067337078,
+      "adapter_load_ms_per_request": 1.071438076496124,
+      "timed_oneoff_fraction_of_measurement_percent": 0.3627322565785027
+    },
+    {
+      "concurrency": 4,
+      "category": "chat",
+      "dataset_sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f",
+      "successful_requests_per_arm": 50,
+      "baseline_output_tokens_per_second": 194.58642876676856,
+      "generator_output_tokens_per_second": 185.3322094220802,
+      "throughput_change_percent": -4.755840067233297,
+      "baseline_acceptance_length": 2.0577354260089686,
+      "generator_acceptance_length": 2.1798219584569734,
+      "acceptance_length_change_percent": 5.933052952526308,
+      "baseline_ttft_median_ms": 79.88524436950684,
+      "generator_ttft_median_ms": 93.05000305175781,
+      "ttft_median_difference_ms": 13.164758682250977,
+      "output_tokens": [
+        11004.0,
+        11010.0
+      ],
+      "mean_draft_batch_size": 3.795539033457249,
+      "generator_ms_per_request": 3.2520435047149645,
+      "adapter_load_ms_per_request": 1.1062457561492922,
+      "timed_oneoff_fraction_of_measurement_percent": 0.3668171562291089
+    }
+  ],
+  "concurrency_totals": [
+    {
+      "concurrency": 1,
+      "baseline_sum_of_category_measurement_seconds": 846.0875144004822,
+      "generator_sum_of_category_measurement_seconds": 845.981285572052,
+      "summed_measurement_duration_change_percent": -0.012555300323213725
+    },
+    {
+      "concurrency": 2,
+      "baseline_sum_of_category_measurement_seconds": 430.0503075122833,
+      "generator_sum_of_category_measurement_seconds": 439.18571424484253,
+      "summed_measurement_duration_change_percent": 2.1242646669420884
+    },
+    {
+      "concurrency": 4,
+      "baseline_sum_of_category_measurement_seconds": 225.81254315376282,
+      "generator_sum_of_category_measurement_seconds": 224.990820646286,
+      "summed_measurement_duration_change_percent": -0.36389586512795
+    }
+  ]
+}

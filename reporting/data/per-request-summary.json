@@ -1,0 +1,1191 @@
+{
+    "correctness_status": "not_checked",
+    "results": {
+      "eagle3-vanilla-c1": {
+        "nemotron/nemo-chat": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.5858166729536024,
+            "acceptance_at_pos_1": 0.33308185590343264,
+            "acceptance_at_pos_2": 0.16314598264805732,
+            "acceptance_length": 2.0820445115050923,
+            "num_accepted_tokens": 5737.0,
+            "num_draft_tokens": 15906.0,
+            "num_drafts": 5302.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {},
+          "correctness_status": "not_checked",
+          "dataset_sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 17.770155270894367,
+              "latency_median_s": 4.52814793586731,
+              "measured_seconds": 206.4731583595276,
+              "output_tokens_per_second": 53.430673931912246,
+              "output_tps_median": 55.538983050847456,
+              "rps_median": 0.21823070391679072,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 11032.0,
+              "ttft_median_ms": 44.59047317504883
+            }
+          ],
+          "subsets": [
+            "chat-00000",
+            "chat-00002",
+            "chat-00003",
+            "chat-00004",
+            "chat-00005"
+          ]
+        },
+        "nemotron/nemo-code": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.6571428571428571,
+            "acceptance_at_pos_1": 0.4206648697214735,
+            "acceptance_at_pos_2": 0.2206648697214735,
+            "acceptance_length": 2.298472596585804,
+            "num_accepted_tokens": 7226.0,
+            "num_draft_tokens": 16695.0,
+            "num_drafts": 5565.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {},
+          "correctness_status": "not_checked",
+          "dataset_sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 16.742771747065525,
+              "latency_median_s": 4.303995847702026,
+              "measured_seconds": 214.90937781333923,
+              "output_tokens_per_second": 59.49019130800558,
+              "output_tps_median": 58.99438974215054,
+              "rps_median": 0.2310986417740301,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12785.0,
+              "ttft_median_ms": 48.81620407104492
+            }
+          ],
+          "subsets": [
+            "code-00000",
+            "code-00002",
+            "code-00003",
+            "code-00004",
+            "code-00005"
+          ]
+        },
+        "nemotron/nemo-math": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.6794484321873819,
+            "acceptance_at_pos_1": 0.4590102002266717,
+            "acceptance_at_pos_2": 0.2842840952021156,
+            "acceptance_length": 2.4227427276161695,
+            "num_accepted_tokens": 7532.0,
+            "num_draft_tokens": 15882.0,
+            "num_drafts": 5294.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {},
+          "correctness_status": "not_checked",
+          "dataset_sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 15.534111097747205,
+              "latency_median_s": 4.005851745605469,
+              "measured_seconds": 203.2366487979889,
+              "output_tokens_per_second": 62.98076688286085,
+              "output_tps_median": 64.0928351408967,
+              "rps_median": 0.2429772555246092,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12800.0,
+              "ttft_median_ms": 44.17991638183594
+            }
+          ],
+          "subsets": [
+            "math-00000",
+            "math-00002",
+            "math-00003",
+            "math-00004",
+            "math-00005"
+          ]
+        },
+        "nemotron/nemo-stem": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.6277932960893855,
+            "acceptance_at_pos_1": 0.37988826815642457,
+            "acceptance_at_pos_2": 0.21787709497206703,
+            "acceptance_length": 2.225558659217877,
+            "num_accepted_tokens": 7020.0,
+            "num_draft_tokens": 17184.0,
+            "num_drafts": 5728.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {},
+          "correctness_status": "not_checked",
+          "dataset_sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 17.388239093855315,
+              "latency_median_s": 4.455280065536499,
+              "measured_seconds": 221.46832942962646,
+              "output_tokens_per_second": 57.57482360046313,
+              "output_tps_median": 57.494963030687984,
+              "rps_median": 0.22251644892246236,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12751.0,
+              "ttft_median_ms": 45.0749397277832
+            }
+          ],
+          "subsets": [
+            "stem-00000",
+            "stem-00002",
+            "stem-00003",
+            "stem-00004",
+            "stem-00005"
+          ]
+        }
+      },
+      "eagle3-vanilla-c2": {
+        "nemotron/nemo-chat": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.5869894099848714,
+            "acceptance_at_pos_1": 0.3320726172465961,
+            "acceptance_at_pos_2": 0.16338880484114976,
+            "acceptance_length": 2.082450832072617,
+            "num_accepted_tokens": 5724.0,
+            "num_draft_tokens": 15864.0,
+            "num_drafts": 5288.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {},
+          "correctness_status": "not_checked",
+          "dataset_sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 17.746785107780905,
+              "latency_median_s": 4.526478052139282,
+              "measured_seconds": 104.49482750892639,
+              "output_tokens_per_second": 105.32578752818958,
+              "output_tps_median": 111.05346901294207,
+              "rps_median": 0.43203368670866515,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 11006.0,
+              "ttft_median_ms": 77.9581069946289
+            }
+          ],
+          "subsets": [
+            "chat-00000",
+            "chat-00002",
+            "chat-00003",
+            "chat-00004",
+            "chat-00005"
+          ]
+        },
+        "nemotron/nemo-code": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.6576057605760576,
+            "acceptance_at_pos_1": 0.42178217821782177,
+            "acceptance_at_pos_2": 0.2223222322232223,
+            "acceptance_length": 2.3017101710171017,
+            "num_accepted_tokens": 7231.0,
+            "num_draft_tokens": 16665.0,
+            "num_drafts": 5555.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {},
+          "correctness_status": "not_checked",
+          "dataset_sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 16.53626198862113,
+              "latency_median_s": 4.28101658821106,
+              "measured_seconds": 109.12539005279541,
+              "output_tokens_per_second": 117.15880230819384,
+              "output_tps_median": 119.31220323872223,
+              "rps_median": 0.4579610440318265,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12785.0,
+              "ttft_median_ms": 80.83820343017578
+            }
+          ],
+          "subsets": [
+            "code-00000",
+            "code-00002",
+            "code-00003",
+            "code-00004",
+            "code-00005"
+          ]
+        },
+        "nemotron/nemo-math": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.6804454511136278,
+            "acceptance_at_pos_1": 0.4592298980747452,
+            "acceptance_at_pos_2": 0.28010570026425063,
+            "acceptance_length": 2.4197810494526237,
+            "num_accepted_tokens": 7522.0,
+            "num_draft_tokens": 15894.0,
+            "num_drafts": 5298.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {},
+          "correctness_status": "not_checked",
+          "dataset_sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 15.48011910681631,
+              "latency_median_s": 4.061324119567871,
+              "measured_seconds": 103.6467068195343,
+              "output_tokens_per_second": 123.4964466578458,
+              "output_tps_median": 126.55935257502227,
+              "rps_median": 0.48291870847375706,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12800.0,
+              "ttft_median_ms": 76.56240463256836
+            }
+          ],
+          "subsets": [
+            "math-00000",
+            "math-00002",
+            "math-00003",
+            "math-00004",
+            "math-00005"
+          ]
+        },
+        "nemotron/nemo-stem": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.6266759533344942,
+            "acceptance_at_pos_1": 0.37889604736200594,
+            "acceptance_at_pos_2": 0.21312902664112832,
+            "acceptance_length": 2.2187010273376284,
+            "num_accepted_tokens": 6999.0,
+            "num_draft_tokens": 17229.0,
+            "num_drafts": 5743.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {},
+          "correctness_status": "not_checked",
+          "dataset_sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 17.215701645495844,
+              "latency_median_s": 4.481674671173096,
+              "measured_seconds": 112.78338313102722,
+              "output_tokens_per_second": 113.0574349342438,
+              "output_tps_median": 115.07893343191988,
+              "rps_median": 0.44222656005357786,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12751.0,
+              "ttft_median_ms": 76.90072059631348
+            }
+          ],
+          "subsets": [
+            "stem-00000",
+            "stem-00002",
+            "stem-00003",
+            "stem-00004",
+            "stem-00005"
+          ]
+        }
+      },
+      "eagle3-vanilla-c4": {
+        "nemotron/nemo-chat": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.577354260089686,
+            "acceptance_at_pos_1": 0.3226831091180867,
+            "acceptance_at_pos_2": 0.1576980568011958,
+            "acceptance_length": 2.0577354260089686,
+            "num_accepted_tokens": 5661.0,
+            "num_draft_tokens": 16056.0,
+            "num_drafts": 5352.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {},
+          "correctness_status": "not_checked",
+          "dataset_sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 18.27686160218482,
+              "latency_median_s": 4.736781120300293,
+              "measured_seconds": 56.55070638656616,
+              "output_tokens_per_second": 194.58642876676856,
+              "output_tps_median": 148.8396202232537,
+              "rps_median": 0.5960054048685025,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 11004.0,
+              "ttft_median_ms": 79.88524436950684
+            }
+          ],
+          "subsets": [
+            "chat-00000",
+            "chat-00002",
+            "chat-00003",
+            "chat-00004",
+            "chat-00005"
+          ]
+        },
+        "nemotron/nemo-code": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.6540190613199065,
+            "acceptance_at_pos_1": 0.4220463945333573,
+            "acceptance_at_pos_2": 0.22280165437870886,
+            "acceptance_length": 2.2988671102319724,
+            "num_accepted_tokens": 7223.0,
+            "num_draft_tokens": 16683.0,
+            "num_drafts": 5561.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {},
+          "correctness_status": "not_checked",
+          "dataset_sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 16.695227342493393,
+              "latency_median_s": 4.3889899253845215,
+              "measured_seconds": 57.39124941825867,
+              "output_tokens_per_second": 222.769152607654,
+              "output_tps_median": 164.04727050967583,
+              "rps_median": 0.5739715514664909,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12785.0,
+              "ttft_median_ms": 89.71786499023438
+            }
+          ],
+          "subsets": [
+            "code-00000",
+            "code-00002",
+            "code-00003",
+            "code-00004",
+            "code-00005"
+          ]
+        },
+        "nemotron/nemo-math": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.6758490566037736,
+            "acceptance_at_pos_1": 0.45962264150943394,
+            "acceptance_at_pos_2": 0.2809433962264151,
+            "acceptance_length": 2.4164150943396225,
+            "num_accepted_tokens": 7507.0,
+            "num_draft_tokens": 15900.0,
+            "num_drafts": 5300.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {},
+          "correctness_status": "not_checked",
+          "dataset_sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 15.484246085671817,
+              "latency_median_s": 4.063330173492432,
+              "measured_seconds": 54.642619132995605,
+              "output_tokens_per_second": 234.24938634156356,
+              "output_tps_median": 139.61281388970255,
+              "rps_median": 0.5883020258901456,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12800.0,
+              "ttft_median_ms": 77.28385925292969
+            }
+          ],
+          "subsets": [
+            "math-00000",
+            "math-00002",
+            "math-00003",
+            "math-00004",
+            "math-00005"
+          ]
+        },
+        "nemotron/nemo-stem": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.6314500612209201,
+            "acceptance_at_pos_1": 0.38621654714010845,
+            "acceptance_at_pos_2": 0.2123491341612734,
+            "acceptance_length": 2.230015742522302,
+            "num_accepted_tokens": 7032.0,
+            "num_draft_tokens": 17151.0,
+            "num_drafts": 5717.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {},
+          "correctness_status": "not_checked",
+          "dataset_sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 17.098041609221813,
+              "latency_median_s": 4.462438344955444,
+              "measured_seconds": 57.22796821594238,
+              "output_tokens_per_second": 222.86305800468784,
+              "output_tps_median": 151.74244513679622,
+              "rps_median": 0.7980302221099235,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12754.0,
+              "ttft_median_ms": 78.02057266235352
+            }
+          ],
+          "subsets": [
+            "stem-00000",
+            "stem-00002",
+            "stem-00003",
+            "stem-00004",
+            "stem-00005"
+          ]
+        }
+      },
+      "generator-4000-per-request-c1": {
+        "nemotron/nemo-chat": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.6046373365041617,
+            "acceptance_at_pos_1": 0.3686087990487515,
+            "acceptance_at_pos_2": 0.21561632976615142,
+            "acceptance_length": 2.1888624653190645,
+            "num_accepted_tokens": 5999.0,
+            "num_draft_tokens": 15138.0,
+            "num_drafts": 5046.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {
+            "adapter_load_seconds": 0.05489529561996459,
+            "completed_batches": 50,
+            "completed_requests": 50,
+            "conditioning_examples": 50,
+            "draft_forward_calls": 15288,
+            "draft_forward_requests": 15288,
+            "draft_forward_tokens": 56035,
+            "generator_invocations": 50,
+            "generator_seconds": 0.16449519944190974,
+            "mean_conditioning_size": 1.0,
+            "mean_draft_batch_size": 1.0,
+            "mean_requests_per_adapter": 1.0,
+            "merge_seconds": 0.0,
+            "prepared_batches": 50,
+            "prepared_requests": 50,
+            "restore_seconds": 0.0
+          },
+          "correctness_status": "not_checked",
+          "dataset_sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 19.441626118678673,
+              "latency_median_s": 4.76978325843811,
+              "measured_seconds": 222.60674953460693,
+              "output_tokens_per_second": 49.55824575429121,
+              "output_tps_median": 51.052053740746416,
+              "rps_median": 0.20516223957925714,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 11032.0,
+              "ttft_median_ms": 55.35578727722168
+            }
+          ],
+          "subsets": [
+            "chat-00000",
+            "chat-00002",
+            "chat-00003",
+            "chat-00004",
+            "chat-00005"
+          ]
+        },
+        "nemotron/nemo-code": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.7376847290640394,
+            "acceptance_at_pos_1": 0.5242200328407225,
+            "acceptance_at_pos_2": 0.36535303776683087,
+            "acceptance_length": 2.6272577996715927,
+            "num_accepted_tokens": 7928.0,
+            "num_draft_tokens": 14616.0,
+            "num_drafts": 4872.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {
+            "adapter_load_seconds": 0.05460726404190063,
+            "completed_batches": 50,
+            "completed_requests": 50,
+            "conditioning_examples": 50,
+            "draft_forward_calls": 14766,
+            "draft_forward_requests": 14766,
+            "draft_forward_tokens": 54383,
+            "generator_invocations": 50,
+            "generator_seconds": 0.16496435213088984,
+            "mean_conditioning_size": 1.0,
+            "mean_draft_batch_size": 1.0,
+            "mean_requests_per_adapter": 1.0,
+            "merge_seconds": 0.0,
+            "prepared_batches": 50,
+            "prepared_requests": 50,
+            "restore_seconds": 0.0
+          },
+          "correctness_status": "not_checked",
+          "dataset_sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 16.497474558213177,
+              "latency_median_s": 4.264040231704712,
+              "measured_seconds": 212.24029564857483,
+              "output_tokens_per_second": 60.23832543641601,
+              "output_tps_median": 60.22384029493562,
+              "rps_median": 0.23170443771883684,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12785.0,
+              "ttft_median_ms": 60.47487258911133
+            }
+          ],
+          "subsets": [
+            "code-00000",
+            "code-00002",
+            "code-00003",
+            "code-00004",
+            "code-00005"
+          ]
+        },
+        "nemotron/nemo-math": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.8057670126874279,
+            "acceptance_at_pos_1": 0.6431372549019608,
+            "acceptance_at_pos_2": 0.5063437139561707,
+            "acceptance_length": 2.9552479815455595,
+            "num_accepted_tokens": 8476.0,
+            "num_draft_tokens": 13005.0,
+            "num_drafts": 4335.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {
+            "adapter_load_seconds": 0.05444127988815309,
+            "completed_batches": 50,
+            "completed_requests": 50,
+            "conditioning_examples": 50,
+            "draft_forward_calls": 13155,
+            "draft_forward_requests": 13155,
+            "draft_forward_tokens": 31040,
+            "generator_invocations": 50,
+            "generator_seconds": 0.16337756848335272,
+            "mean_conditioning_size": 1.0,
+            "mean_draft_batch_size": 1.0,
+            "mean_requests_per_adapter": 1.0,
+            "merge_seconds": 0.0,
+            "prepared_batches": 50,
+            "prepared_requests": 50,
+            "restore_seconds": 0.0
+          },
+          "correctness_status": "not_checked",
+          "dataset_sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 14.281637528363396,
+              "latency_median_s": 3.6979658603668213,
+              "measured_seconds": 190.974200963974,
+              "output_tokens_per_second": 67.02476007434446,
+              "output_tps_median": 68.78802113856193,
+              "rps_median": 0.26291181753111104,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12800.0,
+              "ttft_median_ms": 55.06539344787598
+            }
+          ],
+          "subsets": [
+            "math-00000",
+            "math-00002",
+            "math-00003",
+            "math-00004",
+            "math-00005"
+          ]
+        },
+        "nemotron/nemo-stem": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.6990869392616118,
+            "acceptance_at_pos_1": 0.48630408892417626,
+            "acceptance_at_pos_2": 0.34537514886859866,
+            "acceptance_length": 2.5307661770543866,
+            "num_accepted_tokens": 7712.0,
+            "num_draft_tokens": 15114.0,
+            "num_drafts": 5038.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {
+            "adapter_load_seconds": 0.054200703740119954,
+            "completed_batches": 50,
+            "completed_requests": 50,
+            "conditioning_examples": 50,
+            "draft_forward_calls": 15264,
+            "draft_forward_requests": 15264,
+            "draft_forward_tokens": 40984,
+            "generator_invocations": 50,
+            "generator_seconds": 0.16241196799278235,
+            "mean_conditioning_size": 1.0,
+            "mean_draft_batch_size": 1.0,
+            "mean_requests_per_adapter": 1.0,
+            "merge_seconds": 0.0,
+            "prepared_batches": 50,
+            "prepared_requests": 50,
+            "restore_seconds": 0.0
+          },
+          "correctness_status": "not_checked",
+          "dataset_sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 17.12230046590169,
+              "latency_median_s": 4.421777248382568,
+              "measured_seconds": 220.16003942489624,
+              "output_tokens_per_second": 57.91695910533202,
+              "output_tps_median": 57.73588230111884,
+              "rps_median": 0.22679134059438383,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12751.0,
+              "ttft_median_ms": 55.084943771362305
+            }
+          ],
+          "subsets": [
+            "stem-00000",
+            "stem-00002",
+            "stem-00003",
+            "stem-00004",
+            "stem-00005"
+          ]
+        }
+      },
+      "generator-4000-per-request-c2": {
+        "nemotron/nemo-chat": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.6091017488076311,
+            "acceptance_at_pos_1": 0.3690381558028617,
+            "acceptance_at_pos_2": 0.21462639109697934,
+            "acceptance_length": 2.1927662957074725,
+            "num_accepted_tokens": 6002.0,
+            "num_draft_tokens": 15096.0,
+            "num_drafts": 5032.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {
+            "adapter_load_seconds": 0.05657136023044588,
+            "completed_batches": 50,
+            "completed_requests": 50,
+            "conditioning_examples": 50,
+            "draft_forward_calls": 7827,
+            "draft_forward_requests": 15246,
+            "draft_forward_tokens": 55951,
+            "generator_invocations": 50,
+            "generator_seconds": 0.16323017597198486,
+            "mean_conditioning_size": 1.0,
+            "mean_draft_batch_size": 1.9478727481793792,
+            "mean_requests_per_adapter": 1.0,
+            "merge_seconds": 0.0,
+            "prepared_batches": 50,
+            "prepared_requests": 50,
+            "restore_seconds": 0.0
+          },
+          "correctness_status": "not_checked",
+          "dataset_sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 19.555333081413718,
+              "latency_median_s": 4.929003000259399,
+              "measured_seconds": 115.19345116615295,
+              "output_tokens_per_second": 95.6477984508671,
+              "output_tps_median": 99.22018164789283,
+              "rps_median": 0.3904462475287028,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 11018.0,
+              "ttft_median_ms": 93.89209747314453
+            }
+          ],
+          "subsets": [
+            "chat-00000",
+            "chat-00002",
+            "chat-00003",
+            "chat-00004",
+            "chat-00005"
+          ]
+        },
+        "nemotron/nemo-code": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.7366482504604052,
+            "acceptance_at_pos_1": 0.519950890116636,
+            "acceptance_at_pos_2": 0.3656640065479844,
+            "acceptance_length": 2.6222631471250253,
+            "num_accepted_tokens": 7928.0,
+            "num_draft_tokens": 14661.0,
+            "num_drafts": 4887.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {
+            "adapter_load_seconds": 0.054575136303901664,
+            "completed_batches": 50,
+            "completed_requests": 50,
+            "conditioning_examples": 50,
+            "draft_forward_calls": 7584,
+            "draft_forward_requests": 14811,
+            "draft_forward_tokens": 54473,
+            "generator_invocations": 50,
+            "generator_seconds": 0.15976480007171634,
+            "mean_conditioning_size": 1.0,
+            "mean_draft_batch_size": 1.9529272151898733,
+            "mean_requests_per_adapter": 1.0,
+            "merge_seconds": 0.0,
+            "prepared_batches": 50,
+            "prepared_requests": 50,
+            "restore_seconds": 0.0
+          },
+          "correctness_status": "not_checked",
+          "dataset_sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 17.14330467523313,
+              "latency_median_s": 4.48144268989563,
+              "measured_seconds": 111.52810454368591,
+              "output_tokens_per_second": 114.71547958558328,
+              "output_tps_median": 115.45700591562675,
+              "rps_median": 0.442015118266305,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12794.0,
+              "ttft_median_ms": 98.86407852172852
+            }
+          ],
+          "subsets": [
+            "code-00000",
+            "code-00002",
+            "code-00003",
+            "code-00004",
+            "code-00005"
+          ]
+        },
+        "nemotron/nemo-math": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.8103368712505769,
+            "acceptance_at_pos_1": 0.6393631748961698,
+            "acceptance_at_pos_2": 0.5073834794646978,
+            "acceptance_length": 2.9570835256114445,
+            "num_accepted_tokens": 8482.0,
+            "num_draft_tokens": 13002.0,
+            "num_drafts": 4334.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {
+            "adapter_load_seconds": 0.05398729610443123,
+            "completed_batches": 50,
+            "completed_requests": 50,
+            "conditioning_examples": 50,
+            "draft_forward_calls": 6720,
+            "draft_forward_requests": 13152,
+            "draft_forward_tokens": 31034,
+            "generator_invocations": 50,
+            "generator_seconds": 0.15793379354476927,
+            "mean_conditioning_size": 1.0,
+            "mean_draft_batch_size": 1.957142857142857,
+            "mean_requests_per_adapter": 1.0,
+            "merge_seconds": 0.0,
+            "prepared_batches": 50,
+            "prepared_requests": 50,
+            "restore_seconds": 0.0
+          },
+          "correctness_status": "not_checked",
+          "dataset_sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 14.766626732022155,
+              "latency_median_s": 3.903262138366699,
+              "measured_seconds": 98.28778505325317,
+              "output_tokens_per_second": 130.229814346359,
+              "output_tps_median": 132.27492371804766,
+              "rps_median": 0.5088485799919565,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12800.0,
+              "ttft_median_ms": 93.56236457824707
+            }
+          ],
+          "subsets": [
+            "math-00000",
+            "math-00002",
+            "math-00003",
+            "math-00004",
+            "math-00005"
+          ]
+        },
+        "nemotron/nemo-stem": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.6951364175563464,
+            "acceptance_at_pos_1": 0.48279952550415184,
+            "acceptance_at_pos_2": 0.34084618426255436,
+            "acceptance_length": 2.5187821273230524,
+            "num_accepted_tokens": 7682.0,
+            "num_draft_tokens": 15174.0,
+            "num_drafts": 5058.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {
+            "adapter_load_seconds": 0.05357347178459165,
+            "completed_batches": 50,
+            "completed_requests": 50,
+            "conditioning_examples": 50,
+            "draft_forward_calls": 7821,
+            "draft_forward_requests": 15324,
+            "draft_forward_tokens": 41104,
+            "generator_invocations": 50,
+            "generator_seconds": 0.15728569650650015,
+            "mean_conditioning_size": 1.0,
+            "mean_draft_batch_size": 1.9593402378212506,
+            "mean_requests_per_adapter": 1.0,
+            "merge_seconds": 0.0,
+            "prepared_batches": 50,
+            "prepared_requests": 50,
+            "restore_seconds": 0.0
+          },
+          "correctness_status": "not_checked",
+          "dataset_sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 17.47759183247884,
+              "latency_median_s": 4.5901548862457275,
+              "measured_seconds": 114.17637348175049,
+              "output_tokens_per_second": 111.67809601202714,
+              "output_tps_median": 113.87786574571835,
+              "rps_median": 0.4340878089572505,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12751.0,
+              "ttft_median_ms": 93.80936622619629
+            }
+          ],
+          "subsets": [
+            "stem-00000",
+            "stem-00002",
+            "stem-00003",
+            "stem-00004",
+            "stem-00005"
+          ]
+        }
+      },
+      "generator-4000-per-request-c4": {
+        "nemotron/nemo-chat": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.5996043521266073,
+            "acceptance_at_pos_1": 0.36538081107814047,
+            "acceptance_at_pos_2": 0.21483679525222552,
+            "acceptance_length": 2.1798219584569734,
+            "num_accepted_tokens": 5964.0,
+            "num_draft_tokens": 15165.0,
+            "num_drafts": 5055.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {
+            "adapter_load_seconds": 0.05531228780746461,
+            "completed_batches": 50,
+            "completed_requests": 50,
+            "conditioning_examples": 50,
+            "draft_forward_calls": 4035,
+            "draft_forward_requests": 15315,
+            "draft_forward_tokens": 56089,
+            "generator_invocations": 50,
+            "generator_seconds": 0.16260217523574824,
+            "mean_conditioning_size": 1.0,
+            "mean_draft_batch_size": 3.795539033457249,
+            "mean_requests_per_adapter": 1.0,
+            "merge_seconds": 0.0,
+            "prepared_batches": 50,
+            "prepared_requests": 50,
+            "restore_seconds": 0.0
+          },
+          "correctness_status": "not_checked",
+          "dataset_sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 19.668925977220724,
+              "latency_median_s": 5.005629301071167,
+              "measured_seconds": 59.406835079193115,
+              "output_tokens_per_second": 185.3322094220802,
+              "output_tps_median": 152.84460103115146,
+              "rps_median": 0.6148057778173222,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 11010.0,
+              "ttft_median_ms": 93.05000305175781
+            }
+          ],
+          "subsets": [
+            "chat-00000",
+            "chat-00002",
+            "chat-00003",
+            "chat-00004",
+            "chat-00005"
+          ]
+        },
+        "nemotron/nemo-code": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.7357098955132145,
+            "acceptance_at_pos_1": 0.5228436795738578,
+            "acceptance_at_pos_2": 0.3652939971317353,
+            "acceptance_length": 2.623847572218808,
+            "num_accepted_tokens": 7926.0,
+            "num_draft_tokens": 14643.0,
+            "num_drafts": 4881.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {
+            "adapter_load_seconds": 0.053743072390556285,
+            "completed_batches": 50,
+            "completed_requests": 50,
+            "conditioning_examples": 50,
+            "draft_forward_calls": 3927,
+            "draft_forward_requests": 14793,
+            "draft_forward_tokens": 54437,
+            "generator_invocations": 50,
+            "generator_seconds": 0.15788089632987967,
+            "mean_conditioning_size": 1.0,
+            "mean_draft_batch_size": 3.766997708174179,
+            "mean_requests_per_adapter": 1.0,
+            "merge_seconds": 0.0,
+            "prepared_batches": 50,
+            "prepared_requests": 50,
+            "restore_seconds": 0.0
+          },
+          "correctness_status": "not_checked",
+          "dataset_sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 17.14959705577177,
+              "latency_median_s": 4.513369083404541,
+              "measured_seconds": 57.83612132072449,
+              "output_tokens_per_second": 221.2112380263562,
+              "output_tps_median": 176.9629054578594,
+              "rps_median": 0.593176559768743,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12794.0,
+              "ttft_median_ms": 105.26371002197266
+            }
+          ],
+          "subsets": [
+            "code-00000",
+            "code-00002",
+            "code-00003",
+            "code-00004",
+            "code-00005"
+          ]
+        },
+        "nemotron/nemo-math": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.8082160166166629,
+            "acceptance_at_pos_1": 0.639510731594738,
+            "acceptance_at_pos_2": 0.5061158550657743,
+            "acceptance_length": 2.953842603277175,
+            "num_accepted_tokens": 8466.0,
+            "num_draft_tokens": 12999.0,
+            "num_drafts": 4333.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {
+            "adapter_load_seconds": 0.05345209562778459,
+            "completed_batches": 50,
+            "completed_requests": 50,
+            "conditioning_examples": 50,
+            "draft_forward_calls": 3453,
+            "draft_forward_requests": 13149,
+            "draft_forward_tokens": 31028,
+            "generator_invocations": 50,
+            "generator_seconds": 0.15585555243492138,
+            "mean_conditioning_size": 1.0,
+            "mean_draft_batch_size": 3.8079930495221546,
+            "mean_requests_per_adapter": 1.0,
+            "merge_seconds": 0.0,
+            "prepared_batches": 50,
+            "prepared_requests": 50,
+            "restore_seconds": 0.0
+          },
+          "correctness_status": "not_checked",
+          "dataset_sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 14.362132315542183,
+              "latency_median_s": 3.8263356685638428,
+              "measured_seconds": 49.98160266876221,
+              "output_tokens_per_second": 256.09422900718266,
+              "output_tps_median": 163.66750728398992,
+              "rps_median": 0.6459025734133492,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12800.0,
+              "ttft_median_ms": 92.46325492858887
+            }
+          ],
+          "subsets": [
+            "math-00000",
+            "math-00002",
+            "math-00003",
+            "math-00004",
+            "math-00005"
+          ]
+        },
+        "nemotron/nemo-stem": {
+          "acceptance": {
+            "acceptance_at_pos_0": 0.700592885375494,
+            "acceptance_at_pos_1": 0.4818181818181818,
+            "acceptance_at_pos_2": 0.3395256916996047,
+            "acceptance_length": 2.521936758893281,
+            "num_accepted_tokens": 7701.0,
+            "num_draft_tokens": 15180.0,
+            "num_drafts": 5060.0
+          },
+          "acceptance_scope": "aggregate across all sweep points in this invocation",
+          "adapter_metrics": {
+            "adapter_load_seconds": 0.0535719038248062,
+            "completed_batches": 50,
+            "completed_requests": 50,
+            "conditioning_examples": 50,
+            "draft_forward_calls": 3987,
+            "draft_forward_requests": 15330,
+            "draft_forward_tokens": 41116,
+            "generator_invocations": 50,
+            "generator_seconds": 0.1559649603366854,
+            "mean_conditioning_size": 1.0,
+            "mean_draft_batch_size": 3.8449962377727616,
+            "mean_requests_per_adapter": 1.0,
+            "merge_seconds": 0.0,
+            "prepared_batches": 50,
+            "prepared_requests": 50,
+            "restore_seconds": 0.0
+          },
+          "correctness_status": "not_checked",
+          "dataset_sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757",
+          "output_mismatch_override": false,
+          "performance": [
+            {
+              "itl_median_ms": 17.16430607964011,
+              "latency_median_s": 4.49671483039856,
+              "measured_seconds": 57.7662615776062,
+              "output_tokens_per_second": 221.02867056485564,
+              "output_tps_median": 138.68329979754046,
+              "rps_median": 0.7815121854147676,
+              "strategy": "throughput",
+              "successful_requests": 50,
+              "target_rate": "",
+              "total_output_tokens": 12768.0,
+              "ttft_median_ms": 92.37861633300781
+            }
+          ],
+          "subsets": [
+            "stem-00000",
+            "stem-00002",
+            "stem-00003",
+            "stem-00004",
+            "stem-00005"
+          ]
+        }
+      }
+    },
+    "rows": [
+      {
+        "concurrency": 1,
+        "model": "eagle3-vanilla-c1",
+        "nemotron/nemo-chat": 53.430673931912246,
+        "nemotron/nemo-code": 59.49019130800558,
+        "nemotron/nemo-math": 62.98076688286085,
+        "nemotron/nemo-stem": 57.57482360046313,
+        "type": "drafter"
+      },
+      {
+        "concurrency": 2,
+        "model": "eagle3-vanilla-c2",
+        "nemotron/nemo-chat": 105.32578752818958,
+        "nemotron/nemo-code": 117.15880230819384,
+        "nemotron/nemo-math": 123.4964466578458,
+        "nemotron/nemo-stem": 113.0574349342438,
+        "type": "drafter"
+      },
+      {
+        "concurrency": 4,
+        "model": "eagle3-vanilla-c4",
+        "nemotron/nemo-chat": 194.58642876676856,
+        "nemotron/nemo-code": 222.769152607654,
+        "nemotron/nemo-math": 234.24938634156356,
+        "nemotron/nemo-stem": 222.86305800468784,
+        "type": "drafter"
+      },
+      {
+        "concurrency": 1,
+        "model": "generator-4000-per-request-c1",
+        "nemotron/nemo-chat": 49.55824575429121,
+        "nemotron/nemo-code": 60.23832543641601,
+        "nemotron/nemo-math": 67.02476007434446,
+        "nemotron/nemo-stem": 57.91695910533202,
+        "type": "generator"
+      },
+      {
+        "concurrency": 2,
+        "model": "generator-4000-per-request-c2",
+        "nemotron/nemo-chat": 95.6477984508671,
+        "nemotron/nemo-code": 114.71547958558328,
+        "nemotron/nemo-math": 130.229814346359,
+        "nemotron/nemo-stem": 111.67809601202714,
+        "type": "generator"
+      },
+      {
+        "concurrency": 4,
+        "model": "generator-4000-per-request-c4",
+        "nemotron/nemo-chat": 185.3322094220802,
+        "nemotron/nemo-code": 221.2112380263562,
+        "nemotron/nemo-math": 256.09422900718266,
+        "nemotron/nemo-stem": 221.02867056485564,
+        "type": "generator"
+      }
+    ],
+    "suite_identity": "0c7387248170de558e7465d4d126e6e4220e56b29b8208b7da3afe607e772644"
+  }
+  

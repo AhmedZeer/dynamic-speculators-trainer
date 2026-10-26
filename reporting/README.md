@@ -4,12 +4,14 @@ Update this report **only when explicitly requested**. Markdown under
 `docs/experiments/` remains the working experiment record. There is no daily
 generation, scheduled task, or automatic reporting pipeline.
 
-Read [Version 03](reports/dynamic-speculators-2026-10-23-v03.pdf), with evidence
-through 2026-10-23. Versions 01 and 02 remain preserved in [`reports/`](reports/).
-This update expands the generator architecture, adds both supplied training
-figures, and records the decision to retire bank warmup in favor of direct
-training on the original examples. It records observations and execution status, with no final
-conclusions or overall model ranking.
+Read [Version 04](reports/dynamic-speculators-2026-10-25-v04.pdf), with evidence
+through 2026-10-25. Versions 01--03 remain preserved in [`reports/`](reports/).
+This extension adds the completed shared-adapter concurrency sweep, partial
+matched-budget conditioning-size results, per-request continuous-batching
+throughput/acceptance/TTFT, and the screenshot-based rank/dynamism study.
+Bounded profiling is recorded as implemented; GPU trace results are pending.
+Observations retain correctness, provenance and repeat-uncertainty limitations,
+with no final conclusions or overall model ranking.
 
 ## Organization
 
@@ -19,7 +21,8 @@ conclusions or overall model ranking.
 - `assets/`: unchanged supplied training figures; their working evidence records
   live under `docs/experiments/results/`.
 - `data/`: frozen numeric transcriptions for the current throughput comparison
-  and cache pilot. Missing native experiment metadata remains explicitly missing.
+  cache pilot, concurrency/conditioning/per-request studies and rank sweep.
+  Missing native experiment metadata remains explicitly missing.
 - `report.json`: version, evidence cutoff, implementation revision, output name,
   and manual update policy.
 - `template/`: unchanged source files copied from the provided sibling checkout's
@@ -31,7 +34,8 @@ conclusions or overall model ranking.
 Each experiment uses a stable ID, question, setup, status, evidence, measurements,
 record notes, and missing evidence. The current four-model comparison contains
 no earlier generator benchmark rows. Historical training ablations have their
-own report entries and Markdown records. Batching is implemented; GPU performance measurements remain pending.
+own report entries and Markdown records. Batching performance summaries are now recorded under BATCH-001/002/003.
+Profiler implementation and pending GPU diagnostics remain separate.
 
 ## Build manually
 

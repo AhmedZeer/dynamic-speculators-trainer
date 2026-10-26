@@ -1,0 +1,257 @@
+{
+  "record_id": "BATCH-001",
+  "recorded_date": "2026-10-24",
+  "execution_date": null,
+  "reported_suite": "comparison-v2",
+  "evidence": "user_supplied_summary_markdown",
+  "native_artifacts_archived": false,
+  "metric": "aggregate_output_tokens_per_second",
+  "includes_prefill_and_serving_overhead": true,
+  "correctness_status": "not_checked",
+  "scheduling_policy": "fixed_cohorts; one shared adapter per generator cohort",
+  "serial_measurements_reused": true,
+  "concurrencies": [
+    1,
+    2,
+    4,
+    8
+  ],
+  "category_groups": {
+    "in_distribution": [
+      "nemo-math",
+      "nemo-code",
+      "nemo-stem",
+      "nemo-chat"
+    ],
+    "out_of_distribution": [
+      "specbench-humaneval",
+      "specbench-math-reasoning",
+      "specbench-summarization"
+    ]
+  },
+  "missing_provenance": [
+    "native GuideLLM request-level records and generation outputs",
+    "exact model/checkpoint hashes and update counts",
+    "hardware and environment identity for each execution",
+    "per-cohort membership and within-cohort utilization",
+    "command files and source patches",
+    "repeated-run uncertainty"
+  ],
+  "models": [
+    {
+      "name": "eagle3-base",
+      "measurements": [
+        {
+          "concurrency": 1,
+          "output_tokens_per_second": {
+            "nemo-math": 64.34,
+            "nemo-code": 60.93,
+            "nemo-stem": 59.28,
+            "nemo-chat": 54.97,
+            "specbench-humaneval": 68.32,
+            "specbench-math-reasoning": 66.55,
+            "specbench-summarization": 58.29
+          }
+        },
+        {
+          "concurrency": 2,
+          "output_tokens_per_second": {
+            "nemo-math": 116.85,
+            "nemo-code": 110.79,
+            "nemo-stem": 108.42,
+            "nemo-chat": 85.08,
+            "specbench-humaneval": 121.51,
+            "specbench-math-reasoning": 124.04,
+            "specbench-summarization": 108.6
+          }
+        },
+        {
+          "concurrency": 4,
+          "output_tokens_per_second": {
+            "nemo-math": 213.73,
+            "nemo-code": 201.16,
+            "nemo-stem": 202.13,
+            "nemo-chat": 157.48,
+            "specbench-humaneval": 222.33,
+            "specbench-math-reasoning": 236.27,
+            "specbench-summarization": 198.76
+          }
+        },
+        {
+          "concurrency": 8,
+          "output_tokens_per_second": {
+            "nemo-math": 370.4,
+            "nemo-code": 344.12,
+            "nemo-stem": 358.96,
+            "nemo-chat": 269.56,
+            "specbench-humaneval": 386.17,
+            "specbench-math-reasoning": 419.55,
+            "specbench-summarization": 327.71
+          }
+        }
+      ]
+    },
+    {
+      "name": "trained-lora",
+      "measurements": [
+        {
+          "concurrency": 1,
+          "output_tokens_per_second": {
+            "nemo-math": 72.5,
+            "nemo-code": 64.79,
+            "nemo-stem": 64.23,
+            "nemo-chat": 56.35,
+            "specbench-humaneval": 67.24,
+            "specbench-math-reasoning": 67.19,
+            "specbench-summarization": 58.3
+          }
+        },
+        {
+          "concurrency": 2,
+          "output_tokens_per_second": {
+            "nemo-math": 136.08,
+            "nemo-code": 122.63,
+            "nemo-stem": 118.62,
+            "nemo-chat": 92.4,
+            "specbench-humaneval": 116.13,
+            "specbench-math-reasoning": 122.64,
+            "specbench-summarization": 107.49
+          }
+        },
+        {
+          "concurrency": 4,
+          "output_tokens_per_second": {
+            "nemo-math": 248.65,
+            "nemo-code": 222.99,
+            "nemo-stem": 220.87,
+            "nemo-chat": 163.45,
+            "specbench-humaneval": 215.16,
+            "specbench-math-reasoning": 235.21,
+            "specbench-summarization": 197.72
+          }
+        },
+        {
+          "concurrency": 8,
+          "output_tokens_per_second": {
+            "nemo-math": 446.95,
+            "nemo-code": 389.09,
+            "nemo-stem": 397.33,
+            "nemo-chat": 278.03,
+            "specbench-humaneval": 366.84,
+            "specbench-math-reasoning": 433.09,
+            "specbench-summarization": 348.0
+          }
+        }
+      ]
+    },
+    {
+      "name": "generator-24k-2000step",
+      "measurements": [
+        {
+          "concurrency": 1,
+          "output_tokens_per_second": {
+            "nemo-math": 77.58,
+            "nemo-code": 68.11,
+            "nemo-stem": 66.5,
+            "nemo-chat": 57.58,
+            "specbench-humaneval": 69.24,
+            "specbench-math-reasoning": 67.99,
+            "specbench-summarization": 58.81
+          }
+        },
+        {
+          "concurrency": 2,
+          "output_tokens_per_second": {
+            "nemo-math": 139.21,
+            "nemo-code": 124.74,
+            "nemo-stem": 120.36,
+            "nemo-chat": 92.44,
+            "specbench-humaneval": 118.98,
+            "specbench-math-reasoning": 124.27,
+            "specbench-summarization": 107.19
+          }
+        },
+        {
+          "concurrency": 4,
+          "output_tokens_per_second": {
+            "nemo-math": 256.04,
+            "nemo-code": 228.38,
+            "nemo-stem": 219.65,
+            "nemo-chat": 165.02,
+            "specbench-humaneval": 217.22,
+            "specbench-math-reasoning": 239.08,
+            "specbench-summarization": 194.58
+          }
+        },
+        {
+          "concurrency": 8,
+          "output_tokens_per_second": {
+            "nemo-math": 448.07,
+            "nemo-code": 397.04,
+            "nemo-stem": 397.62,
+            "nemo-chat": 277.83,
+            "specbench-humaneval": 362.63,
+            "specbench-math-reasoning": 422.07,
+            "specbench-summarization": 342.32
+          }
+        }
+      ]
+    },
+    {
+      "name": "generator-4000step",
+      "measurements": [
+        {
+          "concurrency": 1,
+          "output_tokens_per_second": {
+            "nemo-math": 79.11,
+            "nemo-code": 69.83,
+            "nemo-stem": 67.92,
+            "nemo-chat": 56.49,
+            "specbench-humaneval": 69.44,
+            "specbench-math-reasoning": 68.32,
+            "specbench-summarization": 58.69
+          }
+        },
+        {
+          "concurrency": 2,
+          "output_tokens_per_second": {
+            "nemo-math": 142.55,
+            "nemo-code": 128.85,
+            "nemo-stem": 121.48,
+            "nemo-chat": 92.11,
+            "specbench-humaneval": 122.91,
+            "specbench-math-reasoning": 128.52,
+            "specbench-summarization": 109.25
+          }
+        },
+        {
+          "concurrency": 4,
+          "output_tokens_per_second": {
+            "nemo-math": 263.18,
+            "nemo-code": 237.29,
+            "nemo-stem": 224.17,
+            "nemo-chat": 169.35,
+            "specbench-humaneval": 220.45,
+            "specbench-math-reasoning": 234.68,
+            "specbench-summarization": 196.91
+          }
+        },
+        {
+          "concurrency": 8,
+          "output_tokens_per_second": {
+            "nemo-math": 451.59,
+            "nemo-code": 393.68,
+            "nemo-stem": 397.94,
+            "nemo-chat": 283.4,
+            "specbench-humaneval": 368.11,
+            "specbench-math-reasoning": 427.44,
+            "specbench-summarization": 338.82
+          }
+        }
+      ]
+    }
+  ],
+  "detailed_summary_archived": true,
+  "detailed_summary_file": "suite_summary_detailed.json",
+  "detailed_summary_sha256": "7b39e0f62c995a0d383107764ddb938523651092ce96a0ec68508f4b1ed01614"
+}

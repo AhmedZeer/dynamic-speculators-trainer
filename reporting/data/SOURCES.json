@@ -1,0 +1,41 @@
+{
+  "receipt_cutoff": "2026-10-25",
+  "note": "New v04 numeric inputs copied byte-for-byte. Relative links inside frozen JSON refer to their original source directories; rank images are also copied unchanged to reporting/assets. Missing per-run provenance is not filled from present code.",
+  "files": [
+    {
+      "report_file": "reporting/data/shared-concurrency.json",
+      "source_file": "docs/experiments/results/benchmarks/2026-10-24-comparison-v2-concurrency/metrics.json",
+      "sha256": "9d21a04d64bcfa5253bf4822ed4ca6be8088ed84137e163ea053b4f9b79a2730"
+    },
+    {
+      "report_file": "reporting/data/shared-detail.json",
+      "source_file": "docs/experiments/results/benchmarks/2026-10-24-comparison-v2-concurrency/detail_analysis.json",
+      "sha256": "09aef07b591eb52dbf55b758c58459fba7d77b0bde08f088440a48f0ad892381"
+    },
+    {
+      "report_file": "reporting/data/shared-summary.json",
+      "source_file": "docs/experiments/results/benchmarks/2026-10-24-comparison-v2-concurrency/suite_summary_detailed.json",
+      "sha256": "7b39e0f62c995a0d383107764ddb938523651092ce96a0ec68508f4b1ed01614"
+    },
+    {
+      "report_file": "reporting/data/conditioning-partial.json",
+      "source_file": "docs/experiments/results/benchmarks/2026-10-25-conditioning-24k-1k-partial/metrics.json",
+      "sha256": "96be9e06cb0391c88fbc8c4eb514c69ddcf9666ffa42afc571adb25fed660048"
+    },
+    {
+      "report_file": "reporting/data/per-request-summary.json",
+      "source_file": "docs/experiments/results/benchmarks/2026-10-25-per-request-4000-v1/summary.json",
+      "sha256": "bab7d74f187a752a41d9ce2eba986a22579f9c4c814473ba787df2a3b6a3acf9"
+    },
+    {
+      "report_file": "reporting/data/per-request-analysis.json",
+      "source_file": "docs/experiments/results/benchmarks/2026-10-25-per-request-4000-v1/analysis.json",
+      "sha256": "59ee2595de80a20cc336f7c46e21c7d55264fc75aebd01f6ccbdc238c56a07b3"
+    },
+    {
+      "report_file": "reporting/data/rank-sweep.json",
+      "source_file": "docs/experiments/results/benchmarks/2026-10-25-rank-sweep/metrics.json",
+      "sha256": "4caadda2573bc4c27e91757cfe75728637811ecd464833a5114199c4cbd0d7be"
+    }
+  ]
+}

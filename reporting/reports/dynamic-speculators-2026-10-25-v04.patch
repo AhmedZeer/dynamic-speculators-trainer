@@ -1,0 +1,929 @@
+diff --git a/docs/experiments/results/README.md b/docs/experiments/results/README.md
+index 845494c..59f2ebc 100644
+--- a/docs/experiments/results/README.md
++++ b/docs/experiments/results/README.md
+@@ -16,6 +16,7 @@ explain when new evidence changes them.
+ | GEN-002 | [HTTP token equality and repeatability](GEN-002-http-token-equality.md) | Failed exact equality; investigation deferred | Target-only repeat differs on 27/50 prompts; EAGLE3 repeat matches 50/50. Timing experiments proceed with an explicit correctness override. |
+ | GEN-003 | [Generator suite throughput: in-/out-of-distribution](GEN-003-generator-suite-throughput.md) | Preliminary; supplied suite summary | Four-model comparison: generator gains are larger on Nemotron math/code/STEM than on the selected Red Hat categories. |
+ | GEN-004 | [Bank warmup and direct-training decision](GEN-004-bank-warmup-adaptation.md) | Preliminary adaptation evidence; bank workflow retired | Fresh generator catches up to bank-pretrained generator; use original data directly with drafting loss. |
++| GEN-005 | [Rank, adapter dynamism and serving performance](GEN-005-rank-dynamism-and-serving.md) | Preliminary; supplied screenshots | Rank 8→64 increases reported dynamism, category separation, acceptance and tokens/s; matched setup and repeat uncertainty unavailable. |
+ | SYS-001 | [Activation RAM reuse](../eagle3_activation_ram_cache.md) | Measured console pilot; no repeated trials | Recorded validation wall times: 96.90 s on the first pass and 20.06 s on a warm pass; extraction/startup effects are included. |
+ | BATCH-001 | [Shared-adapter concurrency sweep](BATCH-001-shared-adapter-concurrency.md) | Detailed supplied suite summary; correctness/repeat uncertainty unavailable | G4 has higher ID acceptance than LoRA; timed adapter GPU work is below 0.11% of wall time, while throughput gains narrow at C8. |
+ | BATCH-002 | [Matched 24K, 1K-update conditioning-size study](../eagle3_conditioning_24k_1k.md) | Partial supplied throughput; K8 and native metrics pending | K1/K2/K4 exceed static LoRA on all four ID categories; the best reported K varies by category. |
+diff --git a/docs/experiments/results/benchmarks/README.md b/docs/experiments/results/benchmarks/README.md
+index c672216..1dc6508 100644
+--- a/docs/experiments/results/benchmarks/README.md
++++ b/docs/experiments/results/benchmarks/README.md
+@@ -1,5 +1,11 @@
+ # Generation benchmark archive
+ 
++The screenshot-based rank sweep is recorded in
++[GEN-005](../GEN-005-rank-dynamism-and-serving.md), with
++[transcribed geometry and serving metrics](2026-10-25-rank-sweep/metrics.json).
++Its workload, metric definitions and runtime provenance are not yet available;
++keep these results separate from the suite comparisons below.
++
+ The per-request continuous-batching comparison is recorded in
+ [BATCH-003](../BATCH-003-per-request-continuous.md), with
+ [24 supplied measurements](2026-10-25-per-request-4000-v1/summary.json) and
+diff --git a/reporting/README.md b/reporting/README.md
+index cd0ed86..b8a6aee 100644
+--- a/reporting/README.md
++++ b/reporting/README.md
+@@ -4,12 +4,14 @@ Update this report **only when explicitly requested**. Markdown under
+ `docs/experiments/` remains the working experiment record. There is no daily
+ generation, scheduled task, or automatic reporting pipeline.
+ 
+-Read [Version 03](reports/dynamic-speculators-2026-10-23-v03.pdf), with evidence
+-through 2026-10-23. Versions 01 and 02 remain preserved in [`reports/`](reports/).
+-This update expands the generator architecture, adds both supplied training
+-figures, and records the decision to retire bank warmup in favor of direct
+-training on the original examples. It records observations and execution status, with no final
+-conclusions or overall model ranking.
++Read [Version 04](reports/dynamic-speculators-2026-10-25-v04.pdf), with evidence
++through 2026-10-25. Versions 01--03 remain preserved in [`reports/`](reports/).
++This extension adds the completed shared-adapter concurrency sweep, partial
++matched-budget conditioning-size results, per-request continuous-batching
++throughput/acceptance/TTFT, and the screenshot-based rank/dynamism study.
++Bounded profiling is recorded as implemented; GPU trace results are pending.
++Observations retain correctness, provenance and repeat-uncertainty limitations,
++with no final conclusions or overall model ranking.
+ 
+ ## Organization
+ 
+@@ -19,7 +21,8 @@ conclusions or overall model ranking.
+ - `assets/`: unchanged supplied training figures; their working evidence records
+   live under `docs/experiments/results/`.
+ - `data/`: frozen numeric transcriptions for the current throughput comparison
+-  and cache pilot. Missing native experiment metadata remains explicitly missing.
++  cache pilot, concurrency/conditioning/per-request studies and rank sweep.
++  Missing native experiment metadata remains explicitly missing.
+ - `report.json`: version, evidence cutoff, implementation revision, output name,
+   and manual update policy.
+ - `template/`: unchanged source files copied from the provided sibling checkout's
+@@ -31,7 +34,8 @@ conclusions or overall model ranking.
+ Each experiment uses a stable ID, question, setup, status, evidence, measurements,
+ record notes, and missing evidence. The current four-model comparison contains
+ no earlier generator benchmark rows. Historical training ablations have their
+-own report entries and Markdown records. Batching is implemented; GPU performance measurements remain pending.
++own report entries and Markdown records. Batching performance summaries are now recorded under BATCH-001/002/003.
++Profiler implementation and pending GPU diagnostics remain separate.
+ 
+ ## Build manually
+ 
+diff --git a/reporting/build.py b/reporting/build.py
+index c359c5b..81a8ff8 100644
+--- a/reporting/build.py
++++ b/reporting/build.py
+@@ -16,8 +16,8 @@ REPO = ROOT.parent
+ LABELS = {
+     "eagle3-base": "EAGLE3 base",
+     "trained-lora": "Trained LoRA",
+-    "generator-24k-2000step": "Generator, 2K steps",
+-    "generator-4000step": "Generator, 4K steps",
++    "generator-24k-2000step": "Generator, 2K label",
++    "generator-4000step": "Generator, 4K label",
+ }
+ 
+ 
+@@ -126,6 +126,278 @@ def prepare(work, metadata):
+             rows,
+         )
+     )
++    prepare_extended_tables(generated)
++
++
++def prepare_extended_tables(generated):
++    """Derive tables from frozen sources without filling missing measurements."""
++
++    def read(name):
++        return json.loads((ROOT / "data" / name).read_text())
++
++    def write(name, caption, headings, rows):
++        (generated / f"{name}.tex").write_text(
++            table(caption, "tab:" + name, headings, rows)
++        )
++
++    categories = ["math", "code", "stem", "chat"]
++    headings = ["Model / C", "Math", "Code", "STEM", "Chat"]
++    shared = read("shared-concurrency.json")
++    models = {
++        model["name"]: {
++            row["concurrency"]: row["output_tokens_per_second"]
++            for row in model["measurements"]
++        }
++        for model in shared["models"]
++    }
++    short = {
++        "eagle3-base": "EAGLE3",
++        "trained-lora": "Static LoRA",
++        "generator-24k-2000step": "G2 label",
++        "generator-4000step": "G4 label",
++    }
++    for group, label, cols in [
++        ("in_distribution", "shared_id", headings),
++        (
++            "out_of_distribution",
++            "shared_ood",
++            ["Model / C", "HumanEval", "Math reasoning", "Summarization"],
++        ),
++    ]:
++        cats = shared["category_groups"][group]
++        rows = [
++            [f"{short[name]} / {c}"] + [f"{values[cat]:.2f}" for cat in cats]
++            for name, measurements in models.items()
++            for c, values in measurements.items()
++        ]
++        write(
++            label,
++            "BATCH-001: fixed-cohort output tokens/s. C1 values are "
++            "reused from GEN-003, not independent repeats. G2/G4 are labels.",
++            cols,
++            rows,
++        )
++
++    rows = []
++    for c in [1, 2, 4, 8]:
++        changes = []
++        for base, group in [
++            ("eagle3-base", "in_distribution"),
++            ("eagle3-base", "out_of_distribution"),
++            ("trained-lora", "in_distribution"),
++            ("trained-lora", "out_of_distribution"),
++        ]:
++            cats = shared["category_groups"][group]
++            changes.append(
++                sum(
++                    100
++                    * (models["generator-4000step"][c][cat] / models[base][c][cat] - 1)
++                    for cat in cats
++                )
++                / len(cats)
++            )
++        rows.append([c] + [f"{value:+.2f}%" for value in changes])
++    write(
++        "shared_gains",
++        "BATCH-001: unweighted means of per-category "
++        "throughput changes for G4. These are not pooled-workload speedups.",
++        ["C", "ID/base", "OOD/base", "ID/LoRA", "OOD/LoRA"],
++        rows,
++    )
++
++    detail = read("shared-detail.json")["measurements"]
++    lookup = {(r["model"], r["category"]): r for r in detail}
++
++    def shared_value(name, concurrency, category, metric):
++        return lookup[(f"{name}-c{concurrency}", "nemotron/nemo-" + category)][metric]
++
++    def acceptance_percent(row):
++        counters = row["acceptance"]
++        return 100 * counters["num_accepted_tokens"] / counters["num_draft_tokens"]
++
++    write(
++        "shared_acceptance",
++        "BATCH-001: ID acceptance length at C8, "
++        "including the baseline token; higher is better.",
++        headings,
++        [
++            [short[name] + " / 8"]
++            + [
++                f"{shared_value(name, 8, cat, 'acceptance_length'):.3f}"
++                for cat in categories
++            ]
++            for name in ["eagle3-base", "trained-lora", "generator-4000step"]
++        ],
++    )
++    write(
++        "shared_ttft",
++        "BATCH-001: median TTFT (ms) under closed cohorts. "
++        "These measurements do not belong to BATCH-002 checkpoints.",
++        headings,
++        [
++            [short[name] + f" / {c}"]
++            + [
++                f"{shared_value(name, c, cat, 'ttft_median_ms'):.1f}"
++                for cat in categories
++            ]
++            for c in [1, 8]
++            for name in short
++        ],
++    )
++
++    conditioning = read("conditioning-partial.json")
++    write(
++        "conditioning",
++        "BATCH-002: supplied ID output tokens/s at C8; "
++        "24K examples and 1,000 updates per arm are intended matched budgets. "
++        "K8, acceptance and TTFT have not been supplied.",
++        ["Arm", "Math", "Code", "STEM", "Chat"],
++        [
++            [
++                "Static LoRA"
++                if row["reported_conditioning_examples"] is None
++                else f"Generator K{row['reported_conditioning_examples']}"
++            ]
++            + [
++                f"{row['output_tokens_per_second']['nemo-' + cat]:.2f}"
++                for cat in categories
++            ]
++            for row in conditioning["models"]
++        ],
++    )
++
++    per_request = read("per-request-summary.json")["results"]
++    rows, rates, latencies = [], [], []
++    for c in [1, 2, 4]:
++        for name, label in [
++            ("eagle3-vanilla", "Native base"),
++            ("generator-4000-per-request", "Per-request G4"),
++        ]:
++            key = name + f"-c{c}"
++            values = [per_request[key]["nemotron/nemo-" + cat] for cat in categories]
++            rows.append(
++                [f"{label} / {c}"]
++                + [
++                    f"{r['performance'][0]['output_tokens_per_second']:.2f}"
++                    for r in values
++                ]
++            )
++            rates.append(
++                [f"{label} / {c}"] + [f"{acceptance_percent(r):.2f}" for r in values]
++            )
++            latencies.append(
++                [f"{label} / {c}"]
++                + [f"{r['performance'][0]['ttft_median_ms']:.2f}" for r in values]
++            )
++        rates.append(
++            [f"Old shared G4 / {c}"]
++            + [
++                f"{100 * (length - 1) / 3:.2f}"
++                for cat in categories
++                for length in [
++                    shared_value("generator-4000step", c, cat, "acceptance_length")
++                ]
++            ]
++        )
++    write(
++        "per_request_tps",
++        "BATCH-003: aggregate ID output tokens/s, native "
++        "continuous admission. Baseline source identity is intended but not "
++        "independently verifiable from the supplied summary.",
++        headings,
++        rows,
++    )
++    write(
++        "per_request_rates",
++        "Acceptance rate (percent). Native base and "
++        "per-request G4 are BATCH-003; old shared G4 is BATCH-001. Old-shared "
++        "rates use (length minus 1)/3. Cross-study rows are descriptive, "
++        "not a controlled scheduling or adapter-policy ablation.",
++        headings,
++        rates,
++    )
++    write(
++        "per_request_ttft",
++        "BATCH-003: median TTFT (ms), measured by the client; lower is better.",
++        headings,
++        latencies,
++    )
++
++    rank = read("rank-sweep.json")
++    baseline = rank["baseline"]
++    rows = [
++        [
++            "Base",
++            f"{baseline['acceptance_percent']:.2f}%",
++            "--",
++            f"{baseline['tokens_per_second']:.1f}",
++            "--",
++        ]
++    ]
++    rows.extend(
++        [
++            [
++                r["rank"],
++                f"{r['acceptance_percent']:.2f}%",
++                f"{r['derived']['acceptance_gain_pp']:+.2f}",
++                f"{r['tokens_per_second']:.1f}",
++                f"{r['derived']['throughput_gain_percent']:+.2f}%",
++            ]
++            for r in rank["rows"]
++        ]
++    )
++    write(
++        "rank_serving",
++        "GEN-005: screenshot-transcribed serving metrics. "
++        "Gains use the displayed base model; its identity and metric "
++        "aggregation are unknown.",
++        ["Rank", "Accept.", "Gain (pp)", "Tok/s", "Gain"],
++        rows,
++    )
++    write(
++        "rank_geometry",
++        "GEN-005: reported module-averaged adapter geometry. "
++        "Gap is within-category minus between-category cosine similarity.",
++        ["Rank", "Dynamism", "Within cos.", "Between cos.", "Gap"],
++        [
++            [
++                r["rank"],
++                f"{r['dyn_ratio']:.4f}",
++                f"{r['cos_within']:.4f}",
++                f"{r['cos_between']:.4f}",
++                f"{r['derived']['cosine_gap']:.4f}",
++            ]
++            for r in rank["rows"]
++        ],
++    )
++    write(
++        "rank_categories",
++        "GEN-005: reported dynamism by category. "
++        "Definitions and normalization of these metrics are unavailable.",
++        ["Rank", "Chat", "Code", "Math", "Reading"],
++        [
++            [r["rank"]]
++            + [f"{r['dyn_' + cat]:.4f}" for cat in ["chat", "code", "math", "reading"]]
++            for r in rank["rows"]
++        ],
++    )
++    write(
++        "rank_auxiliary",
++        "GEN-005: additional analysis labels preserved "
++        r"from the supplied summary. eff\_dim and erank are distinct metrics; "
++        "their definitions and classifier protocol remain unavailable.",
++        ["Rank", "eff_dim", "erank", "cat_acc", "max_cdist"],
++        [
++            [
++                r["rank"],
++                f"{r['eff_dim']:.2f}",
++                f"{r['erank']:.2f}",
++                f"{100 * r['cat_acc']:.1f}%",
++                f"{r['max_cdist']:.4f}",
++            ]
++            for r in rank["rows"]
++        ],
++    )
+ 
+ 
+ def git_output(*args):
+@@ -214,6 +486,39 @@ def main():
+             "docs/experiments/speculator_benchmarks_inventory.md",
+         )
+     ]
++    sources += [
++        REPO / name
++        for name in (
++            "docs/experiments/results/BATCH-001-shared-adapter-concurrency.md",
++            "docs/experiments/eagle3_conditioning_24k_1k.md",
++            "docs/experiments/results/BATCH-003-per-request-continuous.md",
++            "docs/experiments/results/GEN-005-rank-dynamism-and-serving.md",
++            "docs/experiments/eagle3_per_request_lora.md",
++            "docs/experiments/eagle3_per_request_lora_feasibility.md",
++            "docs/experiments/eagle3_runtime_profiling.md",
++            "examples/eagle3-lora/benchmark_per_request_4000.yaml",
++            "examples/eagle3-lora/benchmark_conditioning_24k_1k.yaml",
++            "examples/eagle3-lora/profile_generator_serial.yaml",
++            "examples/eagle3-lora/profile_generator_continuous.yaml",
++            "src/speculators/generator/serving/controller.py",
++            "src/speculators/generator/serving/multilora.py",
++            "src/speculators/generator/serving/per_request.py",
++            "src/speculators/generator/serving/vanilla.py",
++            "src/speculators/generator/serving/http.py",
++            "src/speculators/generator/serving/endpoint.py",
++            "src/speculators/generator/serving/server.py",
++            "src/speculators/generator/serving/ranges.py",
++            "src/speculators/benchmark/profiling.py",
++            "src/speculators/benchmark/trace.py",
++            "src/speculators/benchmark/config.py",
++            "scripts/launch_vllm.py",
++            "src/speculators/generator/serving/patches/manifest.json",
++        )
++    ]
++    sources += sorted(
++        (REPO / "src/speculators/generator/serving/patches").rglob("*.patch")
++    )
++    sources = sorted(set(sources))
+     hashes = {
+         str(source.relative_to(REPO)): hashlib.sha256(source.read_bytes()).hexdigest()
+         for source in sorted(sources)
+@@ -244,8 +549,12 @@ def main():
+         "pdf_sha256": hashlib.sha256((output / f"{stem}.pdf").read_bytes()).hexdigest(),
+         "input_sha256": hashes,
+         "missing_run_provenance": (
+-            "GEN-003 native workload, checkpoint, hardware, commands, and patches "
+-            "are not supplied; see the experiment record."
++            "GEN-003/BATCH-001/003 lack full request-level, checkpoint, hardware "
++            "and launch/source provenance; BATCH-002 supplies a partial table; "
++            "GEN-005 supplies screenshots without setup or metric definitions. "
++            "GPU profiler results and repeated-run uncertainty are unavailable. "
++            "See individual records; report source snapshots do not replace "
++            "missing per-run provenance."
+         ),
+     }
+     (output / f"{stem}.manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+diff --git a/reporting/main.tex b/reporting/main.tex
+index 28e584c..ed7e0b5 100644
+--- a/reporting/main.tex
++++ b/reporting/main.tex
+@@ -41,8 +41,11 @@ heads, and records fixed-update data scaling and the decision to retire
+ LoRA-bank warmup. It describes the training and serving interfaces, a supplied
+ four-model throughput comparison on in-distribution and out-of-distribution
+ workloads, activation-cache measurements, and an unresolved output-repeatability
+-investigation. A fixed-batch shared-adapter serving implementation is recorded
+-separately from its pending GPU measurements. Every experiment states its
++investigation. Completed shared-adapter concurrency measurements, a partial matched-budget
++conditioning-size study, and per-request continuous-batching results distinguish
++acceptance gains from serving throughput. A screenshot-based rank study records
++adapter variation, category separation, acceptance and token rate. Bounded runtime
++profiling is implemented, with GPU diagnostic evidence still pending. Every experiment states its
+ available evidence, execution status, and missing information. The document
+ is extended on request and does not present final conclusions.
+ \end{abstract}
+@@ -57,4 +60,5 @@ is extended on request and does not present final conclusions.
+ \appendix
+ \small
+ \input{sections/07_reproducibility}
++\input{sections/08_numeric_appendix}
+ \end{document}
+diff --git a/reporting/report.json b/reporting/report.json
+index 8b6925a..21cef7b 100644
+--- a/reporting/report.json
++++ b/reporting/report.json
+@@ -1,7 +1,7 @@
+ {
+-  "version": "03",
+-  "evidence_through": "2026-10-23",
+-  "implementation_revision": "c0ee0e4b7c59ff8ff6ee8c201e591dceb0589635",
+-  "output_stem": "dynamic-speculators-2026-10-23-v03",
++  "version": "04",
++  "evidence_through": "2026-10-25",
++  "implementation_revision": "dc872c505499a50358d3a74e7c07ad68498adbac",
++  "output_stem": "dynamic-speculators-2026-10-25-v04",
+   "update_policy": "Update only when explicitly requested; Markdown remains the working experiment record."
+ }
+diff --git a/reporting/sections/01_questions.tex b/reporting/sections/01_questions.tex
+index fa9775b..fa7eee3 100644
+--- a/reporting/sections/01_questions.tex
++++ b/reporting/sections/01_questions.tex
+@@ -2,9 +2,10 @@
+ \label{sec:questions}
+ 
+ We investigate a generator that maps a set of prompt summaries to one shared
+-adapter for a frozen EAGLE3 drafter. The current comparison comprises the original
+-drafter, a trained static LoRA, and two generator checkpoints described as trained
+-on 24K examples. Older benchmark models are outside this serving comparison. Historical training
++adapter for a frozen EAGLE3 drafter. Separate serving studies compare the
++original drafter, trained static LoRA,
++shared-adapter generators and per-request generators. Checkpoint labels and
++protocol changes are retained within each study rather than pooled. Historical training
+ ablations are recorded separately: fixed-update data scaling and the decision
+ to discontinue bank-based generator warmup.
+ 
+@@ -18,6 +19,12 @@ The working questions are:
+   and selected Red Hat benchmark categories?
+   \item What changes when one generated adapter is shared by a fixed batch of
+   requests at different concurrencies?
++  \item Does conditioning on more examples improve a shared adapter when
++  training data and optimizer updates are matched?
++  \item Do per-request adapters preserve acceptance while permitting native
++  continuous admission, and does better acceptance yield higher throughput?
++  \item How does LoRA rank relate to adapter variation, category separation,
++  acceptance and serving token rate?
+   \item What time and memory costs arise from obtaining and reusing target
+   activations during training?
+ \end{enumerate}
+diff --git a/reporting/sections/03_setup.tex b/reporting/sections/03_setup.tex
+index 2c5c519..3f020a5 100644
+--- a/reporting/sections/03_setup.tex
++++ b/reporting/sections/03_setup.tex
+@@ -3,7 +3,7 @@
+ 
+ \subsection{Models and Data}
+ The documented model family is Qwen3-8B with the Red Hat EAGLE3 drafter. The
+-current suite compares the original drafter, a trained ordinary LoRA, and
++historical shared-cohort suite compares the original drafter, a trained ordinary LoRA, and
+ generator snapshots labeled 2,000 and 4,000 steps. Generator data size is
+ reported as 24K examples. Exact training progress must ultimately come from
+ checkpoint metadata; labels are retained without treating them as verification.
+@@ -29,7 +29,10 @@ We keep the following quantities distinct:
+   \item \textbf{Offline agreement:} drafter/target argmax agreement in offline
+   evaluation, not measured speculative acceptance.
+   \item \textbf{Serving acceptance:} native speculative-decoding counters during
+-  actual generation; absent from the supplied current suite summary.
++  actual generation. For BATCH-001/003, acceptance length is
++  $L=1+A/D$, where $A$ counts accepted draft tokens and $D$ draft cycles.
++  Acceptance rate is $A/P$ for $P$ proposed draft tokens; with three proposals
++  per cycle, $L=1+3A/P$. Neither quantity measures output accuracy.
+   \item \textbf{Throughput:} aggregate generated output tokens divided by
+   measured wall seconds, including prefill and serving overhead.
+   \item \textbf{Latency and systems timings:} request latency, first-token time,
+@@ -41,6 +44,10 @@ The independent serving implementation fixes BF16, eager execution, the V1
+ runner, and a pinned vLLM 0.31.0 integration. Suite defaults specify a seed,
+ sample limit, output budget, and warmup count. These defaults must not be
+ substituted for missing metadata from the supplied throughput summary.
+-For that summary, hardware, concurrency, sample counts, seed, workload hashes,
+-and exact checkpoint identities remain unverified. The cache pilot separately
+-reports an A100 80 GB. Neither source establishes repeated-run uncertainty.
++The later BATCH-001/003 summaries establish 50 successful requests per
++measurement and matched category workload hashes. They still omit full hardware,
++launch/source and checkpoint provenance. BATCH-002 supplies only a throughput
++table, and GEN-005 supplies screenshots with unknown workload/runtime settings.
++The cache pilot separately reports an A100 80 GB. None establishes repeated-run
++uncertainty. Native continuous admission in BATCH-003 must not be conflated with
++the fixed-cohort policy used for every BATCH-001 arm.
+diff --git a/reporting/sections/04_experiments.tex b/reporting/sections/04_experiments.tex
+index 9c72763..217e8ab 100644
+--- a/reporting/sections/04_experiments.tex
++++ b/reporting/sections/04_experiments.tex
+@@ -119,7 +119,9 @@ variants on the selected in-distribution and out-of-distribution categories?
+ 28 reported measurements without adding older model rows. Step counts follow
+ the supplied labels. Correctness was not checked. This record does not include
+ the native per-request outputs, latency statistics, acceptance counters, or
+-server provenance for this suite.
++server provenance for this initial submission. The later BATCH-001 detailed
++summary adds acceptance, median latency, counters and workload hashes for these
++reused C1 values; these are additional artifacts, not new repeated runs.
+ 
+ \input{generated/throughput_tables}
+ 
+@@ -130,9 +132,9 @@ training stages, not a repeated or controlled causal estimate of additional
+ training. The two tables do not establish output quality or a target-only
+ decoding speedup.
+ 
+-\textbf{Missing evidence.} Native GuideLLM results, effective configurations,
+-hardware metadata, prompt fingerprints, checkpoint hashes, and repeated
+-measurements remain to be attached to this suite record.
++\textbf{Missing evidence.} Native request-level GuideLLM results, effective
++configurations, hardware metadata, checkpoint hashes and repeated measurements
++remain unavailable. BATCH-001 supplies the later workload fingerprints.
+ 
+ \subsection{SYS-001: Cold and Warm Activation Reuse}
+ \recordstatus{Measured; console timings transcribed in the cache record.}
+@@ -178,25 +180,183 @@ or unverified. No correctness claim is inferred from the throughput tables.
+ repeat a controlled reference experiment before making an exact-output claim.
+ 
+ \subsection{BATCH-001: Shared-Adapter Concurrency Sweep}
+-\recordstatus{Implemented; GPU measurements pending.}
+-\evidence{Implementation revision \texttt{c0ee0e4}; CPU lifecycle and HTTP
+-tests, plus an audit of the pinned vLLM hook upgrade.}
+-
+-\textbf{Question.} What measurements arise when a generator conditions one
+-shared adapter on a fixed group at concurrency 1, 2, 4, or 8?
+-
+-\textbf{Planned measurement configuration.} Reuse the frozen category prompts
+-for all model/concurrency variants. Record generated output tokens/s,
+-speculative acceptance where available, request latency, actual mean batch size,
+-and generator/merge/restoration costs. Keep the adapter fixed while a group
+-drains. Original-drafter and static-LoRA variants use matching closed groups.
+-
+-\textbf{Available checks.} Tests cover packed prompt boundaries, one generator
+-invocation per group, restoration after the last member, delayed HTTP cleanup,
+-closed admission, partial groups, and suite resume across concurrency variants.
+-The initial broader CPU/HTTP run passed 94 tests; a later focused run after
+-controller refinements passed 50. These runs overlap and are not additive.
+-
+-\textbf{Pending evidence.} No A100 execution, batched throughput table,
+-acceptance comparison, or memory measurement is supplied. CPU checks establish
+-neither GPU compatibility under load nor a performance benefit.
++\recordstatus{Measured summary supplied; preliminary, correctness unchecked.}
++\evidence{112 measurements: four models, C1/C2/C4/C8, seven categories.
++Detailed summary received 2026-10-24; C1 values reuse GEN-003.}
++
++\textbf{Question and protocol.} Does one adapter conditioned on a group improve
++acceptance and serving throughput as concurrency increases? All four arms use
++fixed closed cohorts: vacant slots remain empty until the last request finishes.
++The generator produces one shared adapter per cohort and merges it into the
++frozen drafter, restoring the base afterward. Original EAGLE3 and static LoRA
++use the same admission restriction. This is a matched-policy comparison, not a
++benchmark of unrestricted native vLLM serving. Each measurement completes 50
++requests; workload hashes match across all 16 variants per category.
++
++\textbf{Budget and identity limits.} The static-LoRA recipe describes 4K examples
++and 1,500 updates, while the generator labels describe 24K training. G2 denotes
++\texttt{generator-24k-2000step}, mapped by the example configuration to
++\texttt{epoch-0002}; an earlier epoch-2 archive recorded 2,676 updates. G4 denotes
++\texttt{generator-4000step}. These labels do not independently verify exact
++training progress, hashes or matched compute. Native request-level records,
++hardware and launch/source provenance are unavailable.
++
++\input{generated/shared_gains}
++\input{generated/shared_acceptance}
++
++\textbf{Observed behavior.} Both generators exceed original EAGLE3 throughput
++in every ID category at all four concurrencies. The G4 ID category-mean advantage
++over static LoRA narrows to 1.08\% at C8, although its acceptance-length gains
++there are 4.75/3.85/2.66/1.68\% for math/code/STEM/chat. OOD behavior is mixed:
++at C8 G4 trails EAGLE3 by 4.68\% on HumanEval, and trails static LoRA by 1.30\%
++on math reasoning and 2.64\% on summarization. An OOD mean near zero does not
++establish equivalence. Full ID/OOD throughput rows appear in the appendix.
++
++\textbf{Latency and execution counters.} Recorded generator/merge/restoration
++GPU time accounts for only 0.070--0.105\% of measurement wall time across the
++generator arms. It excludes uninstrumented CPU work and other synchronization.
++Adapter records contain 25/13/7 completed cohorts for 50 requests at C2/C4/C8,
++the minimum possible counts; this does not reveal vacant-slot time within each
++cohort. C8 mean cohort size is $50/7=7.143$.
++
++\input{generated/shared_ttft}
++
++G4 chat median TTFT rises from 49.6 ms at C1 to 1,447.6 ms at C8 while aggregate
++throughput increases. The 2--3 ms generator invocation alone cannot account
++for that first-token delay. Queueing, cohort completion and prefill are not
++separated in the summary. HumanEval at C8 also illustrates why acceptance alone
++is insufficient: G4 acceptance length is 2.579 versus EAGLE3's 2.541, despite
++lower throughput.
++
++\textbf{Working assessment.} Useful ID adaptation is observed under closed
++cohorts, but a strong incremental deployment benefit from our added sharing
++and admission policy is not established. Ordinary GPU batching itself remains
++useful: most C8/C1 scaling is also available to the original drafter. Comparing
++within one category and concurrency is essential. Reused C1 values and LoRA
++startup retries are not independent repeats or controls for runtime drift.
++
++\subsection{BATCH-002: Conditioning Size at Matched Data and Updates}
++\recordstatus{Partially measured; supplied C8 throughput only.}
++\evidence{Table received 2026-10-25 for static LoRA and separately trained
++K1/K2/K4 generators. K8 is unreported; native acceptance/latency unavailable.}
++
++\textbf{Question and intended setup.} Does conditioning on more prompt summaries
++improve a generator at a matched 24K-example, 1,000-update budget? Four separate
++generators are configured for $K=1,2,4,8$, alongside a static LoRA. Every episode
++uses eight loss examples and selects $K$ of their summaries reproducibly;
++all eight still contribute loss. Four episodes per update yield 32,000 example
++presentations per arm, rather than 1,000 updates split between arms. Intended
++shared settings are seed 42, rank 32/alpha 64 V/O adapters, \texttt{lk\_hybrid},
++AdamW LR $10^{-4}$, weight decay 0.01, clipping 0.85, 100-update LR warmup and an
++8,192-token microbatch budget. Architecture and initial generator weights match.
++Effective run provenance is still missing.
++
++\input{generated/conditioning}
++
++Serving holds concurrency at eight with one shared adapter per closed cohort,
++conditioned on $\min(K,\text{actual cohort size})$ summaries. Training K and
++serving K change together across separately trained models; this is not an
++inference-only ablation of one checkpoint. The intended export has 64 held-out
++prompts per category, 256-token caps and three warmups, but the supplied table
++alone cannot verify effective request counts or workload identities.
++
++\textbf{Observed behavior and limits.} All three reported generators exceed
++matched-budget static LoRA on all four ID categories. K2 leads math, K1 leads
++code/STEM, and K4 leads chat. Larger K does not produce monotonically higher
++throughput. Missing K8, acceptance, actual conditioning counts and repeats
++prevent a complete ranking or a claim that larger conditioning sets are
++intrinsically unhelpful. Combined with BATCH-001, this supports the engineering
++assessment that the current fixed-cohort sharing technique has limited observed
++incremental benefit; it does not establish that GPU batching is ineffective.
++
++\subsection{BATCH-003: Per-Request Adapters with Continuous Admission}
++\recordstatus{Measured C1/C2/C4 summaries; correctness unchecked.}
++\evidence{24 supplied measurements received 2026-10-25, two arms and four ID
++categories. C8 and complete runtime provenance are absent.}
++
++\textbf{Question and protocol.} Can each request retain its own generated LoRA
++while the native scheduler continuously admits and retires requests? The intended
++generator checkpoint is \texttt{step-00004000} of
++\texttt{azeeer/eagle3-generator-all24k-10ep-v1}. Each request conditions once on
++its own prompt summary. Draft-only native multi-LoRA executes request-specific
++V/O factors; no shared weight merge is performed. The intended baseline is
++original EAGLE3 with original vLLM sources and native continuous admission.
++BF16, eager V1 execution and other documented runtime restrictions still apply;
++this is not a fully default-tuned vLLM comparison. Supplied labels do not verify
++imported source hashes, exact weights or hardware.
++
++All matched pairs share workload hashes and complete 50 requests. Generator,
++preparation and completion counters each equal 50, with one conditioning example
++and one request per adapter. Mean actual draft batch sizes are about 1.95--1.96
++at C2 and 3.77--3.84 at C4. These counters support concurrent execution of the
++path but do not independently establish per-request semantic isolation.
++
++\input{generated/per_request_tps}
++\input{generated/per_request_rates}
++
++\textbf{Acceptance versus throughput.} Per-request acceptance exceeds native
++EAGLE3 throughout the reported ID grid. At C4, acceptance-length gains are
++22.24/14.14/13.09/5.93\% for math/code/STEM/chat. Throughput improves 5--9\% on
++math, stays close on code/STEM and regresses 5--9\% on chat. The proposal-quality
++hypothesis holds descriptively; broad serving acceleration does not.
++Per-request and earlier shared-generator acceptance rates differ by less than
++0.8 percentage points in every matched category/concurrency cell. That is a
++cross-study observation, not evidence of equivalence: scheduling, adapter
++execution, conditioning policy and unverified runtime conditions differ.
++
++\input{generated/per_request_ttft}
++
++\textbf{Systems diagnosis still open.} Per-request median TTFT is higher than
++native EAGLE3 by roughly 10--18 ms. One-time generator work costs 3.12--3.30 ms
++per request and loading costs 1.07--1.13 ms; their recorded sum is only
++0.098--0.419\% of category wall time. Recurring mapping and unmerged projection
++work are plausible costs, not yet measured causes. Although workload hashes
++also match BATCH-001 and C4 TTFT is much lower than the old closed-cohort G4
++values, the change cannot be assigned solely to continuous admission. Some
++output-token totals differ slightly; matching prompts do not establish equal
++outputs. Retain native continuous admission while profiling adapter execution
++separately. No task-accuracy or verified-losslessness claim follows.
++
++\subsection{GEN-005: Rank, Adapter Variation and Serving Metrics}
++\recordstatus{Preliminary; three screenshot transcriptions.}
++\evidence{Received 2026-10-25. Geometry summary labelled ``modules averaged'';
++acceptance and tokens/s plots include a displayed base-model reference.}
++
++\textbf{Question and evidence boundary.} Does increasing LoRA rank accompany
++more input-dependent adapter variation and better serving behavior? The supplied
++series covers ranks 8/16/32/64. Training budget, seeds, checkpoint identities,
++evaluation data, concurrency, hardware and exact metric formulas are unknown.
++The geometry and serving figures are recorded as one supplied study, but their
++checkpoint linkage is not independently verified. ``Base model'' is the figure's
++label, not an established target-only or EAGLE3 identity.
++
++\input{generated/rank_geometry}
++\input{generated/rank_categories}
++\input{generated/rank_auxiliary}
++\input{generated/rank_serving}
++
++\textbf{Observed geometry.} Overall dynamism increases from 0.3424 to 0.5158.
++Chat/code/math increase monotonically; reading dips at rank 16 before increasing.
++Math has the largest reported dynamism at every rank. Cosine similarity
++\emph{decreases} both within and between categories, with a larger fall between
++categories; the within-minus-between gap grows from 0.0375 to 0.1572. Within-
++category similarity remains high. This is consistent with stronger category
++separation. Increasing \texttt{cat\_acc} and \texttt{max\_cdist} agree with that
++interpretation, subject to unknown definitions and classifier protocol.
++The reported \texttt{eff\_dim} and \texttt{erank} are retained as distinct labels,
++without assigning unprovided formulas or units.
++
++\textbf{Observed serving behavior.} All ranks exceed the displayed 53.53\%
++acceptance and 36.1 tokens/s reference. Rank 8 to 64 adds 1.77 acceptance
++percentage points and 1.2 tokens/s (3.02\% relative to rank 8). Successive
++acceptance increments are 0.70/0.59/0.48 pp, suggesting diminishing increments
++in this series. Small adjacent gaps have no repeat uncertainty. The original
++plots have interrupted vertical axes; numeric tables preserve absolute values.
++
++\textbf{Interpretation and next evidence.} Higher rank accompanies more varied,
++more category-separated adapters and higher reported acceptance/token rate.
++This association does not establish that adapter dynamism causes the serving
++improvement. Unknown acceptance denominators and throughput aggregation prevent
++pooling these figures with BATCH-001/003. A matched static-LoRA rank sweep,
++resource costs, original metric script and checkpoint-linked repeated runs would
++be needed to isolate conditional benefits or choose an optimal rank.
+diff --git a/reporting/sections/05_implementation.tex b/reporting/sections/05_implementation.tex
+index a4edede..ebdb28d 100644
+--- a/reporting/sections/05_implementation.tex
++++ b/reporting/sections/05_implementation.tex
+@@ -31,10 +31,52 @@ a partial group after a 50 ms collection window in the example configuration.
+ The runtime rejects KV preemption or incomplete initial group admission rather
+ than reuse draft cache entries under a different generated adapter. Larger
+ concurrency also increases the prefill/profile token budget and may change
+-GPU memory requirements. These are implementation constraints awaiting the
+-GPU experiment in BATCH-001.
++GPU memory requirements. These constraints define BATCH-001
++and the shared-adapter BATCH-002 protocol. GPU summary measurements are now
++recorded, while detailed scheduling traces remain unavailable.
+ 
+ Collection, queueing, uneven request completion, and partial tails are part of
+ the measured serving protocol. Closed groups are not equivalent to unrestricted
+ continuous batching. Batch membership may vary with arrival/completion order,
+ even when the same prompt list is reused across model variants.
++
++\subsection{Per-Request Multi-LoRA and Native Baseline}
++The per-request controller generates factors once from complete target prefill,
++retains a request-specific CPU copy, and activates only scheduled request IDs in
++the draft-only native LoRA manager. Token mappings follow actual query offsets
++on every draft forward, including speculative rejection and later one-token
++steps. Request completion releases that request's adapter; paused request factors
++remain available. The native scheduler can refill free slots without changing
++other requests' adapters. CPU tests cover lifecycle and mapping invariants;
++aggregate BATCH-003 counters are not a full isolation or correctness test.
++
++Baseline launches can create an isolated package view containing the original,
++checksum-verified copies of the three integration-patched vLLM files. The global
++installation is left intact, and worker status can report imported source hashes.
++This supports original-source EAGLE3 with native admission. Such source hashes
++were not included in the supplied BATCH-003 upload, so this capability must not
++be presented as independently verified provenance for those measurements.
++
++\subsection{Bounded Profiling: Implemented, Measurements Pending}
++Revision \texttt{dc872c5} adds a two-phase profiling command. An unprofiled pass
++provides ordinary timing; fresh servers then collect bounded native CPU/CUDA
++traces after warmup on the same frozen models and workload. The serial example
++compares original EAGLE3, singleton-conditioned merged adapters and singleton
++native multi-LoRA; the continuous example compares baseline and per-request
++adapters at C4. Example captures use math/chat, 16 prompts per category,
++128-token caps and at most 30 worker iterations.
++
++Custom ranges cover generation, packing/loading, mapping and draft/projection
++execution. Analysis records CPU inclusive/self time, GPU kernels and transfers,
++union activity and gaps, and captured request occupancy. Projection ranges
++include base GEMM work; isolated LoRA kernels require their own kernel rows.
++The native execute-model scope includes target work and preparation rather than
++providing an isolated verification timer. Unattributed activity remains unknown.
++A bounded trace may miss refills or completions, and whole-workload acceptance
++counters cannot supply captured-window accepted-token denominators.
++
++CPU lifecycle tests, synthetic CUDA-event analysis, a real CPU profiler export
++and mocked HTTP/GuideLLM orchestration checks were performed locally. CUDA/vLLM
++profiling has not been executed locally and no user GPU traces have been supplied.
++Profiler timings are diagnostic and excluded from ordinary throughput tables.
++Thus recurring adapter kernels/routing remain hypotheses, not diagnosed causes.
+diff --git a/reporting/sections/06_open_questions.tex b/reporting/sections/06_open_questions.tex
+index 7b7fe09..7800f9e 100644
+--- a/reporting/sections/06_open_questions.tex
++++ b/reporting/sections/06_open_questions.tex
+@@ -6,13 +6,23 @@ revised when new evidence arrives.
+ 
+ \begin{enumerate}[leftmargin=*]
+   \item \textbf{Suite provenance.} Attach the native artifacts for
+-  \texttt{comparison-v2}; resolve exact checkpoint progress, hardware,
+-  concurrency, prompt identities, and effective serving settings.
++  \texttt{comparison-v2} and the per-request study; resolve exact checkpoint
++  progress, hardware, source hashes and effective serving settings. Later
++  aggregate summaries establish concurrency labels and prompt hashes, but do
++  not replace full per-run provenance.
+   \item \textbf{Repetition.} Repeat matched serving measurements to record
+-  uncertainty rather than interpret small single-run differences.
+-  \item \textbf{Batching.} Run BATCH-001 on the intended GPU. Check actual batch
+-  sizes, memory, request completion/restoration, and acceptance before treating
+-  it as a completed performance experiment.
++  uncertainty rather than interpret small single-run differences. These are
++  evidence requirements, not a new commitment to execute the repeated-run study
++  previously declined by the owner.
++  \item \textbf{Adapter execution costs.} Run the prepared same-session C1
++  merged-versus-native-multi-LoRA control and C4 continuous profiling. Separate
++  recurring LoRA kernels/mapping from one-time generation/loading. Record bounded
++  trace coverage and avoid interpreting profiler throughput as production timing.
++  \item \textbf{Conditioning and rank.} BATCH-002 has no K8/acceptance/TTFT
++  evidence; do not fill it from older checkpoints. GEN-005 needs metric
++  definitions, matched configurations, checkpoint linkage and resource costs
++  before causal or optimal-rank claims. Per-request and shared acceptance
++  similarity alone does not establish equal conditional information value.
+   \item \textbf{Reference behavior.} Continue GEN-002 when requested, separating
+   target-only repeatability from adapter-related behavior.
+   \item \textbf{Scaling interpretation.} Distinguish the fixed-update result
+diff --git a/reporting/sections/07_reproducibility.tex b/reporting/sections/07_reproducibility.tex
+index 0b1b4d7..0036e4e 100644
+--- a/reporting/sections/07_reproducibility.tex
++++ b/reporting/sections/07_reproducibility.tex
+@@ -15,9 +15,20 @@ records hashes of the source files available when this PDF was built.
+   \item[SYS-001] \path{docs/experiments/eagle3_activation_ram_cache.md}; the copied
+   timing source is \path{reporting/data/cache-pilot.json}.
+   \item[GEN-002] \path{docs/experiments/results/GEN-002-http-token-equality.md}.
+-  \item[BATCH-001] \path{docs/experiments/eagle3_benchmark_suite.md} and
+-  \path{docs/experiments/eagle3_generator_http.md}; implementation revision
+-  \path{c0ee0e4b7c59ff8ff6ee8c201e591dceb0589635}.
++  \item[BATCH-001] \path{docs/experiments/results/BATCH-001-shared-adapter-concurrency.md};
++  frozen numeric sources are \path{reporting/data/shared-concurrency.json},
++  \path{shared-detail.json} and \path{shared-summary.json} in that data directory.
++  \item[BATCH-002] \path{docs/experiments/eagle3_conditioning_24k_1k.md};
++  \path{reporting/data/conditioning-partial.json}.
++  \item[BATCH-003] \path{docs/experiments/results/BATCH-003-per-request-continuous.md};
++  \path{reporting/data/per-request-summary.json} and \path{per-request-analysis.json}.
++  \item[GEN-005] \path{docs/experiments/results/GEN-005-rank-dynamism-and-serving.md};
++  \path{reporting/data/rank-sweep.json}; all three supplied images are preserved
++  unchanged in \path{reporting/assets/} and included in the source archive.
++  \item[Serving/profiling] \path{docs/experiments/eagle3_per_request_lora.md} and
++  \path{docs/experiments/eagle3_runtime_profiling.md}; implementation revision
++  \path{dc872c505499a50358d3a74e7c07ad68498adbac}, including source-only/CPU-checked
++  profiling capabilities rather than supplied GPU diagnostic results.
+   \item[Training] \path{docs/experiments/eagle3_generator.md},
+   \path{docs/experiments/eagle3_generator_campaign_online.md}, and
+   \path{docs/experiments/eagle3_generator_full_data.md}.
+@@ -68,6 +79,27 @@ read from the associated run provenance. Use a persistent output directory on
+ Colab. Every server launch must pass \verb|--provenance-dir|; the suite supplies
+ this automatically.
+ 
++The prepared diagnostic workflows use separate output directories and the same
++automatic server provenance capture. They are commands to obtain future evidence,
++not the source of the measurements above:
++\begingroup\footnotesize
++\begin{verbatim}
++PROFILE_CONFIG=examples/eagle3-lora/\
++profile_generator_serial.yaml
++speculators benchmark profile \
++  --config "$PROFILE_CONFIG" \
++  --output-root output/profile-serial-v1
++PROFILE_CONFIG=examples/eagle3-lora/\
++profile_generator_continuous.yaml
++speculators benchmark profile \
++  --config "$PROFILE_CONFIG" \
++  --output-root output/profile-c4-v1
++\end{verbatim}
++\endgroup
++Append \verb|--resume| to reuse valid completed artifacts. Unprofiled timing
++references and profiled diagnostics are stored separately; see the runtime
++profiling runbook for trace coverage and analysis definitions.
++
+ Report updates occur only on explicit request. Markdown remains the working
+ experiment record. Before extending a report, freeze new input measurements,
+ update statuses and evidence dates, preserve earlier snapshots, and regenerate
+@@ -88,3 +120,13 @@ warmup in favor of direct drafting-loss training. Version 01 is preserved.
+ \textbf{Version 03, 2026-10-23.} Reduced Figure 2 to 70\% of the text width
+ for a more compact presentation of the supplied screenshot. Evidence unchanged;
+ Version 02 is preserved.
++
++
++\textbf{Version 04, 2026-10-25.} Replaces pending BATCH-001 performance status
++with the completed shared-cohort summary; adds matched-budget partial K results,
++per-request continuous-admission throughput/acceptance/TTFT and cross-study shared
++acceptance context. Adds screenshot-based rank/dynamism/category/serving tables.
++Records bounded profiling as implemented with GPU evidence pending. Numeric
++inputs, original rank images and current implementation/protocol sources are
++frozen with the new snapshot; Versions 01--03 remain preserved. Correctness and
++provenance limitations are retained without an overall model ranking.

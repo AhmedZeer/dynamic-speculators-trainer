@@ -1,5 +1,11 @@
 # Generation benchmark archive
 
+The screenshot-based rank sweep is recorded in
+[GEN-005](../GEN-005-rank-dynamism-and-serving.md), with
+[transcribed geometry and serving metrics](2026-10-25-rank-sweep/metrics.json).
+Its workload, metric definitions and runtime provenance are not yet available;
+keep these results separate from the suite comparisons below.
+
 The per-request continuous-batching comparison is recorded in
 [BATCH-003](../BATCH-003-per-request-continuous.md), with
 [24 supplied measurements](2026-10-25-per-request-4000-v1/summary.json) and

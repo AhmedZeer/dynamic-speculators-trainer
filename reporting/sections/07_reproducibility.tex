@@ -15,9 +15,20 @@ records hashes of the source files available when this PDF was built.
   \item[SYS-001] \path{docs/experiments/eagle3_activation_ram_cache.md}; the copied
   timing source is \path{reporting/data/cache-pilot.json}.
   \item[GEN-002] \path{docs/experiments/results/GEN-002-http-token-equality.md}.
-  \item[BATCH-001] \path{docs/experiments/eagle3_benchmark_suite.md} and
-  \path{docs/experiments/eagle3_generator_http.md}; implementation revision
-  \path{c0ee0e4b7c59ff8ff6ee8c201e591dceb0589635}.
+  \item[BATCH-001] \path{docs/experiments/results/BATCH-001-shared-adapter-concurrency.md};
+  frozen numeric sources are \path{reporting/data/shared-concurrency.json},
+  \path{shared-detail.json} and \path{shared-summary.json} in that data directory.
+  \item[BATCH-002] \path{docs/experiments/eagle3_conditioning_24k_1k.md};
+  \path{reporting/data/conditioning-partial.json}.
+  \item[BATCH-003] \path{docs/experiments/results/BATCH-003-per-request-continuous.md};
+  \path{reporting/data/per-request-summary.json} and \path{per-request-analysis.json}.
+  \item[GEN-005] \path{docs/experiments/results/GEN-005-rank-dynamism-and-serving.md};
+  \path{reporting/data/rank-sweep.json}; all three supplied images are preserved
+  unchanged in \path{reporting/assets/} and included in the source archive.
+  \item[Serving/profiling] \path{docs/experiments/eagle3_per_request_lora.md} and
+  \path{docs/experiments/eagle3_runtime_profiling.md}; implementation revision
+  \path{dc872c505499a50358d3a74e7c07ad68498adbac}, including source-only/CPU-checked
+  profiling capabilities rather than supplied GPU diagnostic results.
   \item[Training] \path{docs/experiments/eagle3_generator.md},
   \path{docs/experiments/eagle3_generator_campaign_online.md}, and
   \path{docs/experiments/eagle3_generator_full_data.md}.
@@ -68,6 +79,27 @@ read from the associated run provenance. Use a persistent output directory on
 Colab. Every server launch must pass \verb|--provenance-dir|; the suite supplies
 this automatically.
 
+The prepared diagnostic workflows use separate output directories and the same
+automatic server provenance capture. They are commands to obtain future evidence,
+not the source of the measurements above:
+\begingroup\footnotesize
+\begin{verbatim}
+PROFILE_CONFIG=examples/eagle3-lora/\
+profile_generator_serial.yaml
+speculators benchmark profile \
+  --config "$PROFILE_CONFIG" \
+  --output-root output/profile-serial-v1
+PROFILE_CONFIG=examples/eagle3-lora/\
+profile_generator_continuous.yaml
+speculators benchmark profile \
+  --config "$PROFILE_CONFIG" \
+  --output-root output/profile-c4-v1
+\end{verbatim}
+\endgroup
+Append \verb|--resume| to reuse valid completed artifacts. Unprofiled timing
+references and profiled diagnostics are stored separately; see the runtime
+profiling runbook for trace coverage and analysis definitions.
+
 Report updates occur only on explicit request. Markdown remains the working
 experiment record. Before extending a report, freeze new input measurements,
 update statuses and evidence dates, preserve earlier snapshots, and regenerate
@@ -88,3 +120,13 @@ warmup in favor of direct drafting-loss training. Version 01 is preserved.
 \textbf{Version 03, 2026-10-23.} Reduced Figure 2 to 70\% of the text width
 for a more compact presentation of the supplied screenshot. Evidence unchanged;
 Version 02 is preserved.
+
+
+\textbf{Version 04, 2026-10-25.} Replaces pending BATCH-001 performance status
+with the completed shared-cohort summary; adds matched-budget partial K results,
+per-request continuous-admission throughput/acceptance/TTFT and cross-study shared
+acceptance context. Adds screenshot-based rank/dynamism/category/serving tables.
+Records bounded profiling as implemented with GPU evidence pending. Numeric
+inputs, original rank images and current implementation/protocol sources are
+frozen with the new snapshot; Versions 01--03 remain preserved. Correctness and
+provenance limitations are retained without an overall model ranking.

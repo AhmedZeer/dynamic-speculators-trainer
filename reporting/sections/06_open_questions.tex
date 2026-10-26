@@ -6,13 +6,23 @@ revised when new evidence arrives.
 
 \begin{enumerate}[leftmargin=*]
   \item \textbf{Suite provenance.} Attach the native artifacts for
-  \texttt{comparison-v2}; resolve exact checkpoint progress, hardware,
-  concurrency, prompt identities, and effective serving settings.
+  \texttt{comparison-v2} and the per-request study; resolve exact checkpoint
+  progress, hardware, source hashes and effective serving settings. Later
+  aggregate summaries establish concurrency labels and prompt hashes, but do
+  not replace full per-run provenance.
   \item \textbf{Repetition.} Repeat matched serving measurements to record
-  uncertainty rather than interpret small single-run differences.
-  \item \textbf{Batching.} Run BATCH-001 on the intended GPU. Check actual batch
-  sizes, memory, request completion/restoration, and acceptance before treating
-  it as a completed performance experiment.
+  uncertainty rather than interpret small single-run differences. These are
+  evidence requirements, not a new commitment to execute the repeated-run study
+  previously declined by the owner.
+  \item \textbf{Adapter execution costs.} Run the prepared same-session C1
+  merged-versus-native-multi-LoRA control and C4 continuous profiling. Separate
+  recurring LoRA kernels/mapping from one-time generation/loading. Record bounded
+  trace coverage and avoid interpreting profiler throughput as production timing.
+  \item \textbf{Conditioning and rank.} BATCH-002 has no K8/acceptance/TTFT
+  evidence; do not fill it from older checkpoints. GEN-005 needs metric
+  definitions, matched configurations, checkpoint linkage and resource costs
+  before causal or optimal-rank claims. Per-request and shared acceptance
+  similarity alone does not establish equal conditional information value.
   \item \textbf{Reference behavior.} Continue GEN-002 when requested, separating
   target-only repeatability from adapter-related behavior.
   \item \textbf{Scaling interpretation.} Distinguish the fixed-update result
