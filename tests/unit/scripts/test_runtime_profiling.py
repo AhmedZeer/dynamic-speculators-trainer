@@ -271,6 +271,57 @@ def test_profile_summary_never_presents_diagnostic_throughput_as_benchmark(tmp_p
     assert result["measurements"][0]["captured_iterations"] == 30
 
 
+@pytest.mark.parametrize("status", ["pending", "running", "failed", "completed"])
+@pytest.mark.parametrize("reference_has_category", [True, False])
+def test_profile_summary_handles_sparse_tasks_with_completed_references(
+    tmp_path, status, reference_has_category
+):
+    output = tmp_path / "profiled"
+    output.mkdir()
+    key = "model/nemotron/nemo-math"
+    reference = {"status": "completed", "output": "measurement"}
+    if reference_has_category:
+        reference["category"] = "nemo-math"
+    write_json(tmp_path / "benchmark/state.json", {"tasks": {key: reference}})
+    write_json(
+        tmp_path / "benchmark/measurement/results.json",
+        {
+            "groups": {
+                "nemo-math": {
+                    "performance": [
+                        {
+                            "total_output_tokens": 200,
+                            "measured_seconds": 2,
+                            "output_tokens_per_second": 100,
+                        }
+                    ]
+                }
+            }
+        },
+    )
+    task = {"status": status}
+    if status == "completed":
+        task["output"] = "measurement"
+        write_json(
+            output / "measurement/profile_summary.json",
+            {
+                "captured_worker_iterations": 30,
+            },
+        )
+    original_task = dict(task)
+    profiling.write_profile_summary(
+        output, {"identity": "suite"}, {"tasks": {key: task}}
+    )
+    row = json.loads((output / "summary.json").read_text())["measurements"][0]
+    assert row["status"] == status
+    assert row["unprofiled_reference"] == {
+        "output_tokens_per_second": 100,
+        "aggregate_seconds_per_output_token": 0.01,
+    }
+    assert row["captured_iterations"] == (30 if status == "completed" else None)
+    assert task == original_task
+
+
 def test_server_provenance_does_not_duplicate_packages_or_previous_traces(tmp_path):
     source = tmp_path / "server"
     source.mkdir()

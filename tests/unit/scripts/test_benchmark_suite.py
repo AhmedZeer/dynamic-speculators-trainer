@@ -15,7 +15,7 @@ import yaml
 from pydantic import ValidationError
 
 from speculators.bank.artifacts import digest, file_digest, write_json
-from speculators.benchmark import prepare, suite
+from speculators.benchmark import prepare, profiling, suite
 from speculators.benchmark.config import Benchmark, Model, Settings, Suite
 from speculators.benchmark.processes import (
     ensure_port_free,
@@ -581,4 +581,72 @@ def test_startup_failure_is_recorded_and_resume_can_recover(fake_suite, monkeypa
     assert all(entry["phase"] == "server_start" for entry in failures.values())
     monkeypatch.setattr(suite, "server_command", original)
     assert suite.run_suite(case.config, case.output, resume=True)["completed"] == 4
+    ensure_port_free(case.port)
+
+
+def test_profile_suite_partial_summary_and_resume_reuse_completed_phases(
+    fake_suite, monkeypatch
+):
+    """Real CPU subprocesses reproduce a completed trace plus sparse pending tasks."""
+    case = fake_suite
+    client_script = case.config.parent / "client.py"
+    client_script.write_text(
+        CLIENT.replace("sys.argv[1:]", "sys.argv[1:7]")
+        + """
+if len(sys.argv) > 7:
+    (output / "profile_capture.json").write_text(json.dumps({"files": {}}))
+    summary = json.dumps({"captured_worker_iterations": 30})
+    (output / "profile_summary.json").write_text(summary)
+    for name in ("profile_summary.md", "kernel_summary.csv", "cpu_operations.csv"):
+        (output / name).write_text("CPU test fixture")
+"""
+    )
+    original_client = suite.client_command
+
+    def client_command(root, model, data, settings, tokenizer, provenance, output):  # noqa: PLR0917 -- mirrors the suite builder
+        command = original_client(
+            root, model, data, settings, tokenizer, provenance, output
+        )
+        if settings.profiling is not None:
+            command += ["profile"]
+        return command
+
+    monkeypatch.setattr(suite, "client_command", client_command)
+    original_summary = profiling.write_profile_summary
+    interrupted = False
+
+    def summarize_then_interrupt(output, plan, state):
+        nonlocal interrupted
+        original_summary(output, plan, state)
+        completed = sum(
+            task["status"] == "completed" for task in state["tasks"].values()
+        )
+        if not interrupted and completed == 1:
+            interrupted = True
+            raise KeyboardInterrupt("after first captured measurement")
+
+    monkeypatch.setattr(profiling, "write_profile_summary", summarize_then_interrupt)
+    with pytest.raises(KeyboardInterrupt, match="after first captured"):
+        profiling.run_profile(case.config, case.output)
+    benchmark_state = json.loads((case.output / "benchmark/state.json").read_text())
+    profile_state = json.loads((case.output / "profiled/state.json").read_text())
+    assert all(
+        task["status"] == "completed" for task in benchmark_state["tasks"].values()
+    )
+    completed = {
+        key: task
+        for key, task in profile_state["tasks"].items()
+        if task["status"] == "completed"
+    }
+    assert len(completed) == 1
+    assert any("category" not in task for task in profile_state["tasks"].values())
+    assert len(case.marker.read_text().splitlines()) == 5
+    result = profiling.run_profile(case.config, case.output, resume=True)
+    assert result["failed"] == 0
+    assert result["benchmark"]["completed"] == result["profiled"]["completed"] == 4
+    assert len(case.marker.read_text().splitlines()) == 8
+    resumed = json.loads((case.output / "profiled/state.json").read_text())
+    for key, task in completed.items():
+        assert resumed["tasks"][key] == task
+    assert all(child.poll() is not None for child in case.children)
     ensure_port_free(case.port)

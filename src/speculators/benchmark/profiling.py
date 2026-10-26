@@ -207,7 +207,11 @@ def write_profile_summary(output, plan, state):
                     reference_state_path.parent / reference["output"] / "results.json"
                 ).read_text()
             )
-            measured = result["groups"][task["category"]]["performance"][0]
+            # Pending profile entries may contain only their status. The
+            # completed reference owns its category; legacy references can
+            # recover it from the canonical model/benchmark/category task key.
+            category = reference.get("category") or key.rsplit("/", 1)[-1]
+            measured = result["groups"][category]["performance"][0]
             tokens = measured.get("total_output_tokens", 0)
             reference_metrics = {
                 "output_tokens_per_second": measured["output_tokens_per_second"],
