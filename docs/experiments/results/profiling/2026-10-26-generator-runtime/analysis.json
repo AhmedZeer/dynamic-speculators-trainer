@@ -1,0 +1,816 @@
+{
+  "received_date": "2026-10-26",
+  "execution_date": null,
+  "source_zip_sha256": "3f3bd61593045c759e30410931f32e99f06a52375707e7c69e5fc59b11b81b45",
+  "evidence": "Aggregate unprofiled benchmark summaries and bounded profile summaries/CSVs; no raw timelines or full server provenance supplied.",
+  "profiles": [
+    {
+      "phase": "serial-v1",
+      "model": "eagle3-vanilla",
+      "category": "nemo-chat",
+      "source_sha256": "7563d25b92f3cbe17211a7b758e3f808fbbb9a41f4b0e8ec9ab5299d219bbf10",
+      "output_tokens_per_second": 52.706019723017654,
+      "successful_requests": 16,
+      "output_tokens": 1569.0,
+      "dataset_sha256": "69a98115ec86dfd746af467be852e4618deb7821290d1d3181a5ac36e3885eb1",
+      "acceptance_rate_percent": 37.30266125394677,
+      "acceptance_length": 2.1190798376184032,
+      "captured_iterations": 30,
+      "phase_counts": {
+        "decode": 29,
+        "mixed": 0,
+        "prefill": 1
+      },
+      "mean_scheduled_requests": 1.0,
+      "mapping_calls": 0,
+      "mapping_cpu_inclusive_ms": 0,
+      "draft_cpu_inclusive_ms": null,
+      "mapping_cuda_ms": 0,
+      "lora_kernel_calls": 0,
+      "lora_kernel_cuda_ms": 0,
+      "stream_sync_calls": 29,
+      "stream_sync_cpu_ms": 0.20241,
+      "kernel_launch_calls": 16131,
+      "sort_calls": 0,
+      "unique_calls": 0,
+      "scalar_extraction_calls": 58,
+      "traces": [
+        {
+          "attributed_cuda_activity_ms": 577.7963350000047,
+          "cuda_activity_span_ms": 1819.4902648925781,
+          "cuda_activity_union_ms": 646.6576130371094,
+          "cuda_kernel_union_ms": 644.7886979980469,
+          "file": "traces/rank0.1793004127253466667.pt.trace.json.gz",
+          "gaps_within_cuda_activity_span_ms": 1172.8326518554686,
+          "unattributed_cuda_activity_ms": 68.8614219999997
+        }
+      ],
+      "cuda_scope_attribution": [
+        {
+          "activity_calls": 496,
+          "cuda_activity_ms": 148.9645689999999,
+          "name": "vllm.execute_model.prefill"
+        },
+        {
+          "activity_calls": 13572,
+          "cuda_activity_ms": 428.8317660000068,
+          "name": "vllm.execute_model.decode"
+        }
+      ]
+    },
+    {
+      "phase": "serial-v1",
+      "model": "eagle3-vanilla",
+      "category": "nemo-math",
+      "source_sha256": "7ed36686b81de06dd4e90b700b332122c0a3118418cdbabb1a9f37792509655c",
+      "output_tokens_per_second": 60.91489948585661,
+      "successful_requests": 16,
+      "output_tokens": 2048.0,
+      "dataset_sha256": "2e49660e3c7d9ff02d4b13dcb783dcb5f42cf16409fd7556c56c4c85bb68279b",
+      "acceptance_rate_percent": 47.74346793349169,
+      "acceptance_length": 2.4323040380047507,
+      "captured_iterations": 30,
+      "phase_counts": {
+        "decode": 29,
+        "mixed": 0,
+        "prefill": 1
+      },
+      "mean_scheduled_requests": 1.0,
+      "mapping_calls": 0,
+      "mapping_cpu_inclusive_ms": 0,
+      "draft_cpu_inclusive_ms": null,
+      "mapping_cuda_ms": 0,
+      "lora_kernel_calls": 0,
+      "lora_kernel_cuda_ms": 0,
+      "stream_sync_calls": 29,
+      "stream_sync_cpu_ms": 0.20168500000000003,
+      "kernel_launch_calls": 16120,
+      "sort_calls": 0,
+      "unique_calls": 0,
+      "scalar_extraction_calls": 58,
+      "traces": [
+        {
+          "attributed_cuda_activity_ms": 423.51759200000316,
+          "cuda_activity_span_ms": 1722.1399411621094,
+          "cuda_activity_union_ms": 491.001455078125,
+          "cuda_kernel_union_ms": 488.7015710449219,
+          "file": "traces/rank0.1793004214591440342.pt.trace.json.gz",
+          "gaps_within_cuda_activity_span_ms": 1231.1384860839844,
+          "unattributed_cuda_activity_ms": 67.4839300000002
+        }
+      ],
+      "cuda_scope_attribution": [
+        {
+          "activity_calls": 568,
+          "cuda_activity_ms": 17.01891399999999,
+          "name": "vllm.execute_model.prefill"
+        },
+        {
+          "activity_calls": 13572,
+          "cuda_activity_ms": 406.4986780000035,
+          "name": "vllm.execute_model.decode"
+        }
+      ]
+    },
+    {
+      "phase": "serial-v1",
+      "model": "generator-4000-merged",
+      "category": "nemo-chat",
+      "source_sha256": "951ffa7870d1b8028f0946c0250e483f501dca2af40a3a00cdd8ca6ed4bc096d",
+      "output_tokens_per_second": 54.05263112676661,
+      "successful_requests": 16,
+      "output_tokens": 1569.0,
+      "dataset_sha256": "69a98115ec86dfd746af467be852e4618deb7821290d1d3181a5ac36e3885eb1",
+      "acceptance_rate_percent": 39.19667590027701,
+      "acceptance_length": 2.17590027700831,
+      "captured_iterations": 30,
+      "phase_counts": {
+        "decode": 29,
+        "mixed": 0,
+        "prefill": 1
+      },
+      "mean_scheduled_requests": 1.0,
+      "mapping_calls": 0,
+      "mapping_cpu_inclusive_ms": 0,
+      "draft_cpu_inclusive_ms": 143.831085,
+      "mapping_cuda_ms": 0,
+      "lora_kernel_calls": 0,
+      "lora_kernel_cuda_ms": 0,
+      "stream_sync_calls": 35,
+      "stream_sync_cpu_ms": 111.84847600000006,
+      "kernel_launch_calls": 16199,
+      "sort_calls": 0,
+      "unique_calls": 0,
+      "scalar_extraction_calls": 62,
+      "traces": [
+        {
+          "attributed_cuda_activity_ms": 631.7633380000012,
+          "cuda_activity_span_ms": 1840.906087158203,
+          "cuda_activity_union_ms": 659.7816423339843,
+          "cuda_kernel_union_ms": 657.7817507324219,
+          "file": "traces/rank0.1793004434055669494.pt.trace.json.gz",
+          "gaps_within_cuda_activity_span_ms": 1181.1244448242187,
+          "unattributed_cuda_activity_ms": 28.01850699999997
+        }
+      ],
+      "cuda_scope_attribution": [
+        {
+          "activity_calls": 496,
+          "cuda_activity_ms": 156.177904,
+          "name": "vllm.execute_model.prefill"
+        },
+        {
+          "activity_calls": 47,
+          "cuda_activity_ms": 1.079683,
+          "name": "speculators.generator"
+        },
+        {
+          "activity_calls": 26,
+          "cuda_activity_ms": 1.181061,
+          "name": "speculators.adapter_merge"
+        },
+        {
+          "activity_calls": 1531,
+          "cuda_activity_ms": 42.306149000000055,
+          "name": "speculators.draft_forward"
+        },
+        {
+          "activity_calls": 13572,
+          "cuda_activity_ms": 431.0185410000074,
+          "name": "vllm.execute_model.decode"
+        }
+      ]
+    },
+    {
+      "phase": "serial-v1",
+      "model": "generator-4000-merged",
+      "category": "nemo-math",
+      "source_sha256": "b8284c7190ea0061555863fd041898dfd109607bfac862031e0bec8a2731d74a",
+      "output_tokens_per_second": 78.31940157029864,
+      "successful_requests": 16,
+      "output_tokens": 2048.0,
+      "dataset_sha256": "2e49660e3c7d9ff02d4b13dcb783dcb5f42cf16409fd7556c56c4c85bb68279b",
+      "acceptance_rate_percent": 70.04538577912254,
+      "acceptance_length": 3.1013615733736764,
+      "captured_iterations": 30,
+      "phase_counts": {
+        "decode": 29,
+        "mixed": 0,
+        "prefill": 1
+      },
+      "mean_scheduled_requests": 1.0,
+      "mapping_calls": 0,
+      "mapping_cpu_inclusive_ms": 0,
+      "draft_cpu_inclusive_ms": 143.77936599999998,
+      "mapping_cuda_ms": 0,
+      "lora_kernel_calls": 0,
+      "lora_kernel_cuda_ms": 0,
+      "stream_sync_calls": 35,
+      "stream_sync_cpu_ms": 0.7495530000000002,
+      "kernel_launch_calls": 16192,
+      "sort_calls": 0,
+      "unique_calls": 0,
+      "scalar_extraction_calls": 62,
+      "traces": [
+        {
+          "attributed_cuda_activity_ms": 464.5115240000043,
+          "cuda_activity_span_ms": 1715.17746875,
+          "cuda_activity_union_ms": 493.92682836914065,
+          "cuda_kernel_union_ms": 491.5453562011719,
+          "file": "traces/rank0.1793004518644416217.pt.trace.json.gz",
+          "gaps_within_cuda_activity_span_ms": 1221.2506403808593,
+          "unattributed_cuda_activity_ms": 29.415350999999994
+        }
+      ],
+      "cuda_scope_attribution": [
+        {
+          "activity_calls": 568,
+          "cuda_activity_ms": 17.012116999999996,
+          "name": "vllm.execute_model.prefill"
+        },
+        {
+          "activity_calls": 47,
+          "cuda_activity_ms": 1.065289,
+          "name": "speculators.generator"
+        },
+        {
+          "activity_calls": 26,
+          "cuda_activity_ms": 1.1811249999999998,
+          "name": "speculators.adapter_merge"
+        },
+        {
+          "activity_calls": 1526,
+          "cuda_activity_ms": 38.245611000000075,
+          "name": "speculators.draft_forward"
+        },
+        {
+          "activity_calls": 13572,
+          "cuda_activity_ms": 407.0073820000036,
+          "name": "vllm.execute_model.decode"
+        }
+      ]
+    },
+    {
+      "phase": "serial-v1",
+      "model": "generator-4000-multilora",
+      "category": "nemo-chat",
+      "source_sha256": "1a1ae7928747fd1dc1c1566af4a1165737d2a821e418109f34b73e01dc5a636c",
+      "output_tokens_per_second": 46.14158937912222,
+      "successful_requests": 16,
+      "output_tokens": 1569.0,
+      "dataset_sha256": "69a98115ec86dfd746af467be852e4618deb7821290d1d3181a5ac36e3885eb1",
+      "acceptance_rate_percent": 38.797061524334254,
+      "acceptance_length": 2.1639118457300275,
+      "captured_iterations": 30,
+      "phase_counts": {
+        "decode": 29,
+        "mixed": 0,
+        "prefill": 1
+      },
+      "mean_scheduled_requests": 1.0,
+      "mapping_calls": 90,
+      "mapping_cpu_inclusive_ms": 143.87493800000001,
+      "draft_cpu_inclusive_ms": 259.709522,
+      "mapping_cuda_ms": 9.284370000000138,
+      "lora_kernel_calls": 360,
+      "lora_kernel_cuda_ms": 3.643336999999999,
+      "stream_sync_calls": 401,
+      "stream_sync_cpu_ms": 106.68474099999997,
+      "kernel_launch_calls": 18667,
+      "sort_calls": 120,
+      "unique_calls": 120,
+      "scalar_extraction_calls": 1032,
+      "traces": [
+        {
+          "attributed_cuda_activity_ms": 635.5754830000109,
+          "cuda_activity_span_ms": 2141.3906162109374,
+          "cuda_activity_union_ms": 663.3034379882813,
+          "cuda_kernel_union_ms": 658.8374089355468,
+          "file": "traces/rank0.1793004734136687671.pt.trace.json.gz",
+          "gaps_within_cuda_activity_span_ms": 1478.0871782226561,
+          "unattributed_cuda_activity_ms": 27.728045999999978
+        }
+      ],
+      "cuda_scope_attribution": [
+        {
+          "activity_calls": 496,
+          "cuda_activity_ms": 149.06117999999995,
+          "name": "vllm.execute_model.prefill"
+        },
+        {
+          "activity_calls": 33,
+          "cuda_activity_ms": 0.10144199999999999,
+          "name": "speculators.adapter_prepare"
+        },
+        {
+          "activity_calls": 47,
+          "cuda_activity_ms": 1.028711,
+          "name": "speculators.generator"
+        },
+        {
+          "activity_calls": 4,
+          "cuda_activity_ms": 0.15062399999999998,
+          "name": "speculators.adapter_to_cpu"
+        },
+        {
+          "activity_calls": 12,
+          "cuda_activity_ms": 0.120034,
+          "name": "speculators.adapter_upload"
+        },
+        {
+          "activity_calls": 3510,
+          "cuda_activity_ms": 9.284370000000138,
+          "name": "speculators.token_mapping"
+        },
+        {
+          "activity_calls": 1351,
+          "cuda_activity_ms": 30.103421999999973,
+          "name": "speculators.draft_forward"
+        },
+        {
+          "activity_calls": 360,
+          "cuda_activity_ms": 10.852833,
+          "name": "speculators.qkv_proj_with_lora"
+        },
+        {
+          "activity_calls": 360,
+          "cuda_activity_ms": 4.369194000000006,
+          "name": "speculators.o_proj_with_lora"
+        },
+        {
+          "activity_calls": 13572,
+          "cuda_activity_ms": 430.5036730000095,
+          "name": "vllm.execute_model.decode"
+        }
+      ]
+    },
+    {
+      "phase": "serial-v1",
+      "model": "generator-4000-multilora",
+      "category": "nemo-math",
+      "source_sha256": "6b70444e344337304b0ccf24dc4fd9e64f47db4bde021cd0f712b7bd54269b35",
+      "output_tokens_per_second": 65.20430236292627,
+      "successful_requests": 16,
+      "output_tokens": 2048.0,
+      "dataset_sha256": "2e49660e3c7d9ff02d4b13dcb783dcb5f42cf16409fd7556c56c4c85bb68279b",
+      "acceptance_rate_percent": 69.73353443941679,
+      "acceptance_length": 3.092006033182504,
+      "captured_iterations": 30,
+      "phase_counts": {
+        "decode": 29,
+        "mixed": 0,
+        "prefill": 1
+      },
+      "mean_scheduled_requests": 1.0,
+      "mapping_calls": 90,
+      "mapping_cpu_inclusive_ms": 142.17627799999997,
+      "draft_cpu_inclusive_ms": 258.36583700000006,
+      "mapping_cuda_ms": 11.603621999999957,
+      "lora_kernel_calls": 360,
+      "lora_kernel_cuda_ms": 4.287538999999995,
+      "stream_sync_calls": 401,
+      "stream_sync_cpu_ms": 3.541853,
+      "kernel_launch_calls": 18660,
+      "sort_calls": 120,
+      "unique_calls": 120,
+      "scalar_extraction_calls": 1032,
+      "traces": [
+        {
+          "attributed_cuda_activity_ms": 480.0275670000024,
+          "cuda_activity_span_ms": 2035.956337158203,
+          "cuda_activity_union_ms": 509.32081274414065,
+          "cuda_kernel_union_ms": 503.9159133300781,
+          "file": "traces/rank0.1793004829232647946.pt.trace.json.gz",
+          "gaps_within_cuda_activity_span_ms": 1526.6355244140623,
+          "unattributed_cuda_activity_ms": 29.293252000000006
+        }
+      ],
+      "cuda_scope_attribution": [
+        {
+          "activity_calls": 13572,
+          "cuda_activity_ms": 407.0190460000028,
+          "name": "vllm.execute_model.decode"
+        },
+        {
+          "activity_calls": 3510,
+          "cuda_activity_ms": 11.603621999999957,
+          "name": "speculators.token_mapping"
+        },
+        {
+          "activity_calls": 1344,
+          "cuda_activity_ms": 27.543412000000014,
+          "name": "speculators.draft_forward"
+        },
+        {
+          "activity_calls": 361,
+          "cuda_activity_ms": 10.878524999999998,
+          "name": "speculators.qkv_proj_with_lora"
+        },
+        {
+          "activity_calls": 361,
+          "cuda_activity_ms": 4.489231999999996,
+          "name": "speculators.o_proj_with_lora"
+        },
+        {
+          "activity_calls": 568,
+          "cuda_activity_ms": 17.035037000000006,
+          "name": "vllm.execute_model.prefill"
+        },
+        {
+          "activity_calls": 33,
+          "cuda_activity_ms": 0.122142,
+          "name": "speculators.adapter_prepare"
+        },
+        {
+          "activity_calls": 47,
+          "cuda_activity_ms": 1.059172,
+          "name": "speculators.generator"
+        },
+        {
+          "activity_calls": 4,
+          "cuda_activity_ms": 0.15258,
+          "name": "speculators.adapter_to_cpu"
+        },
+        {
+          "activity_calls": 12,
+          "cuda_activity_ms": 0.12479899999999998,
+          "name": "speculators.adapter_upload"
+        }
+      ]
+    },
+    {
+      "phase": "continuous-v1",
+      "model": "eagle3-vanilla-c4",
+      "category": "nemo-chat",
+      "source_sha256": "9c529f09e99860ef4f288d2bb2eb6d9b705260f64d6e7fa9cf5625e20db2e7c7",
+      "output_tokens_per_second": 173.6127169540511,
+      "successful_requests": 16,
+      "output_tokens": 1573.0,
+      "dataset_sha256": "69a98115ec86dfd746af467be852e4618deb7821290d1d3181a5ac36e3885eb1",
+      "acceptance_rate_percent": 36.639857015192135,
+      "acceptance_length": 2.0991957104557644,
+      "captured_iterations": 30,
+      "phase_counts": {
+        "decode": 28,
+        "mixed": 1,
+        "prefill": 1
+      },
+      "mean_scheduled_requests": 3.9,
+      "mapping_calls": 0,
+      "mapping_cpu_inclusive_ms": 0,
+      "draft_cpu_inclusive_ms": null,
+      "mapping_cuda_ms": 0,
+      "lora_kernel_calls": 0,
+      "lora_kernel_cuda_ms": 0,
+      "stream_sync_calls": 29,
+      "stream_sync_cpu_ms": 0.18778000000000003,
+      "kernel_launch_calls": 16304,
+      "sort_calls": 0,
+      "unique_calls": 0,
+      "scalar_extraction_calls": 58,
+      "traces": [
+        {
+          "attributed_cuda_activity_ms": 724.7375280000001,
+          "cuda_activity_span_ms": 1933.605880126953,
+          "cuda_activity_union_ms": 799.3897287597656,
+          "cuda_kernel_union_ms": 797.6170776367187,
+          "file": "traces/rank0.1793005477831810446.pt.trace.json.gz",
+          "gaps_within_cuda_activity_span_ms": 1134.2161513671874,
+          "unattributed_cuda_activity_ms": 74.65228499999995
+        }
+      ],
+      "cuda_scope_attribution": [
+        {
+          "activity_calls": 497,
+          "cuda_activity_ms": 14.472704000000011,
+          "name": "vllm.execute_model.prefill"
+        },
+        {
+          "activity_calls": 468,
+          "cuda_activity_ms": 265.25634499999984,
+          "name": "vllm.execute_model.mixed"
+        },
+        {
+          "activity_calls": 13104,
+          "cuda_activity_ms": 445.0084790000047,
+          "name": "vllm.execute_model.decode"
+        }
+      ]
+    },
+    {
+      "phase": "continuous-v1",
+      "model": "eagle3-vanilla-c4",
+      "category": "nemo-math",
+      "source_sha256": "a31953b8c124f2a52813c603025f27b34b8f0b714d81339214a5931b925b1d35",
+      "output_tokens_per_second": 225.40400083339762,
+      "successful_requests": 16,
+      "output_tokens": 2048.0,
+      "dataset_sha256": "2e49660e3c7d9ff02d4b13dcb783dcb5f42cf16409fd7556c56c4c85bb68279b",
+      "acceptance_rate_percent": 47.62470308788598,
+      "acceptance_length": 2.42874109263658,
+      "captured_iterations": 30,
+      "phase_counts": {
+        "decode": 28,
+        "mixed": 1,
+        "prefill": 1
+      },
+      "mean_scheduled_requests": 3.9,
+      "mapping_calls": 0,
+      "mapping_cpu_inclusive_ms": 0,
+      "draft_cpu_inclusive_ms": null,
+      "mapping_cuda_ms": 0,
+      "lora_kernel_calls": 0,
+      "lora_kernel_cuda_ms": 0,
+      "stream_sync_calls": 29,
+      "stream_sync_cpu_ms": 0.18803900000000007,
+      "kernel_launch_calls": 16304,
+      "sort_calls": 0,
+      "unique_calls": 0,
+      "scalar_extraction_calls": 58,
+      "traces": [
+        {
+          "attributed_cuda_activity_ms": 464.84649200000047,
+          "cuda_activity_span_ms": 1706.8567041015624,
+          "cuda_activity_union_ms": 534.5505551757813,
+          "cuda_kernel_union_ms": 532.2229133300781,
+          "file": "traces/rank0.1793005540590950978.pt.trace.json.gz",
+          "gaps_within_cuda_activity_span_ms": 1172.3061489257811,
+          "unattributed_cuda_activity_ms": 69.70410900000037
+        }
+      ],
+      "cuda_scope_attribution": [
+        {
+          "activity_calls": 569,
+          "cuda_activity_ms": 16.381984999999993,
+          "name": "vllm.execute_model.prefill"
+        },
+        {
+          "activity_calls": 540,
+          "cuda_activity_ms": 43.01817099999998,
+          "name": "vllm.execute_model.mixed"
+        },
+        {
+          "activity_calls": 13104,
+          "cuda_activity_ms": 405.44633600000105,
+          "name": "vllm.execute_model.decode"
+        }
+      ]
+    },
+    {
+      "phase": "continuous-v1",
+      "model": "generator-4000-per-request-c4",
+      "category": "nemo-chat",
+      "source_sha256": "3f02c476a4011dfcb5231ac908fa2bc627d99a2d86ce0a16a3102f14ef368e55",
+      "output_tokens_per_second": 138.49938830443122,
+      "successful_requests": 16,
+      "output_tokens": 1569.0,
+      "dataset_sha256": "69a98115ec86dfd746af467be852e4618deb7821290d1d3181a5ac36e3885eb1",
+      "acceptance_rate_percent": 39.351851851851855,
+      "acceptance_length": 2.1805555555555554,
+      "captured_iterations": 30,
+      "phase_counts": {
+        "decode": 28,
+        "mixed": 1,
+        "prefill": 1
+      },
+      "mean_scheduled_requests": 3.9,
+      "mapping_calls": 90,
+      "mapping_cpu_inclusive_ms": 141.917058,
+      "draft_cpu_inclusive_ms": 263.413583,
+      "mapping_cuda_ms": 9.863319000000098,
+      "lora_kernel_calls": 360,
+      "lora_kernel_cuda_ms": 6.0743299999999945,
+      "stream_sync_calls": 437,
+      "stream_sync_cpu_ms": 3.9620689999999974,
+      "kernel_launch_calls": 19251,
+      "sort_calls": 120,
+      "unique_calls": 120,
+      "scalar_extraction_calls": 1074,
+      "traces": [
+        {
+          "attributed_cuda_activity_ms": 788.3382390000057,
+          "cuda_activity_span_ms": 2263.2122600097655,
+          "cuda_activity_union_ms": 816.8652590332031,
+          "cuda_kernel_union_ms": 811.88226171875,
+          "file": "traces/rank0.1793005736452241887.pt.trace.json.gz",
+          "gaps_within_cuda_activity_span_ms": 1446.3470009765624,
+          "unattributed_cuda_activity_ms": 28.52698899999994
+        }
+      ],
+      "cuda_scope_attribution": [
+        {
+          "activity_calls": 497,
+          "cuda_activity_ms": 14.56735300000001,
+          "name": "vllm.execute_model.prefill"
+        },
+        {
+          "activity_calls": 132,
+          "cuda_activity_ms": 0.41376100000000005,
+          "name": "speculators.adapter_prepare"
+        },
+        {
+          "activity_calls": 188,
+          "cuda_activity_ms": 4.101239000000001,
+          "name": "speculators.generator"
+        },
+        {
+          "activity_calls": 16,
+          "cuda_activity_ms": 0.603523,
+          "name": "speculators.adapter_to_cpu"
+        },
+        {
+          "activity_calls": 48,
+          "cuda_activity_ms": 0.485152,
+          "name": "speculators.adapter_upload"
+        },
+        {
+          "activity_calls": 3616,
+          "cuda_activity_ms": 9.863319000000098,
+          "name": "speculators.token_mapping"
+        },
+        {
+          "activity_calls": 1349,
+          "cuda_activity_ms": 33.864609999999956,
+          "name": "speculators.draft_forward"
+        },
+        {
+          "activity_calls": 360,
+          "cuda_activity_ms": 13.394605999999987,
+          "name": "speculators.qkv_proj_with_lora"
+        },
+        {
+          "activity_calls": 360,
+          "cuda_activity_ms": 5.032275999999994,
+          "name": "speculators.o_proj_with_lora"
+        },
+        {
+          "activity_calls": 468,
+          "cuda_activity_ms": 260.6136259999998,
+          "name": "vllm.execute_model.mixed"
+        },
+        {
+          "activity_calls": 13104,
+          "cuda_activity_ms": 445.3987740000059,
+          "name": "vllm.execute_model.decode"
+        }
+      ]
+    },
+    {
+      "phase": "continuous-v1",
+      "model": "generator-4000-per-request-c4",
+      "category": "nemo-math",
+      "source_sha256": "e6b4213c0cb5a44d8fbb103344e71559614cb8589e2e6adab6ea82aae505eef4",
+      "output_tokens_per_second": 241.6212779562026,
+      "successful_requests": 16,
+      "output_tokens": 2048.0,
+      "dataset_sha256": "2e49660e3c7d9ff02d4b13dcb783dcb5f42cf16409fd7556c56c4c85bb68279b",
+      "acceptance_rate_percent": 68.91554222888556,
+      "acceptance_length": 3.0674662668665666,
+      "captured_iterations": 30,
+      "phase_counts": {
+        "decode": 28,
+        "mixed": 1,
+        "prefill": 1
+      },
+      "mean_scheduled_requests": 3.9,
+      "mapping_calls": 90,
+      "mapping_cpu_inclusive_ms": 138.260615,
+      "draft_cpu_inclusive_ms": 250.56089400000002,
+      "mapping_cuda_ms": 11.695108000000099,
+      "lora_kernel_calls": 360,
+      "lora_kernel_cuda_ms": 6.762608999999999,
+      "stream_sync_calls": 437,
+      "stream_sync_cpu_ms": 4.123840999999998,
+      "kernel_launch_calls": 19242,
+      "sort_calls": 120,
+      "unique_calls": 120,
+      "scalar_extraction_calls": 1074,
+      "traces": [
+        {
+          "attributed_cuda_activity_ms": 523.4495810000059,
+          "cuda_activity_span_ms": 1986.3552399902344,
+          "cuda_activity_union_ms": 552.3860205078125,
+          "cuda_kernel_union_ms": 546.6092065429688,
+          "file": "traces/rank0.1793005804544703099.pt.trace.json.gz",
+          "gaps_within_cuda_activity_span_ms": 1433.969219482422,
+          "unattributed_cuda_activity_ms": 28.93633000000003
+        }
+      ],
+      "cuda_scope_attribution": [
+        {
+          "activity_calls": 13104,
+          "cuda_activity_ms": 399.8524180000043,
+          "name": "vllm.execute_model.decode"
+        },
+        {
+          "activity_calls": 3597,
+          "cuda_activity_ms": 11.695108000000099,
+          "name": "speculators.token_mapping"
+        },
+        {
+          "activity_calls": 1350,
+          "cuda_activity_ms": 28.77671399999999,
+          "name": "speculators.draft_forward"
+        },
+        {
+          "activity_calls": 361,
+          "cuda_activity_ms": 12.947731000000005,
+          "name": "speculators.qkv_proj_with_lora"
+        },
+        {
+          "activity_calls": 362,
+          "cuda_activity_ms": 4.965345000000002,
+          "name": "speculators.o_proj_with_lora"
+        },
+        {
+          "activity_calls": 569,
+          "cuda_activity_ms": 16.35770899999999,
+          "name": "vllm.execute_model.prefill"
+        },
+        {
+          "activity_calls": 132,
+          "cuda_activity_ms": 0.48332200000000003,
+          "name": "speculators.adapter_prepare"
+        },
+        {
+          "activity_calls": 188,
+          "cuda_activity_ms": 4.246554999999998,
+          "name": "speculators.generator"
+        },
+        {
+          "activity_calls": 16,
+          "cuda_activity_ms": 0.6086740000000002,
+          "name": "speculators.adapter_to_cpu"
+        },
+        {
+          "activity_calls": 48,
+          "cuda_activity_ms": 0.49769800000000014,
+          "name": "speculators.adapter_upload"
+        },
+        {
+          "activity_calls": 540,
+          "cuda_activity_ms": 43.01830700000005,
+          "name": "vllm.execute_model.mixed"
+        }
+      ]
+    }
+  ],
+  "benchmark_comparisons": [
+    {
+      "phase": "serial-v1",
+      "category": "nemo-math",
+      "candidate": "generator-4000-merged",
+      "reference": "eagle3-vanilla",
+      "throughput_change_percent": 28.571830917135554
+    },
+    {
+      "phase": "serial-v1",
+      "category": "nemo-math",
+      "candidate": "generator-4000-multilora",
+      "reference": "eagle3-vanilla",
+      "throughput_change_percent": 7.041631707962659
+    },
+    {
+      "phase": "serial-v1",
+      "category": "nemo-math",
+      "candidate": "generator-4000-multilora",
+      "reference": "generator-4000-merged",
+      "throughput_change_percent": -16.745658092906133
+    },
+    {
+      "phase": "serial-v1",
+      "category": "nemo-chat",
+      "candidate": "generator-4000-merged",
+      "reference": "eagle3-vanilla",
+      "throughput_change_percent": 2.554948013197955
+    },
+    {
+      "phase": "serial-v1",
+      "category": "nemo-chat",
+      "candidate": "generator-4000-multilora",
+      "reference": "eagle3-vanilla",
+      "throughput_change_percent": -12.454801896240763
+    },
+    {
+      "phase": "serial-v1",
+      "category": "nemo-chat",
+      "candidate": "generator-4000-multilora",
+      "reference": "generator-4000-merged",
+      "throughput_change_percent": -14.635812508536484
+    },
+    {
+      "phase": "continuous-v1",
+      "category": "nemo-math",
+      "candidate": "generator-4000-per-request-c4",
+      "reference": "eagle3-vanilla-c4",
+      "throughput_change_percent": 7.194760103123277
+    },
+    {
+      "phase": "continuous-v1",
+      "category": "nemo-chat",
+      "candidate": "generator-4000-per-request-c4",
+      "reference": "eagle3-vanilla-c4",
+      "throughput_change_percent": -20.225090227067344
+    }
+  ]
+}
