@@ -8,6 +8,7 @@ from safetensors.torch import load
 from transformers import DynamicCache
 
 from speculators.bank.artifacts import digest
+from speculators.bank.progress import report
 from speculators.data_generation.offline import check_hidden_states
 from speculators.data_generation.vllm_client import (
     generate_hidden_states,
@@ -23,6 +24,11 @@ class ReplayTrainer:
     def __init__(self, runtime, study, model):
         self.runtime, self.study, self.generator = runtime, study, model
         self.stream = StreamingDraft(runtime)
+        report(
+            "Replay streaming attention: SDPA with causal prefill "
+            "and cached-prefix masks; "
+            "ordinary validation/training retain their configured attention backend"
+        )
         # Full target head is only used on the few verification positions, to
         # preserve true target greedy verification outside the draft vocabulary.
         loaded = load_model_layers(
@@ -92,7 +98,7 @@ class ReplayTrainer:
             hidden = self.runtime.drafter.verifier_norm(states.to(self.runtime.device))
             return torch.nn.functional.linear(hidden, self.head).float()
 
-    def episode(self, index, update, episode, divisor):
+    def episode(self, index, update, episode, divisor):  # noqa: C901 -- causal rollout, verification, backward replay and cache rollback
         runtime, study = self.runtime, self.study
         row = runtime.corpus.rows[index]
         prefix = list(row["input_ids"][: row["prompt_length"]])
@@ -196,7 +202,9 @@ class ReplayTrainer:
             # Drop all tentative draft KV. Newly committed tokens are recomputed
             # from target states in the next round, with the next round's adapter.
             old_length = len(prefix)
-            cache.crop(old_length)
+            tentative = cache.get_seq_length() - old_length
+            if tentative > 0:
+                cache.crop(-tentative)
             prefix = prefix + [bonus] + proposed[:accepted]
             states = verified[: len(prefix)]
             new_start = old_length

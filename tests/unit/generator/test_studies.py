@@ -190,8 +190,8 @@ def test_scale_only_changes_strength_without_regenerating(tmp_path, monkeypatch)
         torch.testing.assert_close(weight, ctl.merger.base[name], rtol=0, atol=0)
 
 
-def streaming_runtime(feedback=False):
-    model = tiny_drafter().eval().requires_grad_(False)
+def streaming_runtime(feedback=False, backend="eager"):
+    model = tiny_drafter(backend=backend).eval().requires_grad_(False)
     paths = install_adapters(model, 2, 4, 0)
     shapes = {
         name: (
@@ -213,8 +213,9 @@ def streaming_runtime(feedback=False):
     return runtime, generator
 
 
-def test_streaming_prefill_matches_core_and_replays_identical_logits():
-    runtime, generator = streaming_runtime()
+@pytest.mark.parametrize("backend", ["eager", "simple_flex_attention"])
+def test_streaming_prefill_matches_core_and_replays_identical_logits(backend):
+    runtime, generator = streaming_runtime(backend=backend)
     summary = torch.randn(1, 24)
     factors = generator(summary, torch.tensor([3]))
     states, ids = torch.randn(3, 24), torch.tensor([[1, 2, 3]])
@@ -222,18 +223,19 @@ def test_streaming_prefill_matches_core_and_replays_identical_logits():
     hook = runtime.drafter.lm_head.register_forward_hook(
         lambda m, a, out: captured.append(out)
     )
-    functional_call(
-        runtime.drafter,
-        factor_parameters(runtime.paths, factors),
-        (),
-        {
-            "hidden_states": states[None],
-            "input_ids": ids,
-            "document_ids": torch.zeros_like(ids),
-            "position_ids": torch.arange(3)[None],
-            "ttt_steps": 1,
-        },
-    )
+    with torch.no_grad():
+        functional_call(
+            runtime.drafter,
+            factor_parameters(runtime.paths, factors),
+            (),
+            {
+                "hidden_states": states[None],
+                "input_ids": ids,
+                "document_ids": torch.zeros_like(ids),
+                "position_ids": torch.arange(3)[None],
+                "ttt_steps": 1,
+            },
+        )
     expected = captured[-1][:, -1:]
     hook.remove()
     stream, cache = StreamingDraft(runtime), DynamicCache()
@@ -245,7 +247,7 @@ def test_streaming_prefill_matches_core_and_replays_identical_logits():
     torch.testing.assert_close(repeated, logits)
     logits.square().mean().backward()
     assert generator.heads["v_proj"]["B"].weight.grad.abs().sum() > 0
-    cache.crop(3)
+    cache.crop(-(cache.get_seq_length() - 3))
     detached = detached_cache(cache)
     assert detached.get_seq_length() == 3
     assert not detached.layers[0].values.requires_grad
@@ -605,3 +607,35 @@ def test_preparation_freezes_disjoint_manifests_and_training_donors(
         )
         == result
     )
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_streaming_flex_uses_sdpa_across_lengths_and_grad_modes(monkeypatch, device):
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA is unavailable")
+    from speculators.models import attention  # noqa: PLC0415
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Streaming replay entered FlexAttention compilation")
+
+    monkeypatch.setattr(attention, "_standalone_flex_attention", forbidden)
+    monkeypatch.setattr(attention, "flex_attention", forbidden)
+    runtime, generator = streaming_runtime(backend="simple_flex_attention")
+    runtime.device = torch.device(device)
+    runtime.drafter.to(device)
+    generator.to(device)
+    stream = StreamingDraft(runtime)
+    for length in range(2, 12):
+        generator.zero_grad(set_to_none=True)
+        factors = generator(
+            torch.randn(1, 24, device=device), torch.tensor([length], device=device)
+        )
+        states = torch.randn(length, 24)
+        tokens = [1] * length
+        with torch.no_grad():
+            proposals, _ = stream.propose(states, tokens, 0, DynamicCache(), factors)
+        _, logits = stream.propose(
+            states, tokens, 0, DynamicCache(), factors, forced=proposals
+        )
+        logits.square().mean().backward()
+        assert generator.heads["v_proj"]["B"].weight.grad.abs().sum() > 0

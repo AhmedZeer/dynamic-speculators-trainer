@@ -26,13 +26,15 @@ def _standalone_flex_attention():
     return torch.compile(flex_attention, fullgraph=True, dynamic=True)
 
 
-def flex_attention_forward(
+def flex_attention_forward(  # noqa: PLR0917 -- transformers attention interface
     module: torch.nn.Module,  # noqa: ARG001
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask,
     scaling: float | None = None,
+    speculators_streaming_sdpa: bool = False,
+    speculators_streaming_is_causal: bool = False,
     **_kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Shared flex attention forward implementation.
@@ -47,6 +49,8 @@ def flex_attention_forward(
         value: Value tensor of shape (batch, num_heads, seq_len, head_dim).
         attention_mask: BlockMask for flex attention.
         scaling: Optional scaling factor for attention scores.
+        speculators_streaming_sdpa: Route streaming replay calls through SDPA.
+        speculators_streaming_is_causal: Use implicit causality for initial prefill.
         **_kwargs: Additional unused kwargs for interface compatibility.
 
     Returns:
@@ -61,28 +65,44 @@ def flex_attention_forward(
     key = key.contiguous()
     value = value.contiguous()
 
-    # A compiled model already captures flex_attention. An uncompiled CUDA
-    # caller (e.g. functional LoRA substitution) still needs a fused kernel.
-    attention = (
-        _standalone_flex_attention()
-        if query.is_cuda and not torch.compiler.is_compiling()
-        else flex_attention
-    )
-    flex_attention_output = attention(
-        query,
-        key,
-        value,
-        score_mod=None,
-        block_mask=attention_mask,
-        enable_gqa=enable_gqa,
-        scale=scaling,
-    )
+    if speculators_streaming_sdpa:
+        # Replay supplies causal prefill or an offset mask including committed KV. Keep
+        # variable-length rollout/backward outside the fullgraph compiler cache.
+        if isinstance(attention_mask, BlockMask):
+            raise ValueError("Streaming SDPA requires a dense causal mask")
+        flex_attention_output = torch.nn.functional.scaled_dot_product_attention(
+            query,
+            key,
+            value,
+            attn_mask=attention_mask,
+            dropout_p=0.0,
+            is_causal=speculators_streaming_is_causal,
+            scale=scaling,
+            enable_gqa=enable_gqa,
+        )
+    else:
+        # A compiled model already captures flex_attention. An uncompiled CUDA
+        # caller (e.g. functional LoRA substitution) still needs a fused kernel.
+        attention = (
+            _standalone_flex_attention()
+            if query.is_cuda and not torch.compiler.is_compiling()
+            else flex_attention
+        )
+        flex_attention_output = attention(
+            query,
+            key,
+            value,
+            score_mod=None,
+            block_mask=attention_mask,
+            enable_gqa=enable_gqa,
+            scale=scaling,
+        )
     attention_output: torch.Tensor = flex_attention_output
     attention_output = attention_output.transpose(1, 2).contiguous()
     return attention_output, None
 
 
-def create_float_mask(
+def create_float_mask(  # noqa: PLR0917 -- mirrors torch create_mask arguments
     mask_mod: Callable,
     B: int | None = None,  # noqa: N803
     H: int | None = None,  # noqa: N803

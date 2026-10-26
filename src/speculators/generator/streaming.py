@@ -45,18 +45,12 @@ class DraftStep(nn.Module):
             embeddings = model.embed_tokens(tokens)
         hidden = torch.cat([embeddings, states], dim=-1)
         past, query = cache.get_seq_length(), tokens.shape[1]
-        if model._attn_impl == "simple_flex_attention":  # noqa: SLF001
-            from torch.nn.attention.flex_attention import create_block_mask  # noqa: PLC0415
-
-            mask = create_block_mask(
-                lambda _b, _h, q, k: k <= q + past,
-                B=None,
-                H=None,
-                Q_LEN=query,
-                KV_LEN=past + query,
-                device=str(tokens.device),
-            )
-        else:
+        # Initial causal prefill and singleton decode need no materialized mask.
+        # Multi-token updates attend the committed KV plus their causal suffix.
+        sdpa = model._attn_impl == "simple_flex_attention"  # noqa: SLF001
+        causal = sdpa and past == 0
+        mask = None
+        if not (causal or (sdpa and query == 1)):
             allowed = torch.arange(past + query, device=tokens.device)[None, :] <= (
                 torch.arange(query, device=tokens.device)[:, None] + past
             )
@@ -75,6 +69,8 @@ class DraftStep(nn.Module):
                 cache_position=torch.arange(past, past + query, device=tokens.device),
                 position_embeddings=rope,
                 use_cache=True,
+                speculators_streaming_sdpa=True,
+                speculators_streaming_is_causal=causal,
             )
         if model.config.norm_output:
             hidden = model.norm(hidden)

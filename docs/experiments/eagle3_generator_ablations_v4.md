@@ -415,3 +415,24 @@ replay, optimizer warm-start mapping, checkpoint/export recovery, W&B publicatio
 retry, and warmup exclusion. The supported vLLM patch is pinned and checksum-checked.
 Live A100/vLLM execution, memory fit, refresh quality and controller usefulness
 remain experiments to run, not measured results in this document.
+
+## Replay compiler-cache failure (2026-10-26)
+
+A live replay run stopped after its step-500 validation with
+`FailOnRecompileLimitHit: Hard failure due to fullgraph=True`. The shared standalone
+FlexAttention entry point exhausted Dynamo's default eight variants while replay
+alternated gradient/no-gradient execution and changing query/KV lengths.
+
+Streaming replay now routes through PyTorch SDPA, using implicit causal prefill,
+unmasked singleton cached decode, and an explicit offset causal mask for
+multi-token cached updates. This avoids materializing a quadratic mask for initial
+prefill and avoids the standalone FlexAttention compiler cache for replay. Ordinary
+training and validation retain their configured attention backend. Cache rollback
+uses a negative crop count, compatible with the Transformers deprecation. The
+causal KV policy, objective and experimental configuration identities are unchanged.
+
+After updating code, rerun the same command with `--resume`; no config or workspace
+change is required. The latest saved replay checkpoint is restored, or the step-500
+parent is loaded when no replay checkpoint was saved. CPU regression checks cover
+output/gradient parity, GQA, changing lengths and alternating gradient modes. The
+CUDA stress test is included but cannot be executed in a CPU-only environment.
