@@ -82,6 +82,12 @@ def native_summary(path, expected_requests):
             ("output_tokens_per_second", "output_tps_median"),
         ):
             row[label] = metrics[metric]["successful"]["median"]
+        for key, label in (
+            ("time_per_output_token_ms", "tpot_median_ms"),
+            ("time_per_output_token", "tpot_median_s"),
+        ):
+            if key in metrics:
+                row[label] = metrics[key]["successful"]["median"]
         scheduler = benchmark["scheduler_metrics"]
         seconds = scheduler["measure_end_time"] - scheduler["measure_start_time"]
         if seconds <= 0:
@@ -310,6 +316,13 @@ def benchmark_endpoint(args, utils):  # noqa: C901 -- explicit measurement bound
         kind = status["configuration"]["kind"] if status else None
         if kind == "target_only":
             acceptance = None
+        elif acceptance is not None:
+            acceptance["draft_acceptance_rate"] = acceptance[
+                "num_accepted_tokens"
+            ] / max(1, acceptance["num_draft_tokens"])
+            acceptance["accepted_prefix_length"] = acceptance[
+                "num_accepted_tokens"
+            ] / max(1, acceptance["num_drafts"])
         summaries = native_summary(native_output, len(rows))
         performance.extend(
             {

@@ -28,7 +28,16 @@ class ResidualMLP(nn.Module):
 class LoRAGenerator(nn.Module):
     """Permutation-invariant context encoder, one A/B pair per projection."""
 
-    def __init__(self, input_dim, shapes, rank, architecture=None, max_examples=8):
+    def __init__(
+        self,
+        input_dim,
+        shapes,
+        rank,
+        architecture=None,
+        max_examples=8,
+        *,
+        feedback_dim=0,
+    ):
         super().__init__()
         cfg = architecture or Architecture()
         self.shapes, self.rank, self.max_examples = shapes, rank, max_examples
@@ -45,6 +54,12 @@ class LoRAGenerator(nn.Module):
         )
         self.module_embedding = nn.Embedding(len(shapes), cfg.descriptor_dim)
         self.layer_embedding = nn.Embedding(1, cfg.descriptor_dim)
+        self.feedback_dim = feedback_dim
+        if feedback_dim:
+            self.feedback_encoder = nn.Linear(
+                feedback_dim, cfg.condition_dim, bias=False
+            )
+            nn.init.zeros_(self.feedback_encoder.weight)
         self.decoder = nn.Sequential(
             nn.Linear(cfg.condition_dim + 2 * cfg.descriptor_dim, cfg.decoder_width),
             nn.GELU(),
@@ -65,7 +80,7 @@ class LoRAGenerator(nn.Module):
                 self.heads[name]["A"].bias.view(rank, in_features), a=math.sqrt(5)
             )
 
-    def forward(self, summaries, lengths):
+    def forward(self, summaries, lengths, feedback=None):
         count = summaries.shape[0]
         if summaries.ndim != SUMMARY_NDIM or not 1 <= count <= self.max_examples:
             raise ValueError(f"Expected 1–{self.max_examples} conditioning examples")
@@ -82,6 +97,12 @@ class LoRAGenerator(nn.Module):
             ]
         )
         condition = self.condition(pooled)
+        if self.feedback_dim:
+            if feedback is None or feedback.shape != (self.feedback_dim,):
+                raise ValueError("Feedback generator requires a causal feedback vector")
+            condition = condition + self.feedback_encoder(feedback.to(condition))
+        elif feedback is not None:
+            raise ValueError("This generator was trained without feedback inputs")
         result = {}
         for index, (name, (in_features, out_features)) in enumerate(
             self.shapes.items()

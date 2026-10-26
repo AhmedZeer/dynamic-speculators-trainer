@@ -1,0 +1,6 @@
+extends: ../common/training.yaml
+name: prompt_ce
+repo_id: azeeer/eagle3-prompt-ce-4k-1500-v4
+wandb:
+  project: eagle3-generator-objectives-train-v4
+loss: ce

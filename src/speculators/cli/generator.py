@@ -1,4 +1,4 @@
-"""Offline conditional LoRA generator experiments."""
+"""Conditional LoRA generator training, serving and experiment commands."""
 
 from enum import Enum
 from pathlib import Path
@@ -12,6 +12,44 @@ app = typer.Typer(
     help="Generator experiments, inference export, and serial vLLM benchmarks."
 )
 ConfigOption = Annotated[Path, typer.Option("--config", exists=True, dir_okay=False)]
+
+
+@app.command(name="prepare-experiments")
+def prepare_experiments_command(
+    config: ConfigOption,
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+):
+    """Freeze study data and training-only conditioning donors; no training."""
+    import json  # noqa: PLC0415
+
+    from speculators.generator.study_config import GeneratorStudy  # noqa: PLC0415
+    from speculators.generator.study_inputs import prepare_study  # noqa: PLC0415
+
+    typer.echo(
+        json.dumps(
+            prepare_study(GeneratorStudy.load(config), dry_run=dry_run), indent=2
+        )
+    )
+
+
+@app.command(name="train-experiment")
+def train_experiment_command(
+    config: ConfigOption,
+    resume: Annotated[bool, typer.Option("--resume")] = False,
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+):
+    """Run exactly one configured generator/static-LoRA training experiment."""
+    import json  # noqa: PLC0415
+
+    from speculators.generator.study import train_study  # noqa: PLC0415
+    from speculators.generator.study_config import GeneratorStudy  # noqa: PLC0415
+
+    typer.echo(
+        json.dumps(
+            train_study(GeneratorStudy.load(config), resume=resume, dry_run=dry_run),
+            indent=2,
+        )
+    )
 
 
 @app.command()

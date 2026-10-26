@@ -450,9 +450,20 @@ def initialize_proposer(proposer, runner):
     validate_runtime(proposer.vllm_config, metadata)
 
 
-def prepare_proposer(proposer, positions, states, attention_metadata=None):
+def prepare_proposer(
+    proposer, positions, states, attention_metadata=None, proposal_kwargs=None
+):
     runner = proposer.adapter_runner
     ids = runner.input_batch.req_ids
+    if hasattr(proposer.draft_adapter, "prepare_proposal"):
+        proposer.draft_adapter.prepare_proposal(
+            list(ids),
+            [runner.requests[name].num_prompt_tokens for name in ids],
+            positions,
+            states,
+            proposal_kwargs,
+        )
+        return
     if getattr(proposer.draft_adapter, "continuous", False):
         if attention_metadata is None:
             raise ValueError("Continuous drafting requires attention token boundaries")

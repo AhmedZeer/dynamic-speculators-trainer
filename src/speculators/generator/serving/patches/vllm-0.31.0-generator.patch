@@ -35,7 +35,7 @@
 +
 +            prepare_proposer(
 +                self, kwargs["target_positions"], kwargs["target_hidden_states"],
-+                kwargs.get("common_attn_metadata"),
++                kwargs.get("common_attn_metadata"), proposal_kwargs=kwargs,
 +            )
 +        return super().propose(*args, **kwargs)
 +

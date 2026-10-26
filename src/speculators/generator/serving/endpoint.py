@@ -108,7 +108,14 @@ def validate_adapter_delta(before, after):  # noqa: C901 -- historical/shared an
         raise ValueError(
             "Adapters were not executed or were not restored for all prepared requests"
         )
-    if before["configuration"]["kind"] == "generator" and delta[
+    experiment = before["configuration"].get("adapter_experiment") or {}
+    expected = delta["prepared_requests"] + delta.get("adapter_refreshes", 0)
+    if experiment.get("refresh") == "prefix":
+        if delta["generator_invocations"] != expected:
+            raise ValueError(
+                "Generator refresh count differs from observed adapter updates"
+            )
+    elif before["configuration"]["kind"] == "generator" and delta[
         "generator_invocations"
     ] != (
         delta["prepared_requests"]
@@ -137,6 +144,12 @@ def validate_adapter_delta(before, after):  # noqa: C901 -- historical/shared an
             delta["mean_draft_batch_size"] = (
                 delta["draft_forward_requests"] / delta["draft_forward_calls"]
             )
+    if delta.get("scale_observations", 0):
+        delta["mean_effective_scale"] = delta["scale_sum"] / delta["scale_observations"]
+    if delta.get("generator_invocations", 0):
+        delta["generator_ms_per_call"] = (
+            1000 * delta["generator_seconds"] / delta["generator_invocations"]
+        )
     return delta
 
 

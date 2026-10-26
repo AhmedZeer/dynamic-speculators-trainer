@@ -1,0 +1,9 @@
+extends: ../common/training.yaml
+name: replay_prompt_lk
+repo_id: azeeer/eagle3-replay-prompt-lk-4k-1500-v4
+wandb:
+  project: eagle3-generator-replay-train-v4
+replay: true
+initial_checkpoint: ${SPECULATORS_STUDY_ROOT}/training/prompt_lk/checkpoints/step-00000500/checkpoint.pt
+initial_step: 500
+replay_rounds_per_episode: 4

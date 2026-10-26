@@ -1,0 +1,6 @@
+extends: ../common/training.yaml
+name: prompt_kl
+repo_id: azeeer/eagle3-prompt-kl-4k-1500-v4
+wandb:
+  project: eagle3-generator-objectives-train-v4
+loss: kl_div

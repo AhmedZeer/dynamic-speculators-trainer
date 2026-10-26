@@ -1,0 +1,12 @@
+extends: ../../common/inference.yaml
+models:
+- name: conditioning-correct
+  type: generator
+  model: azeeer/eagle3-generator-all24k-10ep-v1
+  conditioning_examples: 1
+  adapter_experiment:
+    scale: 2.0
+  revision: bf3fb2818dc1c09f3324b7193d00ceb292a8a854
+  subfolder: step-00004000
+wandb:
+  project: eagle3-generator-conditioning-bench-v4

@@ -1,0 +1,10 @@
+extends: ../../common/inference.yaml
+models:
+- name: vanilla-eagle3
+  type: drafter
+  model: RedHatAI/Qwen3-8B-speculator.eagle3
+  revision: 08610ffa01dd9f16731fe8f627b85905b6aa51c4
+  vanilla_vllm: true
+  batching_policy: continuous
+wandb:
+  project: eagle3-generator-reference-bench-v4

@@ -3,8 +3,10 @@
 from pathlib import Path
 from typing import Literal
 
-import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from speculators.experiment_config import load_experiment_yaml
+from speculators.generator.feedback import AdapterExperiment
 
 MAX_CONCURRENCY = 8
 
@@ -23,6 +25,7 @@ class Model(Strict):
     adapter_policy: Literal["shared", "per_request"] = "shared"
     vanilla_vllm: bool = False
     batching_policy: Literal["fixed_shared_adapter", "continuous"] | None = None
+    adapter_experiment: AdapterExperiment | None = None
 
     @model_validator(mode="after")
     def generator_conditioning_only(self):
@@ -34,6 +37,8 @@ class Model(Strict):
             raise ValueError("per_request requires a singleton-conditioned generator")
         if self.vanilla_vllm and self.type != "drafter":
             raise ValueError("vanilla_vllm is available for original drafters only")
+        if self.adapter_experiment is not None and self.type != "generator":
+            raise ValueError("adapter_experiment requires a generator")
         return self
 
     @field_validator("subfolder")
@@ -51,6 +56,7 @@ class Benchmark(Strict):
     name: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
     categories: list[str] = Field(default_factory=lambda: ["all"], min_length=1)
     prompt_format: Literal["auto", "raw", "chat"] = "auto"
+    validation_manifest: Path | None = None
 
     @field_validator("categories", mode="before")
     @classmethod
@@ -64,6 +70,14 @@ class Benchmark(Strict):
     @property
     def label(self):
         return self.name or ("nemotron" if self.dataset == "nemotron" else "specbench")
+
+
+class BenchmarkTracking(Strict):
+    enabled: bool = False
+    project: str = Field(default="eagle3-generator-benchmarks", min_length=1)
+    entity: str | None = None
+    group: str | None = None
+    mode: Literal["online", "offline", "disabled"] = "online"
 
 
 class Profiling(Strict):
@@ -117,6 +131,7 @@ class Suite(Strict):
     models: list[Model] = Field(min_length=1)
     benchmarks: list[Benchmark] = Field(min_length=1)
     settings: Settings = Field(default_factory=Settings)
+    wandb: BenchmarkTracking = Field(default_factory=BenchmarkTracking)
 
     @model_validator(mode="after")
     def unique_names(self):
@@ -125,6 +140,13 @@ class Suite(Strict):
         if len({b.label for b in self.benchmarks}) != len(self.benchmarks):
             raise ValueError("Repeated datasets require distinct benchmark names")
         for model in self.models:
+            if model.adapter_experiment is not None and (
+                self.settings.concurrency_values != [1]
+                or model.adapter_policy != "shared"
+            ):
+                raise ValueError(
+                    "Adapter ablations require C1 and merged shared execution"
+                )
             continuous = (
                 model.batching_policy or self.settings.batching_policy
             ) == "continuous"
@@ -144,4 +166,4 @@ class Suite(Strict):
 
     @classmethod
     def load(cls, path):
-        return cls.model_validate(yaml.safe_load(Path(path).read_text()))
+        return cls.model_validate(load_experiment_yaml(path))

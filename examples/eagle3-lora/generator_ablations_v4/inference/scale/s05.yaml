@@ -1,0 +1,10 @@
+extends: ../../common/inference.yaml
+models:
+- name: scale-s05
+  type: generator
+  model: ${SPECULATORS_STUDY_ROOT}/training/prompt_lk/checkpoints/step-00001500/bundle
+  conditioning_examples: 1
+  adapter_experiment:
+    scale: 0.5
+wandb:
+  project: eagle3-generator-scale-bench-v4

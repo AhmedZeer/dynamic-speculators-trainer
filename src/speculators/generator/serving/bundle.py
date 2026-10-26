@@ -29,6 +29,10 @@ PROVENANCE = (
     "eval_command.txt",
     "upload_manifest.json",
     "provenance",
+    "study.json",
+    "validation.json",
+    "metrics.jsonl",
+    "membership.json",
 )
 
 
@@ -56,6 +60,7 @@ def load_generator(metadata, state):
         metadata["rank"],
         Architecture.model_validate(metadata["architecture"]),
         metadata["max_examples"],
+        feedback_dim=metadata.get("feedback_dim", 0),
     ).float()
     generator.load_state_dict(state, strict=True)
     return generator.eval().requires_grad_(False)
@@ -161,6 +166,7 @@ def export_run(cfg, run_dir, output, *, drafter_model_path=None):  # noqa: C901 
     }
     if kind == "generator":
         metadata.update(
+            feedback_dim=job.get("feedback_dim", 0),
             input_dim=state["encoder.0.weight"].shape[1] - 1,
             architecture=identity["configuration"]["architecture"],
             max_examples=identity["configuration"]["context"]["max_examples"],

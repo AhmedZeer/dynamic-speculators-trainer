@@ -446,11 +446,7 @@ def test_lifecycle_hook_handles_target_only_and_delivers_finished_ids():
         namespace["update"](runner, output)
     received = []
     namespace["update"](
-        SimpleNamespace(
-            drafter=SimpleNamespace(
-                on_requests_finished=received.append
-            )
-        ),
+        SimpleNamespace(drafter=SimpleNamespace(on_requests_finished=received.append)),
         output,
     )
     assert received == [output.finished_req_ids]
@@ -700,7 +696,9 @@ def test_patched_proposer_merges_before_draft_and_restores_on_finish(monkeypatch
     monkeypatch.setattr(controller_module, "initialize_proposer", initialize)
     monkeypatch.setattr(controller_module, "DraftAdapterController", Controller)
     monkeypatch.setattr(
-        controller_module, "prepare_proposer", lambda *args: events.append("merge")
+        controller_module,
+        "prepare_proposer",
+        lambda *args, **kwargs: events.append("merge"),
     )
     manifest = json.loads((patch.PATCH_DIR / "manifest.json").read_text())
     replacement = manifest["files"]["vllm/v1/spec_decode/eagle.py"]["replacements"][0]

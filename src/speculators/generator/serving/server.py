@@ -64,6 +64,30 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
     adapter_policy = getattr(args, "adapter_policy", "shared")
     vanilla = getattr(args, "vanilla_vllm", False)
     profiler = getattr(args, "profiler_config", None)
+    experiment = getattr(args, "adapter_experiment", None)
+    if metadata and metadata.get("feedback_dim") and experiment is None:
+        raise ValueError(
+            "Feedback-trained bundles require an explicit adapter-experiment policy"
+        )
+    if experiment is not None:
+        from speculators.generator.feedback import AdapterExperiment  # noqa: PLC0415
+
+        experiment = AdapterExperiment.model_validate(experiment).model_dump(
+            mode="json"
+        )
+        if (
+            concurrency != 1
+            or adapter_policy != "shared"
+            or not metadata
+            or metadata["kind"] != "generator"
+        ):
+            raise ValueError(
+                "Adapter experiments require a merged generator at concurrency 1"
+            )
+        if experiment["feedback"] != bool(metadata.get("feedback_dim", 0)):
+            raise ValueError(
+                "Serving feedback inputs must match the trained generator bundle"
+            )
     if profiler is not None:
         from speculators.benchmark.profiling import validate_profiler_config  # noqa: PLC0415
 
@@ -178,7 +202,11 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
     }
     if profiler is not None:
         configuration["profiler"] = profiler
+    if experiment is not None:
+        configuration["adapter_experiment"] = experiment
     output = Path(args.provenance_dir)
+    if experiment is not None:
+        configuration["adapter_rounds_dir"] = str((output / "adapter_rounds").resolve())
     output.mkdir(parents=True, exist_ok=True)
     previous = output / "server.json"
     if previous.exists() and json.loads(previous.read_text()) != configuration:

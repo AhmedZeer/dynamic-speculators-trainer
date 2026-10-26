@@ -79,6 +79,14 @@ def resolve_model(spec, base, output, pinned=None):  # noqa: C901 -- pin local/r
         result["vanilla_vllm"] = True
     if spec.batching_policy is not None:
         result["batching_policy"] = spec.batching_policy
+    if spec.adapter_experiment is not None:
+        policy = spec.adapter_experiment.model_dump(mode="json")
+        if policy["donor_bank"]:
+            bank = Path(policy["donor_bank"]).resolve()
+            policy["donor_bank"] = str(bank)
+            result["donor_bank_sha256"] = file_digest(bank)
+            result["donor_metadata_sha256"] = file_digest(bank.with_suffix(".json"))
+        result["adapter_experiment"] = policy
     if spec.type == "drafter":
         if spec.subfolder:
             raise ValueError(
@@ -158,7 +166,7 @@ def ensure_inputs(cfg, *, nemotron):
                     )
 
 
-def prepare_workload(benchmark, cfg, output, settings, tokenizer):
+def prepare_workload(benchmark, cfg, output, settings, tokenizer):  # noqa: C901 -- explicit manifests and legacy workload exports
     request = {
         "benchmark": benchmark.model_dump(mode="json"),
         "max_samples": settings.max_samples,
@@ -170,6 +178,44 @@ def prepare_workload(benchmark, cfg, output, settings, tokenizer):
         raise ValueError("Frozen workload settings changed; choose a new output root")
     write_json(request_path, request)
     manifest_path = output / "manifest.json"
+    if benchmark.validation_manifest is not None and not manifest_path.exists():
+        source = Path(benchmark.validation_manifest).resolve()
+        source_manifest, source_groups = load_validation(source)
+        selected = benchmark.categories
+        names = (
+            list(source_groups)
+            if selected == ["all"]
+            else [
+                name if name in source_groups else "nemo-" + name for name in selected
+            ]
+        )
+        if any(name not in source_groups for name in names):
+            raise ValueError(
+                "Selected category is absent from the explicit validation manifest"
+            )
+        if any(len(source_groups[name]) > settings.max_samples for name in names):
+            raise ValueError(
+                "Explicit workload exceeds max_samples; "
+                "prepare the intended split first"
+            )
+        if source_manifest["max_tokens"] != settings.max_tokens:
+            raise ValueError(
+                "Explicit workload token cap differs from benchmark settings"
+            )
+        partial = output.with_name(output.name + ".pending")
+        if partial.exists():
+            shutil.rmtree(partial)
+        partial.mkdir(parents=True)
+        source_manifest["groups"] = {
+            name: source_manifest["groups"][name] for name in names
+        }
+        for name in names:
+            item = source_manifest["groups"][name]
+            shutil.copy2(source.parent / item["file"], partial / item["file"])
+        source_manifest.pop("identity")
+        source_manifest["identity"] = digest(source_manifest)
+        write_json(partial / "manifest.json", source_manifest)
+        partial.replace(output)
     if not manifest_path.exists():
         partial = output.with_name(output.name + ".pending")
         if partial.exists():

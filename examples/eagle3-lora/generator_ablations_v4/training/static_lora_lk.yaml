@@ -1,0 +1,6 @@
+extends: ../common/training.yaml
+name: static_lora_lk
+repo_id: azeeer/eagle3-static-lora-lk-4k-1500-v4
+wandb:
+  project: eagle3-generator-objectives-train-v4
+arm: lora

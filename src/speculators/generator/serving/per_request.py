@@ -190,6 +190,14 @@ def create_controller(proposer):
 
     bundle = proposer.speculative_config.draft_adapter_path
     serving = json.loads(os.environ.get("SPECULATORS_SERVER_CONFIG", "{}"))
+    if serving.get("adapter_experiment") is not None:
+        from speculators.generator.serving.experiments import (  # noqa: PLC0415
+            ExperimentalAdapterController,
+        )
+
+        return attach_ranges(
+            ExperimentalAdapterController(bundle, proposer.model), proposer.model
+        )
     if serving.get("adapter_policy") == "per_request":
         return attach_ranges(
             PerRequestAdapterController(bundle, proposer.model, proposer.vllm_config),

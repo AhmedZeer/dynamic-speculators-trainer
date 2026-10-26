@@ -1,0 +1,10 @@
+# Calibrate on inputs/tune before freezing test runs.
+scale_policy: acceptance_ema
+ema_decay: 0.9
+scale_min: 0.0
+scale_max: 4.0
+scale_step: 0.5
+low_acceptance: 0.35
+high_acceptance: 0.75
+low_action: decrease
+min_feedback_rounds: 3

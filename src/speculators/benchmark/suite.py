@@ -74,6 +74,8 @@ def server_command(root, model, target, settings, provenance):
         command += ["--adapter-policy", "per_request"]
     if model.get("vanilla_vllm"):
         command += ["--vanilla-vllm"]
+    if model.get("adapter_experiment") is not None:
+        command += ["--adapter-experiment", json.dumps(model["adapter_experiment"])]
     if settings.profiling is not None:
         from speculators.benchmark.profiling import profiler_config  # noqa: PLC0415
 
@@ -152,6 +154,8 @@ def verify_result(output, task, workload, model):  # noqa: C901 -- independent r
     }
     if identity["server"]["kind"] != expected_kind[model["type"]]:
         raise ValueError("Client measured the wrong server kind")
+    if identity["server"].get("adapter_experiment") != model.get("adapter_experiment"):
+        raise ValueError("Client measured a different adapter experiment")
     if (
         model.get("adapter_policy") == "per_request"
         and identity["server"].get("adapter_policy") != "per_request"
@@ -731,6 +735,9 @@ def run_suite(  # noqa: C901 -- resolve, launch and resume the complete suite
         finally:
             write_json(state_path, state)
             write_summary(output, plan, state)
+        from speculators.benchmark.tracking import publish_completed  # noqa: PLC0415
+
+        publish_completed(output, plan, state)
         failed = sum(
             entry["status"] != "completed" for entry in state["tasks"].values()
         )

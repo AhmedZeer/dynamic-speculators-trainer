@@ -1,0 +1,9 @@
+workspace: ${SPECULATORS_STUDY_ROOT}
+campaign_config: examples/eagle3-lora/generator_campaign_online.yaml
+training_subset: 1
+validation_subset: 0
+train_per_category: 1000
+tune_per_category: 50
+test_per_category: 50
+max_output_tokens: 256
+seed: 42

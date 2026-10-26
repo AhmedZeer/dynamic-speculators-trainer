@@ -1,0 +1,19 @@
+extends: ../../common/inference.yaml
+models:
+- name: calibration-increase
+  type: generator
+  model: ${SPECULATORS_STUDY_ROOT}/training/replay_prefix_lk/checkpoints/step-00001500/bundle
+  conditioning_examples: 1
+  adapter_experiment:
+    scale: 2.0
+    refresh: prefix
+    extends: ../../common/scale_controller.yaml
+    low_action: increase
+wandb:
+  project: eagle3-generator-scale-calibration-v4
+benchmarks:
+- dataset: nemotron
+  categories:
+  - math
+  - chat
+  validation_manifest: ${SPECULATORS_STUDY_ROOT}/inputs/tune/manifest.json

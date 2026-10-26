@@ -1,0 +1,11 @@
+extends: ../../common/inference.yaml
+models:
+- name: prompt_scale
+  type: generator
+  model: ${SPECULATORS_STUDY_ROOT}/training/prompt_lk/checkpoints/step-00001500/bundle
+  conditioning_examples: 1
+  adapter_experiment:
+    scale: 2.0
+    extends: ../../common/scale_controller.yaml
+wandb:
+  project: eagle3-generator-feedback-bench-v4
