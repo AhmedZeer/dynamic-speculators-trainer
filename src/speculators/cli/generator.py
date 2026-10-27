@@ -52,6 +52,26 @@ def train_experiment_command(
     )
 
 
+@app.command(name="train-feedback")
+def train_feedback_command(
+    config: ConfigOption,
+    resume: Annotated[bool, typer.Option("--resume")] = False,
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+):
+    """Run one current-policy online continuation, full generator or projector only."""
+    import json  # noqa: PLC0415
+
+    from speculators.generator.feedback_config import FeedbackStudy  # noqa: PLC0415
+    from speculators.generator.feedback_training import train_feedback  # noqa: PLC0415
+
+    typer.echo(
+        json.dumps(
+            train_feedback(FeedbackStudy.load(config), resume=resume, dry_run=dry_run),
+            indent=2,
+        )
+    )
+
+
 @app.command()
 def campaign(
     config: ConfigOption,

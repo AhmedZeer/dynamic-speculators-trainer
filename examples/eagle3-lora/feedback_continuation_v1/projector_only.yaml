@@ -1,0 +1,5 @@
+extends: common.yaml
+name: projector-from4000
+trainable: projector
+feedback: true
+repo_id: azeeer/eagle3-online-feedback-projector-4k-plus1k-v1

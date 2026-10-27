@@ -29,6 +29,7 @@ class ExperimentalAdapterController(DraftAdapterController):
         self.last_position = None
         self.proposed = None
         self.current_factors = None
+        self.prompt_summary = self.prompt_length = None
         self.rounds = []
         self.donors = self.donor_metadata = None
         if self.policy.donor_bank:
@@ -116,6 +117,7 @@ class ExperimentalAdapterController(DraftAdapterController):
                 )
             tokens = kwargs["target_token_ids"][:end].tolist()
             summary, length = self.select_summary(tokens, states[:end], lengths[0])
+            self.prompt_summary, self.prompt_length = summary.detach().clone(), length
             self.active = request_id
             self.active_requests = {request_id}
             self.completed_records.pop(request_id, None)
@@ -144,11 +146,14 @@ class ExperimentalAdapterController(DraftAdapterController):
             self.totals["feedback_accepted"] += accepted
             self.totals["feedback_proposed"] += self.proposed
             previous_scale = self.merger.scale
-            refresh = self.policy.refresh == "prefix"
+            refresh = self.policy.refresh == "prefix" or self.policy.feedback
             if refresh or previous_scale != self.feedback_state.scale:
-                self.apply_current(
-                    states[end - 1 : end].float(), position + 1, regenerate=refresh
+                summary, length = (
+                    (self.prompt_summary, self.prompt_length)
+                    if self.policy.refresh == "prompt"
+                    else (states[end - 1 : end].float(), position + 1)
                 )
+                self.apply_current(summary, length, regenerate=refresh)
                 self.totals["adapter_refreshes"] += 1
             if self.policy.record_rounds:
                 self.rounds.append(
@@ -189,6 +194,7 @@ class ExperimentalAdapterController(DraftAdapterController):
             self.feedback_state = VerifierFeedback(self.policy)
             self.last_position = self.proposed = self.current_factors = None
             self.rounds = []
+            self.prompt_summary = self.prompt_length = None
         return result
 
     @torch.inference_mode()

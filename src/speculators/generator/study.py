@@ -60,8 +60,10 @@ def update_members(study, members, step):
     return values
 
 
-def build_runtime(study, inputs):
+def build_runtime(study, inputs, *, architecture=None):
     cfg = campaign_settings(study)
+    if architecture is not None:
+        cfg.architecture = architecture
     subsets = [f"{d}-{study.training_subset:05d}" for d in inputs.banks]
     held = [f"{d}-{study.validation_subset:05d}" for d in inputs.banks]
     job = {
@@ -208,7 +210,7 @@ def save_snapshot(  # noqa: PLR0917 -- immutable training snapshot and portable 
         else factor_parameters(runtime.paths, runtime.adapter_state())
     )
     names = (
-        list(generator.state_dict())
+        [name for name, param in generator.named_parameters() if param.requires_grad]
         if generator is not None
         else [name for name, p in runtime.drafter.named_parameters() if p.requires_grad]
     )

@@ -84,6 +84,14 @@ def build_server(args, extra):  # noqa: C901 -- pinned launch contract
             raise ValueError(
                 "Adapter experiments require a merged generator at concurrency 1"
             )
+        if (
+            metadata.get("source_job", {}).get("conditioning_policy")
+            == "fixed_original_prompt"
+            and experiment["refresh"] != "prompt"
+        ):
+            raise ValueError(
+                "This continuation was trained with fixed original-prompt conditioning"
+            )
         if experiment["feedback"] != bool(metadata.get("feedback_dim", 0)):
             raise ValueError(
                 "Serving feedback inputs must match the trained generator bundle"

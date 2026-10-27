@@ -110,7 +110,7 @@ def validate_adapter_delta(before, after):  # noqa: C901 -- historical/shared an
         )
     experiment = before["configuration"].get("adapter_experiment") or {}
     expected = delta["prepared_requests"] + delta.get("adapter_refreshes", 0)
-    if experiment.get("refresh") == "prefix":
+    if experiment.get("refresh") == "prefix" or experiment.get("feedback"):
         if delta["generator_invocations"] != expected:
             raise ValueError(
                 "Generator refresh count differs from observed adapter updates"

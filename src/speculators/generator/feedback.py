@@ -36,8 +36,6 @@ class AdapterExperiment(BaseModel):
             )
         if self.conditioning != "correct" and self.refresh != "prompt":
             raise ValueError("Conditioning controls keep the adapter fixed per request")
-        if self.feedback and self.refresh != "prefix":
-            raise ValueError("Generator feedback requires prefix refresh")
         if (
             self.scale_min > self.scale_max
             or not self.scale_min <= self.scale <= self.scale_max
