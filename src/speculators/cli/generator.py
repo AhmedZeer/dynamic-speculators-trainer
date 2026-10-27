@@ -64,7 +64,7 @@ def train_feedback_command(
         float | None, typer.Option("--ram-cache-gib", min=0.1)
     ] = None,
 ):
-    """Run one current-policy online continuation, full generator or projector only."""
+    """Train a generator with optional feedback, or tune only its projector."""
     import json  # noqa: PLC0415
 
     from speculators.generator.feedback_config import FeedbackStudy  # noqa: PLC0415

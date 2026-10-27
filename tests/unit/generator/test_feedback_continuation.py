@@ -75,6 +75,64 @@ def test_two_configs_share_4k_budget_and_parent_but_separate_trainable_weights(
     assert values["final_lineage_step"] == 5000
 
 
+def test_v2_configs_match_full_training_budgets_and_validate_every_125(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("SPECULATORS_FEEDBACK_ROOT", str(tmp_path))
+    root = ROOT / "examples/eagle3-lora/feedback_continuation_v2"
+    regular = FeedbackStudy.load(root / "regular.yaml")
+    feedback = FeedbackStudy.load(root / "feedback.yaml")
+    assert regular.parent == feedback.parent
+    for cfg in (regular, feedback):
+        assert cfg.train_per_category == 1000
+        assert cfg.steps == 1000
+        assert cfg.examples_per_update == 8
+        assert cfg.rollout_tokens == 64
+        assert cfg.validation_interval == 125
+        assert cfg.wandb.project == "eagle3-generator-online-feedback-v2"
+        assert cfg.wandb.group == "step4000-4k-plus1000-full-generator"
+    assert regular.feedback is False
+    assert regular.trainable == "generator"
+    assert feedback.feedback is True
+    assert feedback.trainable == "generator_and_projector"
+    assert regular.output != feedback.output
+    assert regular.repo_id != feedback.repo_id
+    assert (
+        regular.output
+        != FeedbackStudy.load(
+            root.parent / "feedback_continuation_v1/regular.yaml"
+        ).output
+    )
+    result = CliRunner().invoke(
+        app,
+        [
+            "generator",
+            "train-feedback",
+            "--config",
+            str(root / "feedback.yaml"),
+            "--dry-run",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    value = json.loads(result.output)
+    assert value["configuration"]["validation_interval"] == 125
+    assert value["configuration"]["trainable"] == "generator_and_projector"
+    assert value["training_examples"] == 4000
+
+
+@pytest.mark.parametrize(
+    "trainable", ["generator", "projector", "generator_and_projector"]
+)
+def test_feedback_mode_rejects_incompatible_trainability(tmp_path, trainable):
+    with pytest.raises(ValueError, match="Feedback requires"):
+        FeedbackStudy(
+            workspace=tmp_path,
+            parent={"model": str(tmp_path)},
+            trainable=trainable,
+            feedback=trainable == "generator",
+        )
+
+
 def test_feedback_collection_keeps_prompt_fixed_and_never_supervises_invalid_suffix(
     tmp_path,
 ):
@@ -103,7 +161,7 @@ def test_feedback_collection_keeps_prompt_fixed_and_never_supervises_invalid_suf
     trainer.stream = StreamingDraft(runtime)
     trainer.eos, trainer.prompt_futures = [], {}
     trainer.loss = next(iter(resolve_loss_config("lk_hybrid", "eager").values()))[0]
-    trainer.extract = lambda tokens: (
+    trainer.extract = lambda tokens, **kwargs: (
         torch.arange(len(tokens) * 32).reshape(-1, 4, 8).float() / 100
     )
     trainer.teacher = lambda states: torch.tensor([[4.0] + [0.0] * 15]).expand(
@@ -301,7 +359,40 @@ def feedback_fixture(online_campaign, tmp_path, monkeypatch):  # noqa: F811
     return definition, generator.state_dict(), requests
 
 
-@pytest.mark.parametrize("trainable", ["generator", "projector"])
+def test_full_feedback_preserves_parent_function_and_trains_all_generator_parameters(
+    feedback_fixture,
+):
+    definition, _, _ = feedback_fixture
+    metadata, state = feedback_training.bundle_state(definition.parent.model)
+    inputs = load_local_inputs(study.campaign_settings(definition))
+    runtime, _, _ = study.build_runtime(
+        definition, inputs, architecture=small_architecture()
+    )
+    try:
+        regular = feedback_training.initialize_generator(
+            runtime, definition, metadata, state
+        )
+        cfg = definition.model_copy(
+            update={"trainable": "generator_and_projector", "feedback": True}
+        )
+        feedback = feedback_training.initialize_generator(runtime, cfg, metadata, state)
+        assert all(p.requires_grad for p in feedback.parameters())
+        assert not any(p.requires_grad for p in runtime.drafter.parameters())
+        assert torch.count_nonzero(feedback.feedback_encoder.weight) == 0
+        summary, lengths = torch.randn(1, 24), torch.tensor([5])
+        expected = regular(summary, lengths)
+        for signal in (torch.zeros(3), torch.tensor([0.5, 0.25, 1.0])):
+            actual = feedback(summary, lengths, feedback=signal)
+            for name, pair in expected.items():
+                for left, right in zip(pair, actual[name], strict=True):
+                    torch.testing.assert_close(left, right, rtol=0, atol=0)
+    finally:
+        runtime.corpus.cache.close()
+
+
+@pytest.mark.parametrize(
+    "trainable", ["generator", "projector", "generator_and_projector"]
+)
 def test_full_online_continuation_freeze_export_and_resume(
     feedback_fixture, trainable, monkeypatch
 ):
@@ -310,7 +401,7 @@ def test_full_online_continuation_freeze_export_and_resume(
         update={
             "name": trainable,
             "trainable": trainable,
-            "feedback": trainable == "projector",
+            "feedback": trainable != "generator",
         }
     )
     original_upload = study.upload_snapshot
@@ -343,8 +434,15 @@ def test_full_online_continuation_freeze_export_and_resume(
             torch.testing.assert_close(
                 saved["model"][key], parent_state[key], rtol=0, atol=0
             )
+    elif trainable == "generator_and_projector":
+        assert set(saved["parameter_names"]) == set(saved["model"])
+        assert saved["model"]["feedback_encoder.weight"].abs().sum() > 0
+        assert any(
+            not torch.equal(saved["model"][key], parent_state[key])
+            for key in parent_state
+        )
     bundle = read_bundle(cfg.output / "checkpoints/step-00000002/bundle")
-    assert bundle["feedback_dim"] == (3 if trainable == "projector" else 0)
+    assert bundle["feedback_dim"] == (0 if trainable == "generator" else 3)
     before = len(requests)
     assert feedback_training.train_feedback(cfg, resume=True)["completed_updates"] == 2
     assert len(requests) == before
@@ -354,6 +452,10 @@ def test_full_online_continuation_freeze_export_and_resume(
     assert {row["policy_optimizer_step"] for row in trace} == {1}
     membership = json.loads((cfg.inputs / "membership.json").read_text())
     assert {len(g["train"]) for g in membership["groups"].values()} == {8}
+    if trainable == "generator_and_projector":
+        incompatible = cfg.model_copy(update={"trainable": "projector"})
+        with pytest.raises(ValueError, match="configuration changed"):
+            feedback_training.train_feedback(incompatible, resume=True)
 
 
 @pytest.fixture
@@ -404,7 +506,7 @@ def fast_trainer(tmp_path):
     activity = {"active": 0, "peak": 0}
     lock = Lock()
 
-    def extract(tokens):
+    def extract(tokens, **kwargs):
         verification = len(tokens) > 2
         if verification:
             with lock:
@@ -443,13 +545,16 @@ def test_parallel_collection_matches_serial_policy_and_overlaps_verification(
             torch.testing.assert_close(a.feedback, b.feedback)
 
 
-@pytest.mark.parametrize("feedback", [False, True])
+@pytest.mark.parametrize(
+    "trainable", ["generator", "projector", "generator_and_projector"]
+)
 def test_factor_gradient_accumulation_matches_repeated_generator_backward(
-    fast_trainer, feedback
+    fast_trainer, trainable
 ):
     from speculators.generator.model import LoRAGenerator  # noqa: PLC0415
 
     trainer, _ = fast_trainer
+    feedback = trainable != "generator"
     if not feedback:
         old = trainer.generator
         fresh = LoRAGenerator(24, old.shapes, old.rank, small_architecture())
@@ -464,9 +569,11 @@ def test_factor_gradient_accumulation_matches_repeated_generator_backward(
         trainer.study = trainer.study.model_copy(
             update={"feedback": False, "trainable": "generator"}
         )
-    else:
+    elif trainable == "projector":
         trainer.generator.requires_grad_(False)
         trainer.generator.feedback_encoder.requires_grad_(True)
+    else:
+        trainer.study = trainer.study.model_copy(update={"trainable": trainable})
     summary, blocks, _ = trainer.collect(0)
     positions = sum(len(block.verified_tokens) for block in blocks)
     reference_loss = 0.0
@@ -572,6 +679,12 @@ def test_execution_controls_fit_memory_without_changing_study_identity(monkeypat
     )
     config = feedback_execution.execution_settings(runtime)
     assert config["rollout_concurrency"] == 8
+    monkeypatch.setattr(
+        torch.cuda,
+        "get_device_properties",
+        lambda device: SimpleNamespace(total_memory=40 * 2**30),
+    )
+    assert feedback_execution.execution_settings(runtime)["rollout_concurrency"] == 8
     assert runtime.corpus.cache.cfg.online.ram_cache_gib == 96
     assert runtime.corpus.cache.ram.limit < feedback_execution.memory_limit_bytes()
 

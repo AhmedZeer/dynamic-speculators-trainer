@@ -1,4 +1,4 @@
-"""Independent full-generator and projector-only online continuation configs."""
+"""Independent regular, projector-only and full-feedback continuation configs."""
 
 import re
 from pathlib import Path
@@ -37,7 +37,7 @@ class FeedbackStudy(GeneratorStudy):
     """Override the legacy replay-only validator for this separate training mode."""
 
     parent: ParentBundle
-    trainable: Literal["generator", "projector"]
+    trainable: Literal["generator", "projector", "generator_and_projector"]
     conditioning: Literal["prompt"] = "prompt"
     loss: Literal["lk_hybrid"] = "lk_hybrid"
     rollout_tokens: int = Field(default=64, ge=4, le=8192)
@@ -55,6 +55,9 @@ class FeedbackStudy(GeneratorStudy):
                 "Feedback continuation loads a bundle; "
                 "replay/LoRA/local-parent modes are disabled"
             )
-        if self.feedback != (self.trainable == "projector"):
-            raise ValueError("Only the projector arm enables feedback")
+        if self.feedback != (self.trainable != "generator"):
+            raise ValueError(
+                "Feedback requires projector or generator_and_projector training; "
+                "the regular generator arm disables feedback"
+            )
         return self

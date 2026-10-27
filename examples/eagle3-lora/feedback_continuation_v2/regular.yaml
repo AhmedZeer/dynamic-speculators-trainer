@@ -1,0 +1,5 @@
+extends: common.yaml
+name: regular-full-from4000-v2
+trainable: generator
+feedback: false
+repo_id: azeeer/eagle3-online-regular-full-4k-plus1k-v2

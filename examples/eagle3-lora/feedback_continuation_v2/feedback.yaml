@@ -1,0 +1,5 @@
+extends: common.yaml
+name: feedback-full-from4000-v2
+trainable: generator_and_projector
+feedback: true
+repo_id: azeeer/eagle3-online-feedback-full-4k-plus1k-v2

@@ -1,5 +1,9 @@
 # Online feedback continuation from generator step 4000
 
+Current comparison: [full-generator feedback v2](eagle3_online_feedback_continuation_v2.md),
+with both arms training the whole generator and validating every 125 steps. This
+record preserves the original projector-only setup and rollback history.
+
 Status: implemented; CPU regression tests, no live A100 measurements for this stage.
 This is a separate study from the v4 rejected-suffix replay experiments.
 
@@ -243,7 +247,7 @@ rollouts, 8-example optimizer batch and complete validation memberships:
 Resource settings are execution options, recorded in `execution.json` and each
 attempt's provenance. They do not change the checkpoint's experiment identity, so
 concurrency/RAM settings can be changed while resuming the same experiment. Automatic
-concurrency is 8 with at least 60 GiB GPU memory and 2 otherwise; the default RAM
+concurrency is 8 with at least 35 GiB GPU memory and 2 otherwise; the default RAM
 ceiling respects detected cgroup limits. Set the flags explicitly when desired.
 
 On an 80 GB GPU, for each arm:
@@ -261,8 +265,8 @@ speculators generator train-feedback \
 ```
 
 The user reports eight requests fit on the observed 40 GB GPU. Use explicit
-`--rollout-concurrency 8` there; automatic selection remains conservatively at 2
-on that device after the rollback below. The extractor needs its supported
+`--rollout-concurrency 8` there, or automatic selection (now restored to 8 on this
+device). The extractor needs its supported
 configuration; concurrency cannot provide memory that the GPU does not have.
 
 New performance panels separate collection wall seconds, backward wall seconds,
@@ -279,6 +283,8 @@ skipped. These are correctness/work-reduction checks; real GPU speedup remains t
 be measured from the new phase timings. No A100 speedup factor is claimed here.
 
 ### Latest optimization pass reverted (2026-10-27)
+
+Historical decision; the next section records its subsequent restoration.
 
 At the user's request, commit `d0e5f28` was reverted. The streaming drafter again
 projects every query position into vocabulary logits, teacher-forced proposals
@@ -300,3 +306,13 @@ feedback-projector result or a held-out acceptance measurement. It provides no
 clear early improvement signal, but does not establish that feedback is ineffective
 or attribute the curve to the reverted execution changes. No experiment-wide
 conclusion or throughput gain is recorded from this plot.
+
+### Restored optimizations and full-generator feedback v2 (2026-10-27)
+
+At the user's subsequent request the latest optimization pass was restored,
+including last-position-only vocabulary projection, direct teacher-forced token
+selection and suffix-only activation scans. The new
+[v2 comparison](eagle3_online_feedback_continuation_v2.md) trains the whole
+generator in both arms, adds a trainable feedback projector to one arm, and uses
+125-step validation. Old projector-only runs/configs remain separate; no historical
+training result or measured speedup is inferred from the restoration itself.
