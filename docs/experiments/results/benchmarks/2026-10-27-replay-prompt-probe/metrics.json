@@ -1,0 +1,123 @@
+{
+  "experiment_id": "GEN-006",
+  "observation_date": "2026-10-27",
+  "status": "preliminary_visual_evidence",
+  "metric": "validation_scores/prompt_probe_agreement",
+  "metric_definition": "Equal-weight mean of category full_acc_0; singleton prompt-conditioned teacher-forced probe on tuning rows. Feedback input is zero.",
+  "precision": "Approximate visual readings; not exported measurements. Do not treat small arm differences as significant.",
+  "setup": {
+    "training_examples": 4000,
+    "training_examples_per_category": 1000,
+    "categories": [
+      "math",
+      "code",
+      "stem",
+      "chat"
+    ],
+    "examples_per_update": 8,
+    "seed": 42,
+    "final_total_updates": 1000,
+    "replay_parent_update": 500,
+    "new_replay_updates": 500,
+    "max_replay_rounds_per_request": 4,
+    "draft_tokens_per_round": 3,
+    "tune_examples_per_category": 50,
+    "budget_matched": "optimizer updates, not supervised positions, target compute or wall time"
+  },
+  "approximate_overall_probe": [
+    {
+      "run": "prompt_lk-gseed42",
+      "step": 1000,
+      "agreement_approx": 0.793,
+      "evidence": "objectives-prompt-probe"
+    },
+    {
+      "run": "prompt_ce-gseed42",
+      "step": 1000,
+      "agreement_approx": 0.792,
+      "evidence": "objectives-prompt-probe"
+    },
+    {
+      "run": "static_lora_lk-gseed42",
+      "step": 1000,
+      "agreement_approx": 0.777,
+      "evidence": "objectives-prompt-probe"
+    },
+    {
+      "run": "replay_prompt_lk-gseed42",
+      "step": 500,
+      "agreement_approx": 0.788,
+      "evidence": "prompt-replay-prompt-probe"
+    },
+    {
+      "run": "replay_prompt_lk-gseed42",
+      "step": 1000,
+      "agreement_approx": 0.762,
+      "evidence": "prompt-replay-prompt-probe"
+    },
+    {
+      "run": "replay_prefix_lk-gseed42",
+      "step": 500,
+      "agreement_approx": 0.788,
+      "evidence": "prefix-feedback-prompt-probe"
+    },
+    {
+      "run": "replay_prefix_lk-gseed42",
+      "step": 1000,
+      "agreement_approx": 0.762,
+      "evidence": "prefix-feedback-prompt-probe"
+    },
+    {
+      "run": "replay_prefix_feedback_lk-gseed42",
+      "step": 500,
+      "agreement_approx": 0.788,
+      "evidence": "prefix-feedback-prompt-probe"
+    },
+    {
+      "run": "replay_prefix_feedback_lk-gseed42",
+      "step": 1000,
+      "agreement_approx": 0.762,
+      "evidence": "prefix-feedback-prompt-probe"
+    }
+  ],
+  "observations": [
+    "All three replay arms lose approximately 2.6 percentage points of overall prompt-probe agreement between steps 500 and 1000.",
+    "Endpoint degradation appears in all four categories.",
+    "Prefix refresh and feedback do not rescue this prompt-probe endpoint.",
+    "Training loss is noisy with no clear visual separation between prefix and prefix-feedback arms."
+  ],
+  "missing": [
+    "raw W&B metric exports",
+    "complete run IDs for all arms",
+    "checkpoint hashes and per-run code/provenance confirmation",
+    "repeated seeds and uncertainty estimates",
+    "matched serving acceptance and throughput"
+  ],
+  "evidence": {
+    "objectives-prompt-probe": {
+      "file": "../../assets/GEN-006-objectives-prompt-probe.png",
+      "sha256": "210533c2f3aab2c8c39a8c96f87e7532e52b6857fb6f1762062b7923b093698b",
+      "source": "User-supplied W&B screenshot; received 2026-10-27"
+    },
+    "prefix-feedback-training-loss": {
+      "file": "../../assets/GEN-006-prefix-feedback-training-loss.png",
+      "sha256": "6e0be1faefcb404a1b1cb310035fded490d59af741739fad42d3435753363585",
+      "source": "User-supplied W&B screenshot; received 2026-10-27"
+    },
+    "prompt-replay-training-loss": {
+      "file": "../../assets/GEN-006-prompt-replay-training-loss.png",
+      "sha256": "f56491be33d81adab11b53c66bc3d5c5ab3e282393c415134d76ae7a48133f0b",
+      "source": "User-supplied W&B screenshot; received 2026-10-27"
+    },
+    "prompt-replay-prompt-probe": {
+      "file": "../../assets/GEN-006-prompt-replay-prompt-probe.png",
+      "sha256": "f4bba60468a4ae9a18ab4fe26c6438e5cafe543efc4e35514403138dcef3d081",
+      "source": "User-supplied W&B screenshot; received 2026-10-27"
+    },
+    "prefix-feedback-prompt-probe": {
+      "file": "../../assets/GEN-006-prefix-feedback-prompt-probe.png",
+      "sha256": "afd01c3392a8c1c2d69dbc9ffdc0ab95a40e7b5a9dde30038fd2e14efbdba31f",
+      "source": "User-supplied W&B screenshot; received 2026-10-27"
+    }
+  }
+}
