@@ -103,7 +103,7 @@ def test_feedback_collection_keeps_prompt_fixed_and_never_supervises_invalid_suf
     trainer.stream = StreamingDraft(runtime)
     trainer.eos, trainer.prompt_futures = [], {}
     trainer.loss = next(iter(resolve_loss_config("lk_hybrid", "eager").values()))[0]
-    trainer.extract = lambda tokens: (
+    trainer.extract = lambda tokens, **kwargs: (
         torch.arange(len(tokens) * 32).reshape(-1, 4, 8).float() / 100
     )
     trainer.teacher = lambda states: torch.tensor([[4.0] + [0.0] * 15]).expand(
@@ -404,7 +404,7 @@ def fast_trainer(tmp_path):
     activity = {"active": 0, "peak": 0}
     lock = Lock()
 
-    def extract(tokens):
+    def extract(tokens, **kwargs):
         verification = len(tokens) > 2
         if verification:
             with lock:
@@ -572,6 +572,12 @@ def test_execution_controls_fit_memory_without_changing_study_identity(monkeypat
     )
     config = feedback_execution.execution_settings(runtime)
     assert config["rollout_concurrency"] == 8
+    monkeypatch.setattr(
+        torch.cuda,
+        "get_device_properties",
+        lambda device: SimpleNamespace(total_memory=40 * 2**30),
+    )
+    assert feedback_execution.execution_settings(runtime)["rollout_concurrency"] == 8
     assert runtime.corpus.cache.cfg.online.ram_cache_gib == 96
     assert runtime.corpus.cache.ram.limit < feedback_execution.memory_limit_bytes()
 

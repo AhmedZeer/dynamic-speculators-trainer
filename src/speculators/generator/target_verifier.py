@@ -33,8 +33,11 @@ class FrozenTarget:
         self.stats_lock = Lock()
         self.teacher_rpc_seconds = self.teacher_file_seconds = 0.0
         self.teacher_file_bytes = 0
+        self.teacher_validated_tokens = 0
 
-    def extract(self, tokens):
+    def extract(self, tokens, *, validate_from=0):
+        if not 0 <= validate_from < len(tokens):
+            raise ValueError("Activation validation offset is outside the request")
         started = time.perf_counter()
         cache = self.runtime.corpus.cache
         path = Path(
@@ -59,7 +62,8 @@ class FrozenTarget:
             # Tensor storage keeps memory mappings alive after unlink, avoiding
             # a full-prefix Python bytes buffer and its deserialization copy.
             payload = load_file(path, device="cpu")
-            check_hidden_states(payload, tokens)
+            if not {"token_ids", "hidden_states"}.issubset(payload):
+                raise ValueError("Hidden-state payload is missing required tensors")
             states = payload["hidden_states"]
             expected = (
                 len(tokens),
@@ -74,6 +78,20 @@ class FrozenTarget:
                 raise ValueError(
                     "Target hidden-state dtype differs from the training recipe"
                 )
+            if validate_from and payload["token_ids"].tolist() != tokens:
+                raise ValueError(
+                    "Target hidden-state token IDs differ from the request"
+                )
+            # The online loop consumes only newly verified positions. Earlier
+            # activations were validated when first consumed and are never read
+            # from this response. Do not fault/scan their full mmap again.
+            check_hidden_states(
+                {
+                    "token_ids": payload["token_ids"][validate_from:],
+                    "hidden_states": states[validate_from:],
+                },
+                tokens[validate_from:],
+            )
             with self.stats_lock:
                 self.teacher_requests += 1
                 self.teacher_seconds += time.perf_counter() - started
@@ -81,6 +99,7 @@ class FrozenTarget:
                 self.teacher_rpc_seconds += rpc_seconds
                 self.teacher_file_seconds += time.perf_counter() - file_started
                 self.teacher_file_bytes += file_bytes
+                self.teacher_validated_tokens += len(tokens) - validate_from
             return states
         finally:
             path.unlink(missing_ok=True)
