@@ -1,6 +1,8 @@
 # Generator dynamism experiments, v4
 
-Status: implementation and CPU verification; GPU measurements have not been run.
+Status: implementation and CPU verification; user-supplied GPU measurements for
+correct, fixed-donor and cross-category conditioning are recorded below. Other
+GPU experiments remain unverified in this record.
 Each leaf YAML is one independently runnable experiment. There is no ablation
 runner. YAML `extends` only merges configuration; it never launches another run.
 Run commands from the repository root.
@@ -212,6 +214,118 @@ speculators benchmark suite --config "$CFG/inference/conditioning/fixed.yaml" \
 speculators benchmark suite --config "$CFG/inference/conditioning/same_category.yaml" \
   --output-root "$SPECULATORS_STUDY_ROOT/benchmarks/conditioning-same_category" --resume
 ```
+
+### Conditioning measurements and questions (2026-10-27)
+
+**Evidence status.** The user supplied `summary.json`, `state.json`,
+`failures.json`, `suite_request.json`, and the final 30 lines of server/client
+logs for three policies. All six category tasks report `completed`, attempt 1,
+50 successful requests, and `wandb_published: true`; each suite reports one server
+attempt and an empty failure map. These are transcribed measurements from the
+supplied outputs, not a rerun or an independent verification of the remote files.
+No same-category results have been supplied, so the conditioning study is partial.
+
+**Setup recorded in the requests.** All three policies use
+`azeeer/eagle3-generator-all24k-10ep-v1`, revision
+`bf3fb2818dc1c09f3324b7193d00ceb292a8a854`, subfolder `step-00004000`.
+They use prompt-once conditioning, one conditioning example, fixed effective
+scale 2, no feedback, three speculative tokens, concurrency 1,
+`fixed_shared_adapter` batching, 50 test prompts per category, a 256-output-token
+cap, three warmups and seed 42. This checkpoint is the existing remote model,
+not one of the newly trained step-1000 v4 bundles. The requests reference
+`$SPECULATORS_STUDY_ROOT/inputs/test/manifest.json`; fixed and cross-category
+policies also reference `inputs/conditioning.safetensors`.
+
+**Measurements.** Throughput is aggregate output tokens/s, including prefill and
+serving overhead. Acceptance is accepted draft tokens / proposed draft tokens;
+accepted prefix excludes the bonus token. Latency is median request latency.
+
+| Policy | Category | Output tokens/s | Draft acceptance | Accepted prefix | Median latency (s) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Correct | math | 79.2963 | 65.0545% | 1.9516 | 3.1410 |
+| Fixed donor | math | 77.1801 | 64.9183% | 1.9476 | 3.2382 |
+| Cross-category | math | 70.1106 | 53.9614% | 1.6188 | 3.5765 |
+| Correct | chat | 59.9882 | 40.8347% | 1.2250 | 4.1086 |
+| Fixed donor | chat | 54.0325 | 35.4138% | 1.0624 | 4.5356 |
+| Cross-category | chat | 55.2330 | 35.5605% | 1.0668 | 4.4738 |
+
+The native counters supporting acceptance and accepted-prefix measurements are:
+
+| Policy | Category | Accepted draft tokens | Proposed draft tokens | Verification rounds |
+| --- | --- | ---: | ---: | ---: |
+| Correct | math | 8474 | 13026 | 4342 |
+| Fixed donor | math | 8466 | 13041 | 4347 |
+| Cross-category | math | 7921 | 14679 | 4893 |
+| Correct | chat | 6663 | 16317 | 5439 |
+| Fixed donor | chat | 6230 | 17592 | 5864 |
+| Cross-category | chat | 6243 | 17556 | 5852 |
+
+**Questions and current answers.** Percentage throughput gains below use the
+comparison policy as denominator; acceptance changes are percentage points.
+
+1. **Does correct conditioning outperform one fixed training donor?** On chat,
+   correct conditioning gives 11.0% higher throughput and 5.42 percentage points
+   higher acceptance. On math, throughput is 2.7% higher but acceptance differs
+   by only 0.14 percentage points. The evidence supports a chat benefit against
+   this particular fixed donor; the small math timing difference needs repeats.
+2. **Does conditioning from the wrong category hurt?** Relative to correct
+   conditioning, the cross-category policy has lower acceptance and throughput
+   in both categories. Correct conditioning gives 13.1% higher throughput and
+   11.09 percentage points higher acceptance on math, and 8.6% higher throughput
+   and 5.27 percentage points higher acceptance on chat. These measurements
+   support sensitivity to cross-category donor substitution on this checkpoint.
+3. **Is math insensitive to conditioning?** The fixed-donor comparison alone
+   showed nearly unchanged acceptance, but the cross-category comparison does
+   not. The narrower observation is that the particular fixed donor preserved
+   math acceptance while the selected cross-category donors reduced it. No donor
+   category or general donor-independence claim follows from the fixed result.
+4. **Is a different prompt from the same category sufficient?** Open: no
+   `same_category` measurement was supplied. Its implementation and command above
+   are not measured evidence.
+5. **Is the benefit category information or prompt-specific information?** Open:
+   the same-category control is needed to separate these explanations. The
+   available measurements establish neither explanation alone.
+6. **Could generator execution cost explain the policy difference?** Reported
+   generator time is about 1.95--2.00 ms/call across all six tasks, with exactly
+   50 invocations and zero adapter refreshes per task. The observed acceptance
+   changes are consistent with different draft quality rather than a large
+   change in generator execution cost; these timings do not isolate every
+   component of serving overhead.
+
+**Evidence locations and identities.** The actual supplied cross-category output
+folder is `benchmarks/cross-category`, differing from the suggested command's
+`benchmarks/conditioning-cross_category`. All paths below are relative to
+`/content/drive/MyDrive/dyn-spec-ablations-v4`.
+
+| Policy | Output folder | Suite identity |
+| --- | --- | --- |
+| Correct | `benchmarks/conditioning-correct` | `860c8f59f81c51f5fce534dd9ba68394c0c23c998c00989e345cd820f9ceb04c` |
+| Fixed donor | `benchmarks/conditioning-fixed` | `eb3cbb80955fb3ddbeba30f3ebb290d29b514347873a348e13dd1e2c82087646` |
+| Cross-category | `benchmarks/cross-category` | `de3c3f45e592088bfa81fee4213b1d5fbc4aa71d5ca022a592e95a3053159b53` |
+
+In each output folder, `summary.json` holds the metrics above and `state.json`
+records completion and checksums for each task's `results.json`,
+`benchmark_identity.json` and GuideLLM JSON. Native task results live under
+`measurements/conditioning-<policy>/nemotron/nemo-<category>/attempt-0001/`;
+server logs live under `servers/conditioning-<policy>/attempt-0001/server.log`,
+using `cross_category` for that policy's name. All three policies report identical
+per-category dataset hashes:
+
+- Math: `d7e7f7f47881d09f1e1d1847691ea5a314a38cdb61400ae00b8782ec5170b89f`.
+- Chat: `845fa6ea14a05c498e057b19cf8b43a26f5b7dbc9bbd70f262bd0bf0c7a939d6`.
+
+**Limits and remaining evidence.** These are single executions on 50 prompts per
+category, without repeat uncertainty estimates or supplied hardware metadata.
+The same-category control remains missing. All policies record
+`correctness_status: not_checked`; identical total output counts (12,800 math,
+12,102 chat) do not establish identical text or correctness. The server tails
+show force-kill/semaphore cleanup warnings after measurements completed; the
+supplied task state and client logs report successful completion. Full resolved
+plans, donor hashes/selections, command/version artifacts, checkpoint hashes and
+patches were not supplied or independently inspected here. Retain the original
+run directories and their provenance artifacts with these measurements; this
+transcription does not replace those artifacts. No baseline speedup, general
+model ranking, or final conclusion is established by this partial study.
 
 ### Objectives
 
