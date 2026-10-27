@@ -260,8 +260,9 @@ speculators generator train-feedback \
   --rollout-concurrency 8 --ram-cache-gib 48 --resume
 ```
 
-On the observed 40 GB GPU, use `--rollout-concurrency 2`, or omit the concurrency
-flag for automatic selection. The extractor still needs its existing supported
+The user reports eight requests fit on the observed 40 GB GPU. Use explicit
+`--rollout-concurrency 8` there; automatic selection remains conservatively at 2
+on that device after the rollback below. The extractor needs its supported
 configuration; concurrency cannot provide memory that the GPU does not have.
 
 New performance panels separate collection wall seconds, backward wall seconds,
@@ -276,3 +277,26 @@ verification RPCs, gradient equivalence, validation-logit reuse and resume with
 changed resource flags. The focused suite passed 136 tests with one CUDA-only test
 skipped. These are correctness/work-reduction checks; real GPU speedup remains to
 be measured from the new phase timings. No A100 speedup factor is claimed here.
+
+### Latest optimization pass reverted (2026-10-27)
+
+At the user's request, commit `d0e5f28` was reverted. The streaming drafter again
+projects every query position into vocabulary logits, teacher-forced proposals
+again compute greedy IDs, and verifier responses again undergo complete activation
+finiteness scans. The previous execution changes from `059744a`, including parallel
+verification, generator gradient reuse and validation-logit reuse, remain in place.
+No shorter rollout, smaller data pool or altered optimizer batch was introduced.
+
+The final-position-only projection changed the computation performed, not the model
+weights or architecture: the streaming caller discarded all but the final logits
+already. CPU checks against full-model logits and adapter gradients had passed,
+but no real GPU speedup or trajectory-equivalence measurement had been obtained
+for that follow-up before its rollback.
+
+The supplied `regular-from4000-gseed42` plot shows noisy verified-prefix LK loss
+with an approximately flat smoothed curve over roughly the first 70 updates.
+This is an early training diagnostic for the regular continuation arm, not a
+feedback-projector result or a held-out acceptance measurement. It provides no
+clear early improvement signal, but does not establish that feedback is ineffective
+or attribute the curve to the reverted execution changes. No experiment-wide
+conclusion or throughput gain is recorded from this plot.
