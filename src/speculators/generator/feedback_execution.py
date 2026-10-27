@@ -1,6 +1,7 @@
 """Execution-only resource controls, independent of experiment/checkpoint identity."""
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
@@ -48,4 +49,29 @@ def execution_settings(runtime, *, concurrency=0, ram_cache_gib=None):
         "draft_logits": "last_position_only",
         "forced_token_selection": "supplied_tokens_without_argmax",
         "activation_scan": "new_positions_only_with_complete_token_alignment",
+    }
+
+
+def original_execution_settings(runtime, *, concurrency=0, ram_cache_gib=None):
+    cache = runtime.corpus.cache
+    if concurrency < 0 or (ram_cache_gib is not None and ram_cache_gib <= 0):
+        raise ValueError("Extraction concurrency must be nonnegative and RAM positive")
+    actual = concurrency or cache.settings.concurrency
+    if concurrency:
+        cache.pool.shutdown(wait=True)
+        cache.pool = ThreadPoolExecutor(max_workers=actual)
+    physical = memory_limit_bytes()
+    cap = min(
+        cache.cfg.online.ram_cache_gib,
+        ram_cache_gib if ram_cache_gib is not None else physical / 2 / 2**30,
+    )
+    if cap * 2**30 >= physical:
+        raise ValueError("RAM cache must leave memory for the models and server")
+    cache.ram.limit = int(cap * 2**30)
+    return {
+        "training_pipeline": "original_saved_response",
+        "extraction_concurrency": actual,
+        "ram_cache_gib": cap,
+        "target_requests": "saved_sequences_only",
+        "loss": "original_teacher_forced_ttt_lk",
     }

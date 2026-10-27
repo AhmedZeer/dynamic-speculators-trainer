@@ -38,6 +38,9 @@ class FeedbackStudy(GeneratorStudy):
 
     parent: ParentBundle
     trainable: Literal["generator", "projector", "generator_and_projector"]
+    inherit_parent_optimizer: bool = False
+    feedback_prefix_tokens: int = Field(default=64, ge=3)
+    feedback_prefix_blocks: int = Field(default=2, ge=1, le=2)
     conditioning: Literal["prompt"] = "prompt"
     loss: Literal["lk_hybrid"] = "lk_hybrid"
     rollout_tokens: int = Field(default=64, ge=4, le=8192)
@@ -60,4 +63,6 @@ class FeedbackStudy(GeneratorStudy):
                 "Feedback requires projector or generator_and_projector training; "
                 "the regular generator arm disables feedback"
             )
+        if self.inherit_parent_optimizer and self.warmup_steps:
+            raise ValueError("Parent optimizer continuation must not restart warmup")
         return self

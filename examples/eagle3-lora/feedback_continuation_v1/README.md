@@ -1,8 +1,12 @@
 # Current-policy online feedback continuation
 
-The active full-generator feedback comparison is now in
-[`feedback_continuation_v2`](../feedback_continuation_v2/README.md), with validation
-every 125 steps. This folder preserves the original projector-only comparison.
+Historical rollout experiment. The active comparison is
+[`feedback_continuation_v3`](../feedback_continuation_v3/README.md), which restores
+the original saved-response pipeline.
+
+The prior full-generator rollout comparison is archived in
+[`feedback_continuation_v2`](../feedback_continuation_v2/README.md).
+This folder preserves the original projector-only rollout comparison.
 
 Two independent training configs starting from the pinned generator step 4000:
 

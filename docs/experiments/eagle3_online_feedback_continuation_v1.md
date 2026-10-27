@@ -1,8 +1,8 @@
 # Online feedback continuation from generator step 4000
 
-Current comparison: [full-generator feedback v2](eagle3_online_feedback_continuation_v2.md),
-with both arms training the whole generator and validating every 125 steps. This
-record preserves the original projector-only setup and rollback history.
+Historical rollout study. The active comparison is now the
+[restored original pipeline](eagle3_original_pipeline_continuation_v3.md), with
+validation every 125 steps. This record preserves prior setup and rollback history.
 
 Status: implemented; CPU regression tests, no live A100 measurements for this stage.
 This is a separate study from the v4 rejected-suffix replay experiments.

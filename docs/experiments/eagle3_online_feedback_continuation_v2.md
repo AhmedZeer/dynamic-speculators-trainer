@@ -1,5 +1,9 @@
 # Full-generator online feedback continuation v2
 
+Superseded: the user rejected the rollout training change. The active command now
+uses [the original saved-response pipeline](eagle3_original_pipeline_continuation_v3.md).
+This document records the prior implementation only, not the current recipe.
+
 Status: implemented with local numerical/recovery checks. GPU training and results
 for this comparison have not been measured.
 

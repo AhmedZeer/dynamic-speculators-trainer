@@ -168,11 +168,11 @@ class Runtime:
             adapter.a.requires_grad_(True)
             adapter.b.requires_grad_(True)
 
-    def forward(self, batch, factors=None):
+    def forward(self, batch, factors=None, **overrides):
         with torch.autocast(
             self.device.type, dtype=self.dtype, enabled=self.dtype != torch.float32
         ):
-            kwargs = {**batch, **self.call_kwargs}
+            kwargs = {**batch, **self.call_kwargs, **overrides}
             if factors is None:
                 return self.drafter(**kwargs)
             return functional_call(

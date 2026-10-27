@@ -1,5 +1,9 @@
 # Full-generator online feedback comparison
 
+Historical rollout experiment, superseded by
+[`feedback_continuation_v3`](../feedback_continuation_v3/README.md). Use v3 for the
+restored original pipeline. The active command no longer runs the v2 rollout loop.
+
 Run each config independently:
 
 | Config | Updated parameters | Feedback |

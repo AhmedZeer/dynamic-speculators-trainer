@@ -34,6 +34,8 @@ PROVENANCE = (
     "metrics.jsonl",
     "membership.json",
     "execution.json",
+    "parent_training_state.json",
+    "feedback_observations",
 )
 
 

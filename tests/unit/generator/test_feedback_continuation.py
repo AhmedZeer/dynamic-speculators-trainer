@@ -151,6 +151,7 @@ def test_feedback_collection_keeps_prompt_fixed_and_never_supervises_invalid_suf
         trainable="projector",
         feedback=True,
         rollout_tokens=8,
+        feedback_prefix_tokens=3,
         loss_implementation="eager",
     )
     trainer = OnlineFeedbackTrainer.__new__(OnlineFeedbackTrainer)
@@ -307,6 +308,7 @@ def feedback_fixture(online_campaign, tmp_path, monkeypatch):  # noqa: F811
         test_per_category=1,
         examples_per_update=4,
         rollout_tokens=8,
+        feedback_prefix_tokens=3,
         validation_interval=1,
         checkpoint_interval=1,
         loss_implementation="eager",
@@ -393,7 +395,7 @@ def test_full_feedback_preserves_parent_function_and_trains_all_generator_parame
 @pytest.mark.parametrize(
     "trainable", ["generator", "projector", "generator_and_projector"]
 )
-def test_full_online_continuation_freeze_export_and_resume(
+def test_original_continuation_freeze_export_and_resume(
     feedback_fixture, trainable, monkeypatch
 ):
     definition, parent_state, requests = feedback_fixture
@@ -419,7 +421,7 @@ def test_full_online_continuation_freeze_export_and_resume(
     saved = torch.load(cfg.output / "checkpoint.pt", weights_only=True)
     assert saved["progress"] == 1
     result = feedback_training.train_feedback(
-        cfg, resume=True, rollout_concurrency=4, ram_cache_gib=0.01
+        cfg, resume=True, extraction_concurrency=4, ram_cache_gib=0.01
     )
     assert result["completed_updates"] == 2
     assert result["lineage_optimizer_step"] == 4002
@@ -448,8 +450,10 @@ def test_full_online_continuation_freeze_export_and_resume(
     assert len(requests) == before
     with pytest.raises(FileExistsError, match="resume"):
         feedback_training.train_feedback(cfg)
-    trace = json.loads((cfg.output / "online_traces/update-00000002.json").read_text())
-    assert {row["policy_optimizer_step"] for row in trace} == {1}
+    assert result["training_pipeline"] == "original_saved_response"
+    assert not (cfg.output / "online_traces").exists()
+    if cfg.feedback:
+        assert (cfg.output / "feedback_observations/update-00000002.json").exists()
     membership = json.loads((cfg.inputs / "membership.json").read_text())
     assert {len(g["train"]) for g in membership["groups"].values()} == {8}
     if trainable == "generator_and_projector":
@@ -693,10 +697,12 @@ def test_interrupted_first_update_reuses_initial_validation(
     feedback_fixture, monkeypatch
 ):
     definition, _, _ = feedback_fixture
-    original = OnlineFeedbackTrainer.train_batch
+    from speculators.generator import original_continuation  # noqa: PLC0415
+
+    original = original_continuation.update
     monkeypatch.setattr(
-        OnlineFeedbackTrainer,
-        "train_batch",
+        original_continuation,
+        "update",
         lambda *a: (_ for _ in ()).throw(RuntimeError("stop before first update")),
     )
     with pytest.raises(RuntimeError, match="first update"):
@@ -704,17 +710,17 @@ def test_interrupted_first_update_reuses_initial_validation(
     assert not (definition.output / "checkpoint.pt").exists()
     previous = json.loads((definition.output / "validation.json").read_text())
     assert previous[0]["optimizer_step"] == 0
-    monkeypatch.setattr(OnlineFeedbackTrainer, "train_batch", original)
-    original_evaluation = feedback_training.evaluate_online
+    monkeypatch.setattr(original_continuation, "update", original)
+    original_evaluation = original_continuation.validation
     calls = []
 
     def evaluate(*args):
         calls.append(True)
         return original_evaluation(*args)
 
-    monkeypatch.setattr(feedback_training, "evaluate_online", evaluate)
+    monkeypatch.setattr(original_continuation, "validation", evaluate)
     result = feedback_training.train_feedback(
-        definition, resume=True, rollout_concurrency=4, ram_cache_gib=0.01
+        definition, resume=True, extraction_concurrency=4, ram_cache_gib=0.01
     )
     assert len(calls) == 2  # Steps 1 and 2, not the already-measured step 0.
     assert result["history"][0] == previous[0]

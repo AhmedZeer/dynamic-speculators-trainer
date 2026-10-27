@@ -1,4 +1,4 @@
-"""Two independent online-feedback continuations from a pinned serving bundle."""
+"""Continue the original saved-response generator pipeline from a pinned bundle."""
 
 import json
 import shutil
@@ -8,17 +8,16 @@ from pathlib import Path
 import torch
 from filelock import FileLock
 
-from speculators.bank.artifacts import digest, file_digest, write_json
-from speculators.bank.progress import report
+from speculators.bank.artifacts import digest, write_json
+from speculators.bank.progress import report, stage_progress
 from speculators.benchmark.config import Model
 from speculators.benchmark.prepare import resolve_model
 from speculators.generator import study as common
 from speculators.generator.config import Architecture
-from speculators.generator.engine import clip_gradients, run_identity, set_learning_rate
-from speculators.generator.feedback_execution import execution_settings
+from speculators.generator.engine import run_identity
+from speculators.generator.feedback_execution import original_execution_settings
 from speculators.generator.local_campaign import load_local_inputs
 from speculators.generator.model import LoRAGenerator
-from speculators.generator.online_feedback import OnlineFeedbackTrainer
 from speculators.generator.serving.bundle import archive_source, bundle_state
 from speculators.generator.study_config import campaign_settings
 from speculators.generator.study_inputs import membership
@@ -85,77 +84,25 @@ def initialize_generator(runtime, study, metadata, state):
     return model.eval()
 
 
-def trace_metrics(traces):
-    rounds = [row for trace in traces for row in trace["rounds"]]
-    accepted = sum(row["accepted"] for row in rounds)
-    proposed = sum(row["proposed_count"] for row in rounds)
-    return {
-        "accepted": accepted,
-        "proposed": proposed,
-        "rounds": len(rounds),
-        "draft_acceptance_rate": accepted / max(proposed, 1),
-        "accepted_prefix_length": accepted / max(len(rounds), 1),
-        "generated_tokens": sum(len(trace["response"]) for trace in traces),
-    }
-
-
-def evaluate_online(trainer, members):
-    runtime = trainer.runtime
-    common.synchronize(runtime)
-    started = time.perf_counter()
-    categories, traces, losses, positions = {}, [], 0.0, 0
-    for category, split in sorted(members.items()):
-        category_traces = []
-        width = trainer.rollout_concurrency
-        for offset in range(0, len(split["tune"]), width):
-            for metrics, trace in trainer.evaluate_many(
-                split["tune"][offset : offset + width]
-            ):
-                losses += metrics["loss_sum"]
-                positions += metrics["positions"]
-                category_traces.append(trace)
-        values = trace_metrics(category_traces)
-        categories[category] = values["draft_acceptance_rate"]
-        traces.extend(category_traces)
-        report(
-            f"Online feedback validation {category}: "
-            f"acceptance={categories[category]:.5f}"
-        )
-    values = trace_metrics(traces)
-    common.synchronize(runtime)
-    return {
-        "score": sum(categories.values()) / len(categories),
-        "categories": categories,
-        "loss": losses / max(positions, 1),
-        "positions": positions,
-        "seconds": time.perf_counter() - started,
-        "protocol": "current-policy greedy verification; prompt conditioning; "
-        "observed causal feedback",
-        **values,
-    }, traces
-
-
-def publish_result(tracker, result):
-    common.publish_study_result(tracker, result)
-    tracker.artifact(
-        "online-feedback-traces",
-        list((tracker.output / "online_traces").glob("*.json"))
-        + list((tracker.output / "validation_traces").glob("*.json")),
-    )
-
-
 def train_feedback(
-    study, *, resume=False, dry_run=False, rollout_concurrency=0, ram_cache_gib=None
+    study, *, resume=False, dry_run=False, extraction_concurrency=0, ram_cache_gib=None
 ):
     if dry_run:
         return {
-            "configuration": study.model_dump(mode="json"),
+            "configuration": study.model_dump(
+                mode="json",
+                exclude={"rollout_tokens", "replay_rounds_per_episode", "initial_step"},
+            ),
             "training_examples": 4 * study.train_per_category,
             "additional_updates": study.steps,
             "execution": {
-                "rollout_concurrency": rollout_concurrency or "auto",
+                "extraction_concurrency": extraction_concurrency or "configured",
                 "ram_cache_gib": ram_cache_gib or "auto",
             },
+            "training_pipeline": "original_saved_response",
+            "parent_optimizer": "restore"
+            if study.inherit_parent_optimizer
+            else "fresh",
             "source_optimizer_step": study.parent.optimizer_step,
             "final_lineage_step": study.parent.optimizer_step + study.steps,
         }
@@ -187,18 +134,21 @@ def train_feedback(
             inputs,
             architecture=Architecture.model_validate(metadata["architecture"]),
         )
-        execution = execution_settings(
-            runtime, concurrency=rollout_concurrency, ram_cache_gib=ram_cache_gib
+        runtime.cfg.wandb.group = study.wandb.group
+        execution = original_execution_settings(
+            runtime, concurrency=extraction_concurrency, ram_cache_gib=ram_cache_gib
         )
         job.update(
-            training_mode="online_verified_continuation",
+            training_mode="original_saved_response",
+            training_schedule="original_epoch_cohorts",
             trainable=study.trainable,
             source_optimizer_step=study.parent.optimizer_step,
             additional_updates=study.steps,
-            refresh="verification_round",
+            feedback_source="current_model_saved_prefix_ttt_agreement"
+            if study.feedback
+            else "none",
             conditioning_policy="fixed_original_prompt",
             feedback_dim=3 if study.feedback else 0,
-            rollout_tokens=study.rollout_tokens,
         )
         try:
             return run_training(
@@ -217,13 +167,16 @@ def train_feedback(
             runtime.corpus.cache.close()
 
 
-def run_training(  # noqa: PLR0917, C901 -- durable online training lifecycle
+def run_training(  # noqa: PLR0917, C901 -- durable saved-response continuation lifecycle
     study, runtime, cfg, job, split, parent, metadata, state, *, resume, execution
 ):
     output, started = study.output, time.perf_counter()
     identity = run_identity(runtime.cfg, runtime.bank, runtime.corpus, job)
     identity.update(
-        study=study.model_dump(mode="json"),
+        study=study.model_dump(
+            mode="json",
+            exclude={"rollout_tokens", "replay_rounds_per_episode", "initial_step"},
+        ),
         membership_identity=split["identity"],
         parent={k: v for k, v in parent.items() if k != "path"},
     )
@@ -240,11 +193,17 @@ def run_training(  # noqa: PLR0917, C901 -- durable online training lifecycle
             tracker = ExperimentTracker(runtime.cfg, job, output, identity)
             if not tracker.already_finished():
                 with tracker:
-                    publish_result(tracker, result)
+                    common.publish_study_result(tracker, result)
             return result
     write_json(identity_path, identity)
     write_json(output / "configuration.json", runtime.cfg.model_dump(mode="json"))
-    write_json(output / "study.json", study.model_dump(mode="json"))
+    write_json(
+        output / "study.json",
+        study.model_dump(
+            mode="json",
+            exclude={"rollout_tokens", "replay_rounds_per_episode", "initial_step"},
+        ),
+    )
     write_json(output / "membership.json", split)
     provenance = output / "provenance" / f"attempt-{time.time_ns()}"
     save_train_command(str(provenance))
@@ -271,221 +230,35 @@ def run_training(  # noqa: PLR0917, C901 -- durable online training lifecycle
         torch.set_rng_state(saved["torch_rng"])
         if runtime.device.type == "cuda":
             torch.cuda.set_rng_state_all(saved["cuda_rng"])
+    elif study.inherit_parent_optimizer:
+        from speculators.generator.continuation_state import restore_parent_optimizer  # noqa: PLC0415
+
+        with stage_progress(
+            f"Restoring parent Adam/RNG at step {study.parent.optimizer_step}"
+        ):
+            receipt = restore_parent_optimizer(study, metadata, generator, optimizer)
+        write_json(output / "parent_training_state.json", receipt)
     # Keep the live generator and exported parent provenance.
     del state
-    trainer = OnlineFeedbackTrainer(runtime, study, generator)
-    trainer.rollout_concurrency = execution["rollout_concurrency"]
-    write_json(output / "execution.json", execution)
-    write_json(provenance / "execution.json", execution)
     if not checkpoint.exists() and (output / "validation.json").exists():
         previous = json.loads((output / "validation.json").read_text())
         history = [row for row in previous if row["optimizer_step"] == 0][:1]
         if history:
-            report("Reusing matching step-0 validation from the previous attempt")
-    report(
-        "Online feedback: SDPA streaming; fixed prompt summary; "
-        "LK excludes invalidated suffix contexts"
-    )
-    report(
-        "Online feedback execution: "
-        f"rollout_concurrency={trainer.rollout_concurrency}; "
-        f"optimizer_examples={study.examples_per_update}; "
-        "draft_logits=last_position_only; activation_scan=new_positions_only"
-    )
-    report(
-        f"{study.name}: source_step={study.parent.optimizer_step}; "
-        f"additional_updates={study.steps}; "
-        f"training_examples={job['training_examples']}; "
-        f"trainable_parameters={sum(p.numel() for p in params):,}"
-    )
-    with ExperimentTracker(runtime.cfg, job, output, identity) as tracker:
-        if tracker.run is not None:
-            tracker.run.summary.update(
-                {
-                    "run_summary/trainable_parameters": sum(p.numel() for p in params),
-                    "run_summary/source_optimizer_step": study.parent.optimizer_step,
-                    "run_summary/rollout_concurrency": trainer.rollout_concurrency,
-                    "run_summary/ram_cache_gib": execution["ram_cache_gib"],
-                }
-            )
-            for section in ("training_scores", "feedback_diagnostics"):
-                tracker.run.define_metric(section + "/*", step_metric="optimizer_step")
+            report("Reusing matching original-pipeline step-0 validation")
+    from speculators.generator.original_continuation import run_original_loop  # noqa: PLC0415
 
-        def validate():
-            scores, traces = evaluate_online(trainer, split["groups"])
-            history.append({"optimizer_step": progress, **scores})
-            write_json(output / "validation.json", history)
-            write_json(
-                output / "validation_traces" / f"step-{progress:08d}.json", traces
-            )
-            tracker.log(
-                {
-                    "optimizer_step": progress,
-                    "validation_scores/online_macro_draft_acceptance": scores["score"],
-                    "validation_scores/accepted_prefix_length": scores[
-                        "accepted_prefix_length"
-                    ],
-                    "validation_losses/verified_prefix_lk": scores["loss"],
-                    "validation_performance/seconds": scores["seconds"],
-                    **{
-                        "validation_scores/" + k + "_draft_acceptance": v
-                        for k, v in scores["categories"].items()
-                    },
-                }
-            )
-
-        if progress and (
-            progress % study.checkpoint_interval == 0 or progress == study.steps
-        ):
-            snapshot = common.save_snapshot(
-                study,
-                runtime,
-                cfg,
-                job,
-                identity,
-                generator,
-                optimizer,
-                progress,
-                history,
-            )
-            common.upload_snapshot(study, cfg, snapshot, progress)
-        if not history or history[-1]["optimizer_step"] != progress:
-            validate()
-        while progress < study.steps:
-            beginning = time.perf_counter()
-            episodes = common.update_members(study, split["groups"], progress)
-            teacher_before = (
-                trainer.teacher_requests,
-                trainer.teacher_seconds,
-                trainer.teacher_tokens,
-            )
-            trainer.prefetch([e["indices"][0] for e in episodes])
-            optimizer.zero_grad(set_to_none=True)
-            set_learning_rate(optimizer, runtime.cfg, progress + 1)
-            timing_before = dict(trainer.timings)
-            rpc_before, io_before = (
-                trainer.teacher_rpc_seconds,
-                trainer.teacher_file_seconds,
-            )
-            validated_before = trainer.teacher_validated_tokens
-            file_bytes_before = trainer.teacher_file_bytes
-            results = trainer.train_batch([item["indices"][0] for item in episodes])
-            loss = sum(value for value, _, _ in results) / len(episodes)
-            positions = sum(count for _, count, _ in results)
-            traces = [trace for _, _, trace in results]
-            for trace in traces:
-                trace["policy_optimizer_step"] = progress
-            if not positions:
-                raise ValueError(
-                    "All requests ended before a supervised draft decision"
-                )
-            gradients = clip_gradients(optimizer, study.max_grad_norm)
-            # All rollouts in this batch used the same pre-update policy.
-            optimizer.step()
-            common.synchronize(runtime)
-            progress += 1
-            scores = trace_metrics(traces)
-            metrics = {
-                "optimizer_step": progress,
-                "training_losses/verified_prefix_lk": loss,
-                "training_scores/draft_acceptance": scores["draft_acceptance_rate"],
-                "training_scores/accepted_prefix_length": scores[
-                    "accepted_prefix_length"
-                ],
-                "training_performance/supervised_positions": positions,
-                "training_performance/generated_tokens": scores["generated_tokens"],
-                "training_performance/teacher_requests": trainer.teacher_requests
-                - teacher_before[0],
-                "training_performance/teacher_seconds": trainer.teacher_seconds
-                - teacher_before[1],
-                "training_performance/teacher_input_tokens": trainer.teacher_tokens
-                - teacher_before[2],
-                "training_performance/collection_seconds": trainer.timings[
-                    "collection_seconds"
-                ]
-                - timing_before["collection_seconds"],
-                "training_performance/backward_seconds": trainer.timings[
-                    "backward_seconds"
-                ]
-                - timing_before["backward_seconds"],
-                "training_performance/generator_calls": trainer.timings[
-                    "generator_calls"
-                ]
-                - timing_before["generator_calls"],
-                "training_performance/teacher_rpc_seconds": trainer.teacher_rpc_seconds
-                - rpc_before,
-                "training_performance/activation_io_seconds": (
-                    trainer.teacher_file_seconds - io_before
-                ),
-                "training_performance/activation_validated_tokens": (
-                    trainer.teacher_validated_tokens - validated_before
-                ),
-                "training_performance/activation_bytes_returned": (
-                    trainer.teacher_file_bytes - file_bytes_before
-                ),
-                "training_performance/update_seconds": time.perf_counter() - beginning,
-                "training_performance/example_presentations": len(episodes),
-                "cache_performance/prompt_cache_gib": runtime.corpus.cache.ram.bytes
-                / 2**30,
-                "optimization/lr": optimizer.param_groups[0]["lr"],
-                **{
-                    "optimization/" + key.removeprefix("train/"): value
-                    for key, value in gradients.items()
-                },
-            }
-            if study.feedback:
-                metrics["feedback_diagnostics/projector_weight_norm"] = float(
-                    generator.feedback_encoder.weight.detach().norm()
-                )
-            tracker.log(metrics)
-            with (output / "metrics.jsonl").open("a") as stream:
-                stream.write(json.dumps(metrics) + "\n")
-            write_json(output / "online_traces" / f"update-{progress:08d}.json", traces)
-            if progress == 1 or progress % 10 == 0:
-                collect_seconds = metrics["training_performance/collection_seconds"]
-                backward_seconds = metrics["training_performance/backward_seconds"]
-                report(
-                    f"{study.name}: update={progress}/{study.steps}; "
-                    f"wall={metrics['training_performance/update_seconds']:.2f}s; "
-                    f"acceptance={scores['draft_acceptance_rate']:.4f}; "
-                    f"collect={collect_seconds:.2f}s; "
-                    f"backward={backward_seconds:.2f}s; "
-                    f"supervised_positions={positions}; "
-                    f"prompt_cache={runtime.corpus.cache.ram.bytes / 2**30:.2f} GiB"
-                )
-            if progress % study.validation_interval == 0 or progress == study.steps:
-                validate()
-            if (
-                progress % study.checkpoint_interval == 0
-                or progress % study.hub_interval == 0
-                or progress == study.steps
-            ):
-                snapshot = common.save_snapshot(
-                    study,
-                    runtime,
-                    cfg,
-                    job,
-                    identity,
-                    generator,
-                    optimizer,
-                    progress,
-                    history,
-                )
-                common.upload_snapshot(study, cfg, snapshot, progress)
-        result = {
-            "status": "complete",
-            "job": job,
-            "completed_updates": progress,
-            "source_optimizer_step": study.parent.optimizer_step,
-            "lineage_optimizer_step": study.parent.optimizer_step + progress,
-            "score": history[-1]["score"],
-            "history": history,
-            "elapsed_seconds": time.perf_counter() - started,
-            "trainable_parameters": sum(p.numel() for p in params),
-            "checkpoint_sha256": file_digest(checkpoint),
-            "budget": "same prompts and additional updates; "
-            "verifier and supervised-token costs measured separately",
-        }
-        write_json(output / "result.json", result)
-        publish_result(tracker, result)
-        return result
+    write_json(output / "execution.json", execution)
+    write_json(provenance / "execution.json", execution)
+    return run_original_loop(
+        study,
+        runtime,
+        cfg,
+        job,
+        split,
+        identity,
+        generator,
+        optimizer,
+        progress,
+        history,
+        started,
+    )
