@@ -74,11 +74,9 @@ class DraftStep(nn.Module):
             )
         if model.config.norm_output:
             hidden = model.norm(hidden)
-            # Proposals only consume the final position. Avoid projecting the
-            # entire prefill/suffix into the large draft vocabulary.
-            logits = model.lm_head(hidden[:, -1:])
+            logits = model.lm_head(hidden)
         else:
-            logits = model.lm_head(model.norm(hidden[:, -1:]))
+            logits = model.lm_head(model.norm(hidden))
         return logits, hidden
 
 
@@ -134,17 +132,13 @@ class StreamingDraft:
         for index in range(count):
             current = logits[:, -1:].float()
             outputs.append(current)
-            if forced is not None:
-                # Supervised tokens are already known. Avoid an unused argmax
-                # and its GPU-to-host synchronization at every training token.
-                token = forced[index]
-            else:
-                draft_id = int(current.argmax(-1).item())
-                token = (
-                    draft_id + int(self.runtime.drafter.d2t[draft_id].item())
-                    if self.runtime.drafter.use_draft_vocab
-                    else draft_id
-                )
+            draft_id = int(current.argmax(-1).item())
+            target_id = (
+                draft_id + int(self.runtime.drafter.d2t[draft_id].item())
+                if self.runtime.drafter.use_draft_vocab
+                else draft_id
+            )
+            token = forced[index] if forced is not None else target_id
             proposals.append(token)
             if index + 1 < count:
                 logits, hidden = self.forward(

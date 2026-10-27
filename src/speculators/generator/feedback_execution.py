@@ -27,9 +27,9 @@ def execution_settings(runtime, *, concurrency=0, ram_cache_gib=None):
         gpu_bytes = torch.cuda.get_device_properties(runtime.device).total_memory
     if concurrency < 0 or (ram_cache_gib is not None and ram_cache_gib <= 0):
         raise ValueError("Concurrency must be nonnegative and RAM cache positive")
-    # The user confirmed eight requests fit on the 40 GB Colab GPU. Smaller
-    # devices retain the conservative setting; explicit overrides remain valid.
-    actual = concurrency or (8 if gpu_bytes >= 35 * 2**30 else 2)
+    # Four/eight simultaneous tiny verification calls suit a large GPU. Keep
+    # request-local KV snapshots bounded on the observed 40 GB Colab session.
+    actual = concurrency or (8 if gpu_bytes >= 60 * 2**30 else 2)
     physical = memory_limit_bytes()
     requested = runtime.corpus.cache.cfg.online.ram_cache_gib
     cap = min(
@@ -45,7 +45,4 @@ def execution_settings(runtime, *, concurrency=0, ram_cache_gib=None):
         "gpu_memory_bytes": gpu_bytes,
         "validation_logits": "reuse_collected_policy_logits",
         "generator_backward": "once_per_distinct_conditioning_input",
-        "draft_logits": "last_position_only",
-        "forced_token_selection": "supplied_tokens_without_argmax",
-        "activation_scan": "new_positions_only_with_complete_token_alignment",
     }

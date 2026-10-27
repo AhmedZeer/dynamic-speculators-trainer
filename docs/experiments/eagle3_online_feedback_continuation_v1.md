@@ -243,7 +243,7 @@ rollouts, 8-example optimizer batch and complete validation memberships:
 Resource settings are execution options, recorded in `execution.json` and each
 attempt's provenance. They do not change the checkpoint's experiment identity, so
 concurrency/RAM settings can be changed while resuming the same experiment. Automatic
-concurrency is 8 with at least 35 GiB GPU memory and 2 otherwise; the default RAM
+concurrency is 8 with at least 60 GiB GPU memory and 2 otherwise; the default RAM
 ceiling respects detected cgroup limits. Set the flags explicitly when desired.
 
 On an 80 GB GPU, for each arm:
@@ -260,8 +260,8 @@ speculators generator train-feedback \
   --rollout-concurrency 8 --ram-cache-gib 48 --resume
 ```
 
-The user subsequently confirmed eight requests fit on the 40 GB GPU, so that
-device now also selects concurrency 8 automatically. The extractor needs its supported
+On the observed 40 GB GPU, use `--rollout-concurrency 2`, or omit the concurrency
+flag for automatic selection. The extractor still needs its existing supported
 configuration; concurrency cannot provide memory that the GPU does not have.
 
 New performance panels separate collection wall seconds, backward wall seconds,
@@ -276,52 +276,3 @@ verification RPCs, gradient equivalence, validation-logit reuse and resume with
 changed resource flags. The focused suite passed 136 tests with one CUDA-only test
 skipped. These are correctness/work-reduction checks; real GPU speedup remains to
 be measured from the new phase timings. No A100 speedup factor is claimed here.
-
-### Collection remains the measured bottleneck
-
-User-supplied regular-arm update logs after the first optimization:
-
-| Update | Total seconds | Collection seconds | Backward seconds |
-| --- | ---: | ---: | ---: |
-| 1 | 26.10 | 12.79 | 13.05 |
-| 10 | 19.32 | 15.83 | 3.36 |
-| 20 | 12.22 | 8.98 | 3.16 |
-
-These are individual update timings, not ten-update averages or a controlled GPU
-benchmark. Update 20 spends about 74% of its time collecting. Eight concurrent
-requests were reported to fit on the 40 GB machine; the supplied log excerpt did
-not record the effective concurrency. Startup now prints it explicitly together
-with the optimizer batch size and execution policies.
-
-Further execution changes remove work without altering the experiment:
-
-- Streaming draft calls project only the final query position into vocabulary
-  logits, including the gradient-enabled prompt prefill. Attention still processes
-  the complete prefix. For a prompt of length L, this reduces vocabulary projection
-  positions from L to 1, not the complete update cost by L.
-- Teacher-forced training uses the supplied token IDs directly, avoiding unused
-  argmax computations and their CUDA-to-host synchronization. The generator's
-  known positive prompt length is checked on CPU before transfer to its encoder.
-- For verification responses, complete token alignment, shape and dtype are still
-  checked. Finiteness scans cover the newly consumed suffix; ignored prefix
-  activations are not scanned or consumed again. Initial prompt extraction still
-  validates every position. This avoids repeatedly faulting and scanning the entire
-  memory-mapped activation prefix on the CPU.
-- Execution provenance records these policies. W&B additionally logs returned
-  activation bytes and the number of positions scanned, alongside full target input
-  tokens. The target continues to recompute and export the full prefix; this is
-  still distinct from incremental target verification with persistent KV caches.
-
-The training optimizer batch remains eight prompts. Setting rollout concurrency
-to 16 cannot create 16 training requests in that batch. Collecting future optimizer
-batches with stale weights would violate the current-policy protocol, and changing
-the optimizer batch would change the training comparison. Higher concurrency can
-still apply to the independent validation membership.
-
-Numerical checks compare the final-position projection's logits and adapter
-gradients with the full core model, including both output-normalization modes and
-eager/SDPA streaming attention. Other checks cover teacher-forced token selection,
-suffix validation and full token-ID alignment. GPU speedup for this follow-up is
-not measured locally. The focused suite passed 142 tests with one CUDA-only test
-skipped. Persistent target KV and avoiding full-prefix export remain
-the larger implementation opportunity if collection continues to dominate.

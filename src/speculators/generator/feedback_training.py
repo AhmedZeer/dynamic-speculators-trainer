@@ -284,12 +284,6 @@ def run_training(  # noqa: PLR0917, C901 -- durable online training lifecycle
         "LK excludes invalidated suffix contexts"
     )
     report(
-        "Online feedback execution: "
-        f"rollout_concurrency={trainer.rollout_concurrency}; "
-        f"optimizer_examples={study.examples_per_update}; "
-        "draft_logits=last_position_only; activation_scan=new_positions_only"
-    )
-    report(
         f"{study.name}: source_step={study.parent.optimizer_step}; "
         f"additional_updates={study.steps}; "
         f"training_examples={job['training_examples']}; "
@@ -364,8 +358,6 @@ def run_training(  # noqa: PLR0917, C901 -- durable online training lifecycle
                 trainer.teacher_rpc_seconds,
                 trainer.teacher_file_seconds,
             )
-            validated_before = trainer.teacher_validated_tokens
-            file_bytes_before = trainer.teacher_file_bytes
             results = trainer.train_batch([item["indices"][0] for item in episodes])
             loss = sum(value for value, _, _ in results) / len(episodes)
             positions = sum(count for _, count, _ in results)
@@ -413,12 +405,6 @@ def run_training(  # noqa: PLR0917, C901 -- durable online training lifecycle
                 - rpc_before,
                 "training_performance/activation_io_seconds": (
                     trainer.teacher_file_seconds - io_before
-                ),
-                "training_performance/activation_validated_tokens": (
-                    trainer.teacher_validated_tokens - validated_before
-                ),
-                "training_performance/activation_bytes_returned": (
-                    trainer.teacher_file_bytes - file_bytes_before
                 ),
                 "training_performance/update_seconds": time.perf_counter() - beginning,
                 "training_performance/example_presentations": len(episodes),

@@ -13,7 +13,5 @@ See [the runbook](../../../docs/experiments/eagle3_online_feedback_continuation_
 for the extraction server and the two separate training commands.
 
 Execution flags `--rollout-concurrency` and `--ram-cache-gib` can change on resume.
-Use concurrency 8 on the observed 40 GB GPU or a larger GPU; automatic mode uses
-8 with at least 35 GiB GPU memory and 2 below that. RAM is capped automatically to
-leave memory for the models and extraction server. Training concurrency is bounded
-by the eight examples in each optimizer update; a higher flag only helps validation.
+Use concurrency 8 on an 80 GB GPU; automatic mode uses 2 on smaller GPUs. RAM is
+capped automatically to leave memory for the models and extraction server.

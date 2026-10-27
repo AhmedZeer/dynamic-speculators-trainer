@@ -86,7 +86,7 @@ class OnlineFeedbackTrainer(FrozenTarget):
             else {}
         )
         return self.generator(
-            summary[None], torch.tensor([length]), **kwargs
+            summary[None], torch.tensor([length], device=self.runtime.device), **kwargs
         )
 
     def _rollout(self, index, *, gradient_blocks=True):  # noqa: C901 -- resumable causal verification state machine
@@ -132,7 +132,7 @@ class OnlineFeedbackTrainer(FrozenTarget):
                 fresh, shifted, new_start, cache, factors, count=count
             )
             # Yield only the RPC. GPU work remains on the owning main thread.
-            verified = yield prefix + [bonus] + proposed, len(prefix)
+            verified = yield prefix + [bonus] + proposed
             teachers = self.teacher(verified[len(prefix) : len(prefix) + count, -1])
             target_ids = teachers.argmax(-1).tolist()
             accepted = 0
@@ -208,13 +208,11 @@ class OnlineFeedbackTrainer(FrozenTarget):
         def advance(slot, routine, value=None, *, initial=False):
             with torch.no_grad():
                 try:
-                    tokens, validate_from = (
-                        next(routine) if initial else routine.send(value)
-                    )
+                    tokens = next(routine) if initial else routine.send(value)
                 except StopIteration as complete:
                     results[slot] = complete.value
                     return
-            scheduled.append((tokens, validate_from, slot, routine))
+            scheduled.append((tokens, slot, routine))
 
         try:
             while next_index < len(indices) or pending or scheduled:
@@ -230,10 +228,8 @@ class OnlineFeedbackTrainer(FrozenTarget):
                     )
                 # Prepare a wave before releasing its verifier RPCs, so the
                 # target does not occupy the shared GPU before other proposals.
-                for tokens, validate_from, slot, routine in scheduled:
-                    pending[
-                        pool.submit(self.extract, tokens, validate_from=validate_from)
-                    ] = (slot, routine)
+                for tokens, slot, routine in scheduled:
+                    pending[pool.submit(self.extract, tokens)] = (slot, routine)
                 scheduled.clear()
                 if pending:
                     ready, _ = wait(pending, return_when=FIRST_COMPLETED)
@@ -245,7 +241,7 @@ class OnlineFeedbackTrainer(FrozenTarget):
             for future, (_, routine) in pending.items():
                 future.cancel()
                 routine.close()
-            for _, _, _, routine in scheduled:
+            for _, _, routine in scheduled:
                 routine.close()
         return results
 
