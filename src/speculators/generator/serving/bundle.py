@@ -33,6 +33,7 @@ PROVENANCE = (
     "validation.json",
     "metrics.jsonl",
     "membership.json",
+    "execution.json",
 )
 
 

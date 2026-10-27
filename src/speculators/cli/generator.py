@@ -57,6 +57,12 @@ def train_feedback_command(
     config: ConfigOption,
     resume: Annotated[bool, typer.Option("--resume")] = False,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    rollout_concurrency: Annotated[
+        int, typer.Option("--rollout-concurrency", min=0)
+    ] = 0,
+    ram_cache_gib: Annotated[
+        float | None, typer.Option("--ram-cache-gib", min=0.1)
+    ] = None,
 ):
     """Run one current-policy online continuation, full generator or projector only."""
     import json  # noqa: PLC0415
@@ -66,7 +72,13 @@ def train_feedback_command(
 
     typer.echo(
         json.dumps(
-            train_feedback(FeedbackStudy.load(config), resume=resume, dry_run=dry_run),
+            train_feedback(
+                FeedbackStudy.load(config),
+                resume=resume,
+                dry_run=dry_run,
+                rollout_concurrency=rollout_concurrency,
+                ram_cache_gib=ram_cache_gib,
+            ),
             indent=2,
         )
     )

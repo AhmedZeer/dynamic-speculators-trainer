@@ -5,7 +5,7 @@ from pathlib import Path
 from threading import Lock
 
 import torch
-from safetensors.torch import load
+from safetensors.torch import load_file
 
 from speculators.data_generation.offline import check_hidden_states
 from speculators.data_generation.vllm_client import (
@@ -31,6 +31,8 @@ class FrozenTarget:
         self.eos = list(eos) if isinstance(eos, (list, tuple)) else [eos]
         self.teacher_requests = self.teacher_seconds = self.teacher_tokens = 0
         self.stats_lock = Lock()
+        self.teacher_rpc_seconds = self.teacher_file_seconds = 0.0
+        self.teacher_file_bytes = 0
 
     def extract(self, tokens):
         started = time.perf_counter()
@@ -44,6 +46,8 @@ class FrozenTarget:
                 max_retries=cache.settings.max_retries,
             )
         ).resolve()
+        rpc_seconds = time.perf_counter() - started
+        file_started = time.perf_counter()
         if not path.is_relative_to(cache.root):
             raise ValueError("Target extractor returned a file outside shared_dir")
         try:
@@ -51,7 +55,10 @@ class FrozenTarget:
                 wait_for_lock(
                     str(path) + ".lock", timeout=cache.settings.request_timeout
                 )
-            payload = load(path.read_bytes())
+            file_bytes = path.stat().st_size
+            # Tensor storage keeps memory mappings alive after unlink, avoiding
+            # a full-prefix Python bytes buffer and its deserialization copy.
+            payload = load_file(path, device="cpu")
             check_hidden_states(payload, tokens)
             states = payload["hidden_states"]
             expected = (
@@ -71,6 +78,9 @@ class FrozenTarget:
                 self.teacher_requests += 1
                 self.teacher_seconds += time.perf_counter() - started
                 self.teacher_tokens += len(tokens)
+                self.teacher_rpc_seconds += rpc_seconds
+                self.teacher_file_seconds += time.perf_counter() - file_started
+                self.teacher_file_bytes += file_bytes
             return states
         finally:
             path.unlink(missing_ok=True)

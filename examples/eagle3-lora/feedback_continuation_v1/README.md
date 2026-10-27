@@ -11,3 +11,7 @@ verified-prefix LK supervision and the new W&B project
 
 See [the runbook](../../../docs/experiments/eagle3_online_feedback_continuation_v1.md)
 for the extraction server and the two separate training commands.
+
+Execution flags `--rollout-concurrency` and `--ram-cache-gib` can change on resume.
+Use concurrency 8 on an 80 GB GPU; automatic mode uses 2 on smaller GPUs. RAM is
+capped automatically to leave memory for the models and extraction server.

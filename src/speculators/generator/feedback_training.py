@@ -15,6 +15,7 @@ from speculators.benchmark.prepare import resolve_model
 from speculators.generator import study as common
 from speculators.generator.config import Architecture
 from speculators.generator.engine import clip_gradients, run_identity, set_learning_rate
+from speculators.generator.feedback_execution import execution_settings
 from speculators.generator.local_campaign import load_local_inputs
 from speculators.generator.model import LoRAGenerator
 from speculators.generator.online_feedback import OnlineFeedbackTrainer
@@ -102,12 +103,14 @@ def evaluate_online(trainer, members):
     categories, traces, losses, positions = {}, [], 0.0, 0
     for category, split in sorted(members.items()):
         category_traces = []
-        for number, index in enumerate(split["tune"]):
-            trainer.prefetch(split["tune"][number : number + 8])
-            metrics, trace = trainer.evaluate_episode(index)
-            losses += metrics["loss_sum"]
-            positions += metrics["positions"]
-            category_traces.append(trace)
+        width = trainer.rollout_concurrency
+        for offset in range(0, len(split["tune"]), width):
+            for metrics, trace in trainer.evaluate_many(
+                split["tune"][offset : offset + width]
+            ):
+                losses += metrics["loss_sum"]
+                positions += metrics["positions"]
+                category_traces.append(trace)
         values = trace_metrics(category_traces)
         categories[category] = values["draft_acceptance_rate"]
         traces.extend(category_traces)
@@ -138,12 +141,18 @@ def publish_result(tracker, result):
     )
 
 
-def train_feedback(study, *, resume=False, dry_run=False):
+def train_feedback(
+    study, *, resume=False, dry_run=False, rollout_concurrency=0, ram_cache_gib=None
+):
     if dry_run:
         return {
             "configuration": study.model_dump(mode="json"),
             "training_examples": 4 * study.train_per_category,
             "additional_updates": study.steps,
+            "execution": {
+                "rollout_concurrency": rollout_concurrency or "auto",
+                "ram_cache_gib": ram_cache_gib or "auto",
+            },
             "source_optimizer_step": study.parent.optimizer_step,
             "final_lineage_step": study.parent.optimizer_step + study.steps,
         }
@@ -175,6 +184,9 @@ def train_feedback(study, *, resume=False, dry_run=False):
             inputs,
             architecture=Architecture.model_validate(metadata["architecture"]),
         )
+        execution = execution_settings(
+            runtime, concurrency=rollout_concurrency, ram_cache_gib=ram_cache_gib
+        )
         job.update(
             training_mode="online_verified_continuation",
             trainable=study.trainable,
@@ -187,13 +199,24 @@ def train_feedback(study, *, resume=False, dry_run=False):
         )
         try:
             return run_training(
-                study, runtime, cfg, job, split, parent, metadata, state, resume=resume
+                study,
+                runtime,
+                cfg,
+                job,
+                split,
+                parent,
+                metadata,
+                state,
+                resume=resume,
+                execution=execution,
             )
         finally:
             runtime.corpus.cache.close()
 
 
-def run_training(study, runtime, cfg, job, split, parent, metadata, state, *, resume):  # noqa: PLR0917, C901 -- durable online training lifecycle
+def run_training(  # noqa: PLR0917, C901 -- durable online training lifecycle
+    study, runtime, cfg, job, split, parent, metadata, state, *, resume, execution
+):
     output, started = study.output, time.perf_counter()
     identity = run_identity(runtime.cfg, runtime.bank, runtime.corpus, job)
     identity.update(
@@ -248,6 +271,14 @@ def run_training(study, runtime, cfg, job, split, parent, metadata, state, *, re
     # Keep the live generator and exported parent provenance.
     del state
     trainer = OnlineFeedbackTrainer(runtime, study, generator)
+    trainer.rollout_concurrency = execution["rollout_concurrency"]
+    write_json(output / "execution.json", execution)
+    write_json(provenance / "execution.json", execution)
+    if not checkpoint.exists() and (output / "validation.json").exists():
+        previous = json.loads((output / "validation.json").read_text())
+        history = [row for row in previous if row["optimizer_step"] == 0][:1]
+        if history:
+            report("Reusing matching step-0 validation from the previous attempt")
     report(
         "Online feedback: SDPA streaming; fixed prompt summary; "
         "LK excludes invalidated suffix contexts"
@@ -264,6 +295,8 @@ def run_training(study, runtime, cfg, job, split, parent, metadata, state, *, re
                 {
                     "run_summary/trainable_parameters": sum(p.numel() for p in params),
                     "run_summary/source_optimizer_step": study.parent.optimizer_step,
+                    "run_summary/rollout_concurrency": trainer.rollout_concurrency,
+                    "run_summary/ram_cache_gib": execution["ram_cache_gib"],
                 }
             )
             for section in ("training_scores", "feedback_diagnostics"):
@@ -320,16 +353,17 @@ def run_training(study, runtime, cfg, job, split, parent, metadata, state, *, re
             trainer.prefetch([e["indices"][0] for e in episodes])
             optimizer.zero_grad(set_to_none=True)
             set_learning_rate(optimizer, runtime.cfg, progress + 1)
-            loss, positions, traces = 0.0, 0, []
-            for episode, item in enumerate(episodes):
-                torch.manual_seed(study.seed + progress * 100003 + episode * 1009)
-                value, count, trace = trainer.train_episode(
-                    item["indices"][0], len(episodes)
-                )
+            timing_before = dict(trainer.timings)
+            rpc_before, io_before = (
+                trainer.teacher_rpc_seconds,
+                trainer.teacher_file_seconds,
+            )
+            results = trainer.train_batch([item["indices"][0] for item in episodes])
+            loss = sum(value for value, _, _ in results) / len(episodes)
+            positions = sum(count for _, count, _ in results)
+            traces = [trace for _, _, trace in results]
+            for trace in traces:
                 trace["policy_optimizer_step"] = progress
-                traces.append(trace)
-                loss += value / len(episodes)
-                positions += count
             if not positions:
                 raise ValueError(
                     "All requests ended before a supervised draft decision"
@@ -355,6 +389,23 @@ def run_training(study, runtime, cfg, job, split, parent, metadata, state, *, re
                 - teacher_before[1],
                 "training_performance/teacher_input_tokens": trainer.teacher_tokens
                 - teacher_before[2],
+                "training_performance/collection_seconds": trainer.timings[
+                    "collection_seconds"
+                ]
+                - timing_before["collection_seconds"],
+                "training_performance/backward_seconds": trainer.timings[
+                    "backward_seconds"
+                ]
+                - timing_before["backward_seconds"],
+                "training_performance/generator_calls": trainer.timings[
+                    "generator_calls"
+                ]
+                - timing_before["generator_calls"],
+                "training_performance/teacher_rpc_seconds": trainer.teacher_rpc_seconds
+                - rpc_before,
+                "training_performance/activation_io_seconds": (
+                    trainer.teacher_file_seconds - io_before
+                ),
                 "training_performance/update_seconds": time.perf_counter() - beginning,
                 "training_performance/example_presentations": len(episodes),
                 "cache_performance/prompt_cache_gib": runtime.corpus.cache.ram.bytes
@@ -374,10 +425,14 @@ def run_training(study, runtime, cfg, job, split, parent, metadata, state, *, re
                 stream.write(json.dumps(metrics) + "\n")
             write_json(output / "online_traces" / f"update-{progress:08d}.json", traces)
             if progress == 1 or progress % 10 == 0:
+                collect_seconds = metrics["training_performance/collection_seconds"]
+                backward_seconds = metrics["training_performance/backward_seconds"]
                 report(
                     f"{study.name}: update={progress}/{study.steps}; "
                     f"wall={metrics['training_performance/update_seconds']:.2f}s; "
                     f"acceptance={scores['draft_acceptance_rate']:.4f}; "
+                    f"collect={collect_seconds:.2f}s; "
+                    f"backward={backward_seconds:.2f}s; "
                     f"supervised_positions={positions}; "
                     f"prompt_cache={runtime.corpus.cache.ram.bytes / 2**30:.2f} GiB"
                 )

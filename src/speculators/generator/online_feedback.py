@@ -5,6 +5,8 @@ pass predicts accepted tokens and, when present, the first target correction fro
 its correct prefix. Invalidated suffix positions are excluded from distillation.
 """
 
+import time
+from concurrent.futures import FIRST_COMPLETED, wait
 from dataclasses import dataclass
 
 import torch
@@ -12,6 +14,7 @@ from transformers import DynamicCache
 
 from speculators.bank.artifacts import digest
 from speculators.generator.feedback import AdapterExperiment, VerifierFeedback
+from speculators.generator.model import backward_factors, detached_factors
 from speculators.generator.streaming import StreamingDraft, detached_cache
 from speculators.generator.target_verifier import FrozenTarget
 from speculators.losses import resolve_loss_config
@@ -26,6 +29,7 @@ class VerifiedBlock:
     feedback: torch.Tensor
     verified_tokens: list[int]
     teacher_logits: torch.Tensor
+    student_logits: torch.Tensor | None = None
 
 
 class OnlineFeedbackTrainer(FrozenTarget):
@@ -37,6 +41,12 @@ class OnlineFeedbackTrainer(FrozenTarget):
             iter(resolve_loss_config(study.loss, study.loss_implementation).values())
         )[0]
         self.prompt_futures = {}
+        self.rollout_concurrency = 4
+        self.timings = {
+            "collection_seconds": 0.0,
+            "backward_seconds": 0.0,
+            "generator_calls": 0,
+        }
 
     def prompt_key(self, index):
         row = self.runtime.corpus.rows[index]
@@ -45,12 +55,13 @@ class OnlineFeedbackTrainer(FrozenTarget):
     def prefetch(self, indices):
         cache = self.runtime.corpus.cache
         for index in indices:
+            key = self.prompt_key(index)
             with cache.ram.lock:
-                present = self.prompt_key(index) in cache.ram.full
-            if present or index in self.prompt_futures:
+                present = key in cache.ram.full
+            if present or key in self.prompt_futures:
                 continue
             row = self.runtime.corpus.rows[index]
-            self.prompt_futures[index] = cache.pool.submit(
+            self.prompt_futures[key] = cache.pool.submit(
                 self.extract, row["input_ids"][: row["prompt_length"]]
             )
 
@@ -62,11 +73,13 @@ class OnlineFeedbackTrainer(FrozenTarget):
                 cache.ram.full.move_to_end(key)
                 return cache.ram.full[key]["hidden_states"]
         self.prefetch([index])
-        states = self.prompt_futures.pop(index).result()
+        states = self.prompt_futures.pop(key).result()
         cache.ram.put(key, {"hidden_states": states})
         return states
 
     def factors(self, summary, length, feedback):
+        if hasattr(self, "timings"):
+            self.timings["generator_calls"] += 1
         kwargs = (
             {"feedback": feedback.to(self.runtime.device)}
             if self.study.feedback
@@ -76,8 +89,7 @@ class OnlineFeedbackTrainer(FrozenTarget):
             summary[None], torch.tensor([length], device=self.runtime.device), **kwargs
         )
 
-    @torch.no_grad()
-    def collect(self, index, *, gradient_blocks=True):  # noqa: C901 -- causal greedy verification and exact budget/EOS handling
+    def _rollout(self, index, *, gradient_blocks=True):  # noqa: C901 -- resumable causal verification state machine
         runtime, study = self.runtime, self.study
         runtime.drafter.eval()  # Same dropout-free policy in collection and training.
         self.generator.eval()
@@ -97,6 +109,7 @@ class OnlineFeedbackTrainer(FrozenTarget):
         )
         cache, new_start = DynamicCache(), 0
         blocks, trace, response = [], [], []
+        previous_key, previous_factors = None, None
         while len(response) < limit:
             bonus = int(self.teacher(states[-1:, -1]).argmax(-1).item())
             if bonus in self.eos:
@@ -106,15 +119,20 @@ class OnlineFeedbackTrainer(FrozenTarget):
             if not count:
                 response.append(bonus)
                 break
-            signal = feedback.tensor(runtime.device)
-            factors = self.factors(summary, prompt_length, signal)
+            signal = feedback.tensor("cpu")
+            key = tuple(signal.tolist()) if study.feedback else ()
+            if previous_factors is None or key != previous_key:
+                previous_factors = self.factors(summary, prompt_length, signal)
+                previous_key = key
+            factors = previous_factors
             previous_cache = detached_cache(cache) if gradient_blocks else None
             fresh = states[new_start:, :-1].flatten(1).to(runtime.device)
             shifted = prefix[new_start + 1 :] + [bonus]
-            proposed, _ = self.stream.propose(
+            proposed, student_logits = self.stream.propose(
                 fresh, shifted, new_start, cache, factors, count=count
             )
-            verified = self.extract(prefix + [bonus] + proposed)
+            # Yield only the RPC. GPU work remains on the owning main thread.
+            verified = yield prefix + [bonus] + proposed
             teachers = self.teacher(verified[len(prefix) : len(prefix) + count, -1])
             target_ids = teachers.argmax(-1).tolist()
             accepted = 0
@@ -140,6 +158,7 @@ class OnlineFeedbackTrainer(FrozenTarget):
                     signal.detach(),
                     target_ids[:valid],
                     targets.detach(),
+                    student_logits[:, :valid].detach() if not gradient_blocks else None,
                 )
             )
             trace.append(
@@ -178,22 +197,79 @@ class OnlineFeedbackTrainer(FrozenTarget):
             },
         )
 
-    def train_episode(self, index, divisor):
-        summary, blocks, trace = self.collect(index)
+    def collect_many(self, indices, *, gradient_blocks=True):
+        """Interleave RPC waits; retain request-local KV/feedback and input order."""
+        self.prefetch(indices)
+        results = [None] * len(indices)
+        pending, scheduled, next_index = {}, [], 0
+        limit = max(1, getattr(self, "rollout_concurrency", 1))
+        pool = self.runtime.corpus.cache.pool
+
+        def advance(slot, routine, value=None, *, initial=False):
+            with torch.no_grad():
+                try:
+                    tokens = next(routine) if initial else routine.send(value)
+                except StopIteration as complete:
+                    results[slot] = complete.value
+                    return
+            scheduled.append((tokens, slot, routine))
+
+        try:
+            while next_index < len(indices) or pending or scheduled:
+                while (
+                    next_index < len(indices) and len(pending) + len(scheduled) < limit
+                ):
+                    slot = next_index
+                    next_index += 1
+                    advance(
+                        slot,
+                        self._rollout(indices[slot], gradient_blocks=gradient_blocks),
+                        initial=True,
+                    )
+                # Prepare a wave before releasing its verifier RPCs, so the
+                # target does not occupy the shared GPU before other proposals.
+                for tokens, slot, routine in scheduled:
+                    pending[pool.submit(self.extract, tokens)] = (slot, routine)
+                scheduled.clear()
+                if pending:
+                    ready, _ = wait(pending, return_when=FIRST_COMPLETED)
+                    # Stable gradient/output order is independent of RPC completion.
+                    for future in sorted(ready, key=lambda item: pending[item][0]):
+                        slot, routine = pending.pop(future)
+                        advance(slot, routine, future.result())
+        finally:
+            for future, (_, routine) in pending.items():
+                future.cancel()
+                routine.close()
+            for _, _, routine in scheduled:
+                routine.close()
+        return results
+
+    def collect(self, index, *, gradient_blocks=True):
+        return self.collect_many([index], gradient_blocks=gradient_blocks)[0]
+
+    def train_collected(self, index, collected, divisor):
+        summary, blocks, trace = collected
         positions = sum(len(block.verified_tokens) for block in blocks)
-        total = 0.0
+        total, graphs = 0.0, {}
         for block in blocks:
-            factors = self.factors(
-                summary,
-                self.runtime.corpus.rows[index]["prompt_length"],
-                block.feedback,
-            )
+            # Identical conditioning yields identical factors. Accumulate adapter
+            # derivatives, then traverse the large hypernetwork once per context.
+            key = tuple(block.feedback.tolist()) if self.study.feedback else ()
+            if key not in graphs:
+                generated = self.factors(
+                    summary,
+                    self.runtime.corpus.rows[index]["prompt_length"],
+                    block.feedback,
+                )
+                graphs[key] = generated, detached_factors(generated)
+            leaves = graphs[key][1]
             _, logits = self.stream.propose(
                 block.states,
                 block.shifted_tokens,
                 block.position,
                 block.cache,
-                factors,
+                leaves,
                 count=len(block.verified_tokens),
                 forced=block.verified_tokens,
             )
@@ -203,38 +279,54 @@ class OnlineFeedbackTrainer(FrozenTarget):
             weight = len(block.verified_tokens) / max(positions, 1)
             (loss * weight / divisor).backward()
             total += float(loss.detach()) * weight
+        for generated, leaves in graphs.values():
+            backward_factors(generated, leaves)
         return total, positions, trace
 
+    def train_episode(self, index, divisor):
+        return self.train_collected(index, self.collect(index), divisor)
+
+    def train_batch(self, indices):
+        """Collect bounded groups with one unchanged policy, accumulate all grads."""
+        results = []
+        width = max(1, getattr(self, "rollout_concurrency", 1))
+        for offset in range(0, len(indices), width):
+            group = indices[offset : offset + width]
+            started = time.perf_counter()
+            collected = self.collect_many(group)
+            self.synchronize()
+            self.timings["collection_seconds"] += time.perf_counter() - started
+            started = time.perf_counter()
+            for index, sample in zip(group, collected, strict=True):
+                results.append(self.train_collected(index, sample, len(indices)))
+            self.synchronize()
+            self.timings["backward_seconds"] += time.perf_counter() - started
+        return results
+
+    def synchronize(self):
+        if self.runtime.device.type == "cuda":
+            torch.cuda.synchronize(self.runtime.device)
+
     @torch.no_grad()
-    def evaluate_episode(self, index):
-        summary, blocks, trace = self.collect(index, gradient_blocks=False)
-        # Reconstruct the policy's committed KV while teacher-forcing only valid
-        # blocks. This uses real feedback, not a zero-feedback prompt diagnostic.
-        cache = DynamicCache()
+    def evaluation_values(self, collected):
+        _, blocks, trace = collected
         total, count, correct = 0.0, 0, 0
         for block in blocks:
-            block.cache = cache
-            factors = self.factors(
-                summary,
-                self.runtime.corpus.rows[index]["prompt_length"],
-                block.feedback,
-            )
-            _, logits = self.stream.propose(
-                block.states,
-                block.shifted_tokens,
-                block.position,
-                cache,
-                factors,
-                count=len(block.verified_tokens),
-                forced=block.verified_tokens,
-            )
-            size = len(block.verified_tokens)
+            # Before the first mismatch, these are exactly the logits of the
+            # verified-prefix pass. No second generator/draft execution is needed.
+            logits = block.student_logits
+            if logits is None:
+                raise ValueError("Validation collection did not retain policy logits")
             total += float(self.loss(logits, block.teacher_logits[None]).sum())
             correct += int((logits.argmax(-1) == block.teacher_logits.argmax(-1)).sum())
-            count += size
-            excess = cache.get_seq_length() - (
-                block.position + len(block.shifted_tokens)
-            )
-            if excess > 0:
-                cache.crop(-excess)
+            count += len(block.verified_tokens)
         return {"loss_sum": total, "positions": count, "correct": correct}, trace
+
+    def evaluate_episode(self, index):
+        return self.evaluation_values(self.collect(index, gradient_blocks=False))
+
+    def evaluate_many(self, indices):
+        return [
+            self.evaluation_values(sample)
+            for sample in self.collect_many(indices, gradient_blocks=False)
+        ]

@@ -160,8 +160,10 @@ group `step4000-4k-plus1000-online`, with distinct run names:
 - `feedback_diagnostics`: projector weight norm.
 
 Validation runs at additional updates 0, 500 and 1,000, using actual causal feedback
-for the projector arm. Prompt-only target activations can be cached in bounded RAM
-(default 96 GiB); policy-dependent continuations/feedback are freshly collected.
+for the projector arm. Prompt-only target activations can be cached in bounded RAM. The execution layer
+caps this at half the detected system/container memory by default, also respecting
+the configured upper bound; `--ram-cache-gib` sets a smaller explicit cap.
+Policy-dependent continuations/feedback are freshly collected.
 Transient extraction files are read and deleted. No full activation dataset is
 retained on disk.
 
@@ -213,3 +215,64 @@ the current policy, exclusion of invalidated suffixes, fixed prompt conditioning
 projector-only updates, full checkpoint recovery and export, and matching serving
 inputs. The broader focused suite passed 130 tests with one CUDA-only test skipped.
 The real A100 run remains required to measure fit and online-collection cost.
+
+## Faster execution (2026-10-27)
+
+Execution changes preserve the 4K prompt pool, 1,000 additional updates, 64-token
+rollouts, 8-example optimizer batch and complete validation memberships:
+
+- Independent requests retain separate KV caches and feedback. Proposal waves are
+  produced before their verifier RPCs are released together, allowing vLLM to batch
+  verification on the shared GPU. Gradient accumulation remains in input order and
+  parameters change only after the complete optimizer batch.
+- Validation uses the logits already computed during collection; it does not run
+  a second generator/drafter pass for its loss diagnostic.
+- Collection reuses factors when their conditioning input is unchanged. During
+  training, adapter derivatives accumulate per distinct conditioning input and
+  backpropagate through the generator once per such input. The regular arm therefore
+  needs one generator backward per request rather than one per verification round.
+  The feedback arm also reuses identical feedback inputs without rounding them.
+- Extracted activations are memory-mapped and consumed before their temporary files
+  are unlinked; this removes the full-prefix Python bytes/deserialization copy.
+  The target still computes and emits full-prefix activations: incremental target
+  KV verification is not implemented by this optimization.
+- If interrupted before its first checkpoint, a resumed run can reuse its saved
+  matching step-0 validation. It still restarts updates from the parent when no
+  optimizer checkpoint was saved.
+
+Resource settings are execution options, recorded in `execution.json` and each
+attempt's provenance. They do not change the checkpoint's experiment identity, so
+concurrency/RAM settings can be changed while resuming the same experiment. Automatic
+concurrency is 8 with at least 60 GiB GPU memory and 2 otherwise; the default RAM
+ceiling respects detected cgroup limits. Set the flags explicitly when desired.
+
+On an 80 GB GPU, for each arm:
+
+```bash
+speculators generator train-feedback \
+  --config examples/eagle3-lora/feedback_continuation_v1/regular.yaml \
+  --rollout-concurrency 8 --ram-cache-gib 48 --resume
+```
+
+```bash
+speculators generator train-feedback \
+  --config examples/eagle3-lora/feedback_continuation_v1/projector_only.yaml \
+  --rollout-concurrency 8 --ram-cache-gib 48 --resume
+```
+
+On the observed 40 GB GPU, use `--rollout-concurrency 2`, or omit the concurrency
+flag for automatic selection. The extractor still needs its existing supported
+configuration; concurrency cannot provide memory that the GPU does not have.
+
+New performance panels separate collection wall seconds, backward wall seconds,
+generator call count, verifier RPC seconds and activation-file mapping/validation
+seconds. RPC seconds are summed across overlapping calls and must not be added to
+wall seconds. Memory-map page faults and subsequent GPU copies can occur later and
+are included in collection wall time rather than fully represented by the file
+opening timer. `update_seconds` remains the total measured update wall time.
+
+CPU checks establish serial/parallel output and feedback parity, actual overlapping
+verification RPCs, gradient equivalence, validation-logit reuse and resume with
+changed resource flags. The focused suite passed 136 tests with one CUDA-only test
+skipped. These are correctness/work-reduction checks; real GPU speedup remains to
+be measured from the new phase timings. No A100 speedup factor is claimed here.

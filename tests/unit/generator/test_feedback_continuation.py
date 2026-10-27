@@ -327,7 +327,9 @@ def test_full_online_continuation_freeze_export_and_resume(
         feedback_training.train_feedback(cfg)
     saved = torch.load(cfg.output / "checkpoint.pt", weights_only=True)
     assert saved["progress"] == 1
-    result = feedback_training.train_feedback(cfg, resume=True)
+    result = feedback_training.train_feedback(
+        cfg, resume=True, rollout_concurrency=4, ram_cache_gib=0.01
+    )
     assert result["completed_updates"] == 2
     assert result["lineage_optimizer_step"] == 4002
     assert [r["optimizer_step"] for r in result["history"]] == [0, 1, 2]
@@ -352,3 +354,254 @@ def test_full_online_continuation_freeze_export_and_resume(
     assert {row["policy_optimizer_step"] for row in trace} == {1}
     membership = json.loads((cfg.inputs / "membership.json").read_text())
     assert {len(g["train"]) for g in membership["groups"].values()} == {8}
+
+
+@pytest.fixture
+def fast_trainer(tmp_path):
+    import time  # noqa: PLC0415
+    from threading import Lock  # noqa: PLC0415
+
+    from speculators.generator.streaming import StreamingDraft  # noqa: PLC0415
+    from speculators.losses import resolve_loss_config  # noqa: PLC0415
+
+    runtime, generator = streaming_runtime(
+        feedback=True, backend="simple_flex_attention"
+    )
+    runtime.bank = SimpleNamespace(hidden_states=SimpleNamespace(sequence_length=64))
+    pool = ThreadPoolExecutor(max_workers=8)
+    runtime.corpus = SimpleNamespace(
+        rows=[
+            {"input_ids": [1, 2 + i, 3], "prompt_length": 2, "primary_id": str(i)}
+            for i in range(4)
+        ],
+        cache=SimpleNamespace(ram=ActivationRAM(0.01), pool=pool),
+    )
+    cfg = FeedbackStudy(
+        workspace=tmp_path,
+        parent={"model": str(tmp_path)},
+        trainable="projector",
+        feedback=True,
+        rollout_tokens=8,
+        loss_implementation="eager",
+    )
+    trainer = OnlineFeedbackTrainer.__new__(OnlineFeedbackTrainer)
+    trainer.runtime, trainer.study, trainer.generator = runtime, cfg, generator
+    trainer.stream, trainer.eos, trainer.prompt_futures = (
+        StreamingDraft(runtime),
+        [],
+        {},
+    )
+    trainer.rollout_concurrency = 4
+    trainer.timings = {
+        "collection_seconds": 0.0,
+        "backward_seconds": 0.0,
+        "generator_calls": 0,
+    }
+    trainer.loss = next(iter(resolve_loss_config("lk_hybrid", "eager").values()))[0]
+    trainer.teacher = lambda states: torch.tensor([[4.0] + [0.0] * 15]).expand(
+        len(states), -1
+    )
+    activity = {"active": 0, "peak": 0}
+    lock = Lock()
+
+    def extract(tokens):
+        verification = len(tokens) > 2
+        if verification:
+            with lock:
+                activity["active"] += 1
+                activity["peak"] = max(activity["peak"], activity["active"])
+            time.sleep(0.03)
+        value = torch.arange(len(tokens) * 32).reshape(-1, 4, 8).float() / 100
+        if verification:
+            with lock:
+                activity["active"] -= 1
+        return value
+
+    trainer.extract = extract
+    try:
+        yield trainer, activity
+    finally:
+        pool.shutdown(wait=True)
+
+
+def test_parallel_collection_matches_serial_policy_and_overlaps_verification(
+    fast_trainer,
+):
+    trainer, activity = fast_trainer
+    trainer.rollout_concurrency = 1
+    serial = trainer.collect_many([0, 1, 2, 3])
+    assert activity["peak"] == 1
+    activity["peak"] = 0
+    trainer.rollout_concurrency = 4
+    parallel = trainer.collect_many([0, 1, 2, 3])
+    assert activity["peak"] > 1
+    assert [sample[2] for sample in serial] == [sample[2] for sample in parallel]
+    for first, second in zip(serial, parallel, strict=True):
+        torch.testing.assert_close(first[0], second[0])
+        for a, b in zip(first[1], second[1], strict=True):
+            torch.testing.assert_close(a.teacher_logits, b.teacher_logits)
+            torch.testing.assert_close(a.feedback, b.feedback)
+
+
+@pytest.mark.parametrize("feedback", [False, True])
+def test_factor_gradient_accumulation_matches_repeated_generator_backward(
+    fast_trainer, feedback
+):
+    from speculators.generator.model import LoRAGenerator  # noqa: PLC0415
+
+    trainer, _ = fast_trainer
+    if not feedback:
+        old = trainer.generator
+        fresh = LoRAGenerator(24, old.shapes, old.rank, small_architecture())
+        fresh.load_state_dict(
+            {
+                k: v
+                for k, v in old.state_dict().items()
+                if k != "feedback_encoder.weight"
+            }
+        )
+        trainer.generator = fresh
+        trainer.study = trainer.study.model_copy(
+            update={"feedback": False, "trainable": "generator"}
+        )
+    else:
+        trainer.generator.requires_grad_(False)
+        trainer.generator.feedback_encoder.requires_grad_(True)
+    summary, blocks, _ = trainer.collect(0)
+    positions = sum(len(block.verified_tokens) for block in blocks)
+    reference_loss = 0.0
+    for block in blocks:
+        factors = trainer.factors(summary, 2, block.feedback)
+        _, logits = trainer.stream.propose(
+            block.states,
+            block.shifted_tokens,
+            block.position,
+            block.cache,
+            factors,
+            count=len(block.verified_tokens),
+            forced=block.verified_tokens,
+        )
+        loss = trainer.loss(logits, block.teacher_logits[None]).mean()
+        weight = len(block.verified_tokens) / positions
+        (loss * weight).backward()
+        reference_loss += float(loss.detach()) * weight
+    gradients = {
+        name: p.grad.clone()
+        for name, p in trainer.generator.named_parameters()
+        if p.grad is not None
+    }
+    trainer.generator.zero_grad(set_to_none=True)
+    sample = trainer.collect(0)
+    keys = {tuple(block.feedback.tolist()) if feedback else () for block in sample[1]}
+    before = trainer.timings["generator_calls"]
+    loss, count, _ = trainer.train_collected(0, sample, 1)
+    assert loss == pytest.approx(reference_loss)
+    assert count == positions
+    assert trainer.timings["generator_calls"] - before == len(keys)
+    assert len(keys) <= len(blocks)
+    for name, p in trainer.generator.named_parameters():
+        if name in gradients:
+            torch.testing.assert_close(p.grad, gradients[name], rtol=1e-4, atol=1e-6)
+
+
+def test_validation_uses_collected_logits_without_extra_draft_or_generator_pass(
+    fast_trainer, monkeypatch
+):
+    from transformers import DynamicCache  # noqa: PLC0415
+
+    trainer, _ = fast_trainer
+    summary, blocks, trace = trainer.collect(0, gradient_blocks=False)
+    cache = DynamicCache()
+    reference = 0.0
+    with torch.no_grad():
+        for block in blocks:
+            factors = trainer.factors(summary, 2, block.feedback)
+            _, logits = trainer.stream.propose(
+                block.states,
+                block.shifted_tokens,
+                block.position,
+                cache,
+                factors,
+                count=len(block.verified_tokens),
+                forced=block.verified_tokens,
+            )
+            reference += float(trainer.loss(logits, block.teacher_logits[None]).sum())
+            excess = cache.get_seq_length() - (
+                block.position + len(block.shifted_tokens)
+            )
+            if excess > 0:
+                cache.crop(-excess)
+    monkeypatch.setattr(
+        trainer.stream,
+        "propose",
+        lambda *a, **k: pytest.fail("duplicate validation draft pass"),
+    )
+    monkeypatch.setattr(
+        trainer,
+        "factors",
+        lambda *a, **k: pytest.fail("duplicate validation generator pass"),
+    )
+    metrics, result = trainer.evaluation_values((summary, blocks, trace))
+    assert metrics["loss_sum"] == pytest.approx(reference)
+    assert result == trace
+
+
+def test_execution_controls_fit_memory_without_changing_study_identity(monkeypatch):
+    from speculators.generator import feedback_execution  # noqa: PLC0415
+
+    monkeypatch.setattr(
+        feedback_execution, "memory_limit_bytes", lambda: int(83.5 * 2**30)
+    )
+    runtime = SimpleNamespace(
+        device=torch.device("cpu"),
+        corpus=SimpleNamespace(
+            cache=SimpleNamespace(
+                ram=ActivationRAM(0.01),
+                cfg=SimpleNamespace(online=SimpleNamespace(ram_cache_gib=96)),
+            )
+        ),
+    )
+    config = feedback_execution.execution_settings(runtime)
+    assert config["rollout_concurrency"] == 2
+    assert config["ram_cache_gib"] == pytest.approx(41.75)
+    runtime.device = torch.device("cuda")
+    monkeypatch.setattr(
+        torch.cuda,
+        "get_device_properties",
+        lambda device: SimpleNamespace(total_memory=80 * 2**30),
+    )
+    config = feedback_execution.execution_settings(runtime)
+    assert config["rollout_concurrency"] == 8
+    assert runtime.corpus.cache.cfg.online.ram_cache_gib == 96
+    assert runtime.corpus.cache.ram.limit < feedback_execution.memory_limit_bytes()
+
+
+def test_interrupted_first_update_reuses_initial_validation(
+    feedback_fixture, monkeypatch
+):
+    definition, _, _ = feedback_fixture
+    original = OnlineFeedbackTrainer.train_batch
+    monkeypatch.setattr(
+        OnlineFeedbackTrainer,
+        "train_batch",
+        lambda *a: (_ for _ in ()).throw(RuntimeError("stop before first update")),
+    )
+    with pytest.raises(RuntimeError, match="first update"):
+        feedback_training.train_feedback(definition)
+    assert not (definition.output / "checkpoint.pt").exists()
+    previous = json.loads((definition.output / "validation.json").read_text())
+    assert previous[0]["optimizer_step"] == 0
+    monkeypatch.setattr(OnlineFeedbackTrainer, "train_batch", original)
+    original_evaluation = feedback_training.evaluate_online
+    calls = []
+
+    def evaluate(*args):
+        calls.append(True)
+        return original_evaluation(*args)
+
+    monkeypatch.setattr(feedback_training, "evaluate_online", evaluate)
+    result = feedback_training.train_feedback(
+        definition, resume=True, rollout_concurrency=4, ram_cache_gib=0.01
+    )
+    assert len(calls) == 2  # Steps 1 and 2, not the already-measured step 0.
+    assert result["history"][0] == previous[0]
