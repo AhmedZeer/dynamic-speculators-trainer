@@ -37,10 +37,10 @@ Do not infer them from current configuration defaults or earlier benchmarks.
 | Generator · 24K · 2,000 steps | 77.58 | 68.11 | 66.50 | **57.58** |
 | Generator · 24K · 4,000 steps | **79.11** | **69.83** | **67.92** | 56.49 |
 
-Planned follow-up: [fixed LoRA coefficients 0.5, 4 and 8](../../../examples/eagle3-lora/coefficient_sweep_4000/README.md)
-for the pinned step-4000 generator, shared/merged execution, math/chat only, C1.
-The runbook reserves new rows alongside the historical coefficient-2 reference;
-new measurements are pending and are not inferred from these earlier results.
+Follow-up: [GEN-008](GEN-008-coefficient-sweep.md) archives the supplied fixed
+coefficient 0.5/4/8 results for the step-4000 generator, shared/merged execution,
+math/chat only, C1. Its extended table preserves coefficient 2 as a historical
+reference rather than presenting it as a same-session measurement.
 
 ## Out-of-distribution — Red Hat (output tokens/s)
 

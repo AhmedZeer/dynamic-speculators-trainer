@@ -1,5 +1,11 @@
 # Generation benchmark archive
 
+The fixed-coefficient step-4000 sweep is recorded in
+[GEN-008](../GEN-008-coefficient-sweep.md), with its
+[six supplied measurements](2026-10-28-coefficient-4000-c1/summary.json),
+[throughput/acceptance table](2026-10-28-coefficient-4000-c1/summary.md), and
+[derived comparisons](2026-10-28-coefficient-4000-c1/analysis.json).
+
 The original-pipeline feedback continuation observation is recorded in
 [GEN-007](../GEN-007-original-feedback-v3.md), with
 [qualitative screenshot observations](2026-10-28-original-feedback-v3/metrics.json)

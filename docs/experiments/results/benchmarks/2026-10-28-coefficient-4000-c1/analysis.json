@@ -1,0 +1,95 @@
+{
+  "experiment_id": "GEN-008",
+  "receipt_date": "2026-10-28",
+  "execution_date": null,
+  "source": "User-supplied aggregate summary JSON; archived with equivalent JSON values and shared fields expanded. Original whitespace is not retained.",
+  "correctness_status": "not_checked",
+  "comparisons": [
+    {
+      "category": "math",
+      "scale": 0.5,
+      "output_tokens_per_second": 66.97256662278322,
+      "throughput_change_vs_scale_05_percent": 0.0,
+      "draft_acceptance_percent": 55.384934633741445,
+      "acceptance_length": 2.661548039012243,
+      "oneoff_generator_merge_restore_seconds": 0.1759857922941446
+    },
+    {
+      "category": "math",
+      "scale": 4,
+      "output_tokens_per_second": 64.08350748533356,
+      "throughput_change_vs_scale_05_percent": -4.313794861293019,
+      "draft_acceptance_percent": 51.14317717598998,
+      "acceptance_length": 2.5342953152796994,
+      "oneoff_generator_merge_restore_seconds": 0.17603907245397557
+    },
+    {
+      "category": "math",
+      "scale": 8,
+      "output_tokens_per_second": 37.10483793980713,
+      "throughput_change_vs_scale_05_percent": -44.59695990330385,
+      "draft_acceptance_percent": 15.359103385178408,
+      "acceptance_length": 1.4607731015553522,
+      "oneoff_generator_merge_restore_seconds": 0.17605830425024033
+    },
+    {
+      "category": "chat",
+      "scale": 0.5,
+      "output_tokens_per_second": 53.66425468190554,
+      "throughput_change_vs_scale_05_percent": 0.0,
+      "draft_acceptance_percent": 37.937491928193204,
+      "acceptance_length": 2.1381247578457963,
+      "oneoff_generator_merge_restore_seconds": 0.179167200550437
+    },
+    {
+      "category": "chat",
+      "scale": 4,
+      "output_tokens_per_second": 51.334805766751,
+      "throughput_change_vs_scale_05_percent": -4.3407831320165124,
+      "draft_acceptance_percent": 34.72581638940234,
+      "acceptance_length": 2.0417744916820704,
+      "oneoff_generator_merge_restore_seconds": 0.17916441609710454
+    },
+    {
+      "category": "chat",
+      "scale": 8,
+      "output_tokens_per_second": 36.94368605075757,
+      "throughput_change_vs_scale_05_percent": -31.157739411940057,
+      "draft_acceptance_percent": 15.695706395866738,
+      "acceptance_length": 1.470871191876002,
+      "oneoff_generator_merge_restore_seconds": 0.17992015972733497
+    }
+  ],
+  "evidence_limits": [
+    "No server/config/checkpoint provenance or hardware identification supplied.",
+    "No repeats or request-level GuideLLM records supplied.",
+    "Scale 2 is a historical separate-run reference, not measured in this sweep."
+  ],
+  "within_sweep_prompt_hashes_equal": true,
+  "within_sweep_output_totals_equal": true,
+  "historical_coefficient_2": {
+    "source": "../2026-10-24-comparison-v2-concurrency/suite_summary_detailed.json",
+    "same_prompt_hashes": true,
+    "same_execution_session": false,
+    "categories": {
+      "math": {
+        "output_tokens_per_second": 79.10888060606892,
+        "acceptance_length": 2.9602495955627455,
+        "draft_acceptance_percent": 65.34165318542485,
+        "num_accepted_tokens": 8482.0,
+        "num_draft_tokens": 12981.0,
+        "num_drafts": 4327.0,
+        "dataset_sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28"
+      },
+      "chat": {
+        "output_tokens_per_second": 56.486110821640246,
+        "acceptance_length": 2.1894945490584736,
+        "draft_acceptance_percent": 39.649818301949125,
+        "num_accepted_tokens": 6001.0,
+        "num_draft_tokens": 15135.0,
+        "num_drafts": 5045.0,
+        "dataset_sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f"
+      }
+    }
+  }
+}

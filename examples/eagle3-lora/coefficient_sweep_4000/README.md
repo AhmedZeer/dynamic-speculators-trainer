@@ -46,7 +46,7 @@ overhead. Preserve aggregate acceptance counters/length alongside throughput.
 Suite-generated launch provenance includes the required `--provenance-dir`.
 Apply the repository's supported vLLM generator patch before adapter serving.
 
-Historical shared/merged C1 table, with requested rows reserved for measurements:
+Extended shared/merged C1 table (historical reference plus supplied new sweep):
 
 | Model | Math output tok/s | Chat output tok/s |
 | --- | ---: | ---: |
@@ -54,12 +54,15 @@ Historical shared/merged C1 table, with requested rows reserved for measurements
 | Trained LoRA (historical) | 72.50 | 56.35 |
 | Generator, 2000 steps (historical) | 77.58 | 57.58 |
 | Generator, 4000 steps, coefficient 2 (historical) | 79.11 | 56.49 |
-| Generator, 4000 steps, coefficient 0.5 | Pending | Pending |
-| Generator, 4000 steps, coefficient 4 | Pending | Pending |
-| Generator, 4000 steps, coefficient 8 | Pending | Pending |
+| Generator, 4000 steps, coefficient 0.5 | 66.97 | 53.66 |
+| Generator, 4000 steps, coefficient 4 | 64.08 | 51.33 |
+| Generator, 4000 steps, coefficient 8 | 37.10 | 36.94 |
 
 Historical values are from [GEN-003](../../../docs/experiments/results/GEN-003-generator-suite-throughput.md).
 They are not rerun or silently inserted into the new suite's measured summary.
 Runtime/hardware provenance for the old table is incomplete; cross-run differences
-need that qualification. No new throughput, acceptance or correctness result is
-claimed by these configs. Exact-output correctness is not established by timing.
+need that qualification. New measurements and acceptance metrics are archived in
+[GEN-008](../../../docs/experiments/results/GEN-008-coefficient-sweep.md).
+Coefficient 0.5 leads the three new settings; 8 sharply reduces acceptance and
+throughput. Coefficient 2 still needs a same-runtime measurement for a controlled
+comparison. Exact-output correctness is not established by timing.
