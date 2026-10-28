@@ -1,5 +1,11 @@
 # Generation benchmark archive
 
+The original-pipeline feedback continuation observation is recorded in
+[GEN-007](../GEN-007-original-feedback-v3.md), with
+[qualitative screenshot observations](2026-10-28-original-feedback-v3/metrics.json)
+and [verified architecture dimensions](2026-10-28-original-feedback-v3/architecture.json).
+These are training/validation losses, not new serving benchmark measurements.
+
 The screenshot-based rank sweep is recorded in
 [GEN-005](../GEN-005-rank-dynamism-and-serving.md), with
 [transcribed geometry and serving metrics](2026-10-25-rank-sweep/metrics.json).

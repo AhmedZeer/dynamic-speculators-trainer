@@ -1,7 +1,10 @@
 # Restore the original pipeline: continuation and feedback
 
-Status: implementation and local numerical/recovery checks. No new GPU training
-result or speedup is claimed. The online-rollout continuation direction was dropped
+Status: implemented and locally checked. The supplied
+[GEN-007 screenshot](results/GEN-007-original-feedback-v3.md) shows no clear feedback
+validation-loss benefit through step 500. Remaining steps and serving outcomes
+were not supplied. See the [architecture and tensor axes](eagle3_generator_architecture.md).
+The online-rollout continuation direction was dropped
 at the user's request. Earlier v1/v2 documents are historical and not the active
 training recipe.
 

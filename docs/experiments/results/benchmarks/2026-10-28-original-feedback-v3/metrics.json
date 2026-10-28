@@ -1,0 +1,74 @@
+{
+  "experiment_id": "GEN-007",
+  "observation_date": "2026-10-28",
+  "status": "preliminary_no_observed_feedback_validation_loss_gain_through_step_500",
+  "evidence_type": "user_supplied_screenshot",
+  "evidence": {
+    "file": "../../assets/GEN-007-original-feedback-v3-losses.png",
+    "sha256": "4dcbb0134c0eab564053ccd2cf36c56d8454a5362350afdac627630c73658d33"
+  },
+  "runs": {
+    "regular": {
+      "name": "original-regular-from4000-v3-gseed42",
+      "run_id": null
+    },
+    "feedback": {
+      "name": "original-feedback-from4000-v3-gseed42",
+      "run_id": null
+    }
+  },
+  "project_from_configuration": "eagle3-generator-original-feedback-v3",
+  "displayed_seed": 42,
+  "validation_steps_shown": [
+    0,
+    125,
+    250,
+    375,
+    500
+  ],
+  "planned_additional_updates": 1000,
+  "training_visible_beyond_step_500": true,
+  "metrics": [
+    "training_losses/drafter_loss",
+    "validation_losses/loss_0",
+    "validation_losses/loss_1",
+    "validation_losses/loss_2"
+  ],
+  "exact_metric_values": null,
+  "metric_precision": "Qualitative visual observations; no exported metric values transcribed.",
+  "observations": [
+    "Training loss is noisy, with closely overlapping smoothed curves and no clear separation.",
+    "Both arms improve validation loss by the middle evaluations and rise again at step 500.",
+    "Feedback is slightly lower at some intermediate evaluations and slightly higher in all three validation losses at step 500.",
+    "No consistent or practically clear validation-loss advantage from feedback is visible through step 500."
+  ],
+  "setup_source": "Repository configs and pinned parent metadata; exact executed config and code revision were not supplied.",
+  "expected_training": {
+    "training_examples": 4000,
+    "train_examples_per_category": 1000,
+    "additional_updates": 1000,
+    "validation_interval": 125,
+    "episodes_per_update": 4,
+    "conditioning_examples_range": [
+      1,
+      8
+    ],
+    "validation_conditioning_examples": 4,
+    "feedback_prefix_tokens": 64,
+    "feedback_prefix_blocks": 2,
+    "trainable_feedback_arm": "whole_generator_plus_projector",
+    "feedback_source": "current_model_teacher_forced_prefix_agreement_proxy"
+  },
+  "unavailable": [
+    "raw W&B metric exports",
+    "run IDs",
+    "executed config/provenance and code SHA",
+    "trained checkpoint/projector hashes",
+    "remaining validations through step 1000",
+    "validation agreement",
+    "serving acceptance and throughput",
+    "repeat-seed uncertainty",
+    "projector norm and factor sensitivity"
+  ],
+  "working_conclusion": "This feedback variant has not demonstrated an improvement on the supplied validation-loss plots; not evidence of statistical equivalence, zero projector weights, or universal failure of feedback."
+}

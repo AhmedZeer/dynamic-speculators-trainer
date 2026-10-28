@@ -1,0 +1,61 @@
+{
+  "implementation_revision": "2ea51dee6bfb02394ad2990e56f5d66a4b11da80",
+  "parent": {
+    "model": "azeeer/eagle3-generator-all24k-10ep-v1",
+    "revision": "bf3fb2818dc1c09f3324b7193d00ceb292a8a854",
+    "subfolder": "step-00004000",
+    "checkpoint_sha256": "10d7657a1ee25c8fd95a331ae3db15362d8243f224a058e73fda399c2589e7c3",
+    "weights_sha256": "efb31f6d8b03a3f22c6d9e532c772c8c098a326fd21af986b0400373e1a9e869"
+  },
+  "source_models": {
+    "drafter": {
+      "id": "RedHatAI/Qwen3-8B-speculator.eagle3",
+      "revision": "08610ffa01dd9f16731fe8f627b85905b6aa51c4"
+    },
+    "target": {
+      "id": "Qwen/Qwen3-8B",
+      "revision": "b968826d9c46dd6066d109eabc6255188de91218"
+    }
+  },
+  "architecture": {
+    "condition_dim": 64,
+    "decoder_width": 512,
+    "descriptor_dim": 32,
+    "encoder_hidden": 512,
+    "example_dim": 128,
+    "residual_blocks": 2
+  },
+  "input_dim": 12288,
+  "rank": 32,
+  "alpha": 64,
+  "shapes_input_output": {
+    "o_proj": [
+      4096,
+      4096
+    ],
+    "v_proj": [
+      8192,
+      1024
+    ]
+  },
+  "max_examples": 8,
+  "draft_hidden_size": 4096,
+  "draft_vocab_size": 32000,
+  "target_vocab_size": 151936,
+  "attention_heads": 32,
+  "kv_heads": 8,
+  "head_dim": 128,
+  "intermediate_size": 12288,
+  "parameter_counts": {
+    "encoder": 6358400,
+    "condition": 41280,
+    "descriptors": 96,
+    "decoder": 1118720,
+    "heads": 285769728,
+    "regular_total": 293288224,
+    "feedback_extra": 192,
+    "generated_factor_elements": 557056,
+    "feedback_total": 293288416
+  },
+  "parameter_count_method": "Exact Linear/LayerNorm/Embedding counts from pinned bundle dimensions and current generator implementation; not a new training measurement."
+}
