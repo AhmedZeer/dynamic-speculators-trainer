@@ -1,0 +1,19 @@
+benchmarks:
+- dataset: nemotron
+  categories: [math, chat]
+settings:
+  batching_policy: fixed_shared_adapter
+  concurrency: 1
+  max_samples: 50
+  max_tokens: 256
+  speculative_tokens: 3
+  warmups: 3
+  seed: 42
+  batch_wait_ms: 50
+  gpu: 0
+  continue_on_error: false
+wandb:
+  enabled: true
+  project: eagle3-generator-coefficient-bench-v1
+  group: step4000-merged-math-chat-c1
+  mode: online

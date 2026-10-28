@@ -1,0 +1,6 @@
+extends: common.yaml
+models:
+- extends: model.yaml
+  name: generator-4000-s8
+  adapter_experiment:
+    scale: 8

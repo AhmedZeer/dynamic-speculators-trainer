@@ -1,0 +1,14 @@
+extends: common.yaml
+models:
+- extends: model.yaml
+  name: generator-4000-s05
+  adapter_experiment:
+    scale: 0.5
+- extends: model.yaml
+  name: generator-4000-s4
+  adapter_experiment:
+    scale: 4
+- extends: model.yaml
+  name: generator-4000-s8
+  adapter_experiment:
+    scale: 8

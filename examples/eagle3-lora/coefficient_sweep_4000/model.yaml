@@ -1,0 +1,13 @@
+name: generator-4000
+type: generator
+model: azeeer/eagle3-generator-all24k-10ep-v1
+revision: bf3fb2818dc1c09f3324b7193d00ceb292a8a854
+subfolder: step-00004000
+adapter_policy: shared
+conditioning_examples: 1
+adapter_experiment:
+  refresh: prompt
+  feedback: false
+  scale_policy: fixed
+  scale_max: 8
+  record_rounds: false
