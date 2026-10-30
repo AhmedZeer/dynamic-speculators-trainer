@@ -1,7 +1,9 @@
 # Generator module and architecture studies v1
 
-Status: implemented and locally tested with tiny models; GPU runs and new
-measurements pending. These are eleven independent training jobs, launched
+Status: implemented and locally tested with tiny models; preliminary GPU-run
+validation screenshots are recorded in [GEN-009](results/GEN-009-generator-structure.md).
+Several supplied curves are partial; raw histories and serving measurements
+remain pending. These are eleven independent training jobs, launched
 manually using the same CLI. There is no multi-job ablation command.
 
 ## Shared baseline and protocol

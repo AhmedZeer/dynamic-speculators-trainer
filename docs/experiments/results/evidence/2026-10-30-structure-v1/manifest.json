@@ -1,0 +1,76 @@
+{
+  "receipt_date": "2026-10-30",
+  "source": "User-supplied W&B screenshots; raw histories and per-run provenance not supplied",
+  "items": [
+    {
+      "image_number": 1,
+      "file": "01-decoder-width-agreement.png",
+      "original_file": "codex-clipboard-kSSWKb.png",
+      "sha256": "37d29cfc88d49ec552674006d0320f48e9205c0e371ff666309a4367fead58d6",
+      "bytes": 224687
+    },
+    {
+      "image_number": 2,
+      "file": "02-decoder-width-loss.png",
+      "original_file": "codex-clipboard-6cd67l.png",
+      "sha256": "9ed79addbd38ac21342b429ad9636da3726a4ee43cf82fc0cb5dd9007abfb556",
+      "bytes": 111782
+    },
+    {
+      "image_number": 3,
+      "file": "03-condition-dim-agreement.png",
+      "original_file": "codex-clipboard-IBglla.png",
+      "sha256": "0caaaf9ecdeb2a9c4b9eceffed39288e746deb720fd6402ba5f650f98fc233da",
+      "bytes": 203910
+    },
+    {
+      "image_number": 4,
+      "file": "04-condition-dim-loss.png",
+      "original_file": "codex-clipboard-aHZdIL.png",
+      "sha256": "7b448c4a83ebea6f79d5c251a03483d511e6e4f10f50e4b88e60c4a44a43f367",
+      "bytes": 98960
+    },
+    {
+      "image_number": 5,
+      "file": "05-residual-blocks-agreement.png",
+      "original_file": "codex-clipboard-TI1EB9.png",
+      "sha256": "b6500d059efa9face499408bac9a1b8d32c524ec39d62c0b7d01f8526e4a4dd7",
+      "bytes": 218638
+    },
+    {
+      "image_number": 6,
+      "file": "06-residual-blocks-loss.png",
+      "original_file": "codex-clipboard-zV0oQC.png",
+      "sha256": "da57a69309694b471b0fe61dcd95a668399f23c9516a8bb0f4a97bc742ae5ce2",
+      "bytes": 103455
+    },
+    {
+      "image_number": 7,
+      "file": "07-encoder-hidden-loss.png",
+      "original_file": "codex-clipboard-jDgNy6.png",
+      "sha256": "2ab804ac3d85d1ada6545bf406d2115711a8b160c45abded564329736f6b58ae",
+      "bytes": 104700
+    },
+    {
+      "image_number": 8,
+      "file": "08-encoder-hidden-agreement.png",
+      "original_file": "codex-clipboard-r3OgDK.png",
+      "sha256": "fc54b9ecbbd3c4406507b1595d013e85c13cb717b2b6726927f718540e397eb1",
+      "bytes": 214435
+    },
+    {
+      "image_number": 9,
+      "file": "09-target-modules-agreement.png",
+      "original_file": "codex-clipboard-8wbwGC.png",
+      "sha256": "6ba8c7459c079d6e182919784d7ba9c2e073b301c92ca94a13f0548d1fc4198e",
+      "bytes": 216388
+    },
+    {
+      "image_number": 10,
+      "file": "10-target-modules-loss.png",
+      "original_file": "codex-clipboard-XMNzz0.png",
+      "sha256": "a8b0c80ecce83a3f5d227fad5dab92cabc8e63e2090f9c0152eabe19f734e2cc",
+      "bytes": 112316
+    }
+  ]
+}
