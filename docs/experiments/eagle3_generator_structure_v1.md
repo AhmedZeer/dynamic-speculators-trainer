@@ -89,14 +89,17 @@ CUDA_VISIBLE_DEVICES=0 python scripts/launch_vllm.py train ./models/qwen3-8b \
   --provenance-dir output/structure-ablations-v1/provenance/vllm \
   -- --served-model-name Qwen/Qwen3-8B \
   --host 127.0.0.1 --port 8000 --dtype bfloat16 \
-  --max-model-len 8193 --max-num-batched-tokens 8193 --max-num-seqs 16 \
+  --max-model-len 8193 --max-num-batched-tokens 8193 --max-num-seqs 32 \
   --gpu-memory-utilization 0.40 --enforce-eager \
   --no-enable-prefix-caching --no-enable-chunked-prefill
 ```
 
-This is the existing single-GPU A100-80GB setup, not a measured fit guarantee
-for the largest heads. The trainer defaults to a 96-GiB activation RAM budget
-plus overhead. Adjust the cache to the machine's available system RAM.
+Extraction concurrency is 32, with a 64-example buffer. This is the next trial
+for the user's RTX PRO 6000, not a measured fit or speed guarantee. The total
+per-iteration token budget remains 8,193, so long sequences can limit actual
+parallelism even with 32 outstanding requests. Keep GPU headroom for the trainer,
+especially with the largest heads. The trainer defaults to a 96-GiB activation
+RAM budget plus overhead; adjust this independently to available system RAM.
 
 ## Independent training commands
 
