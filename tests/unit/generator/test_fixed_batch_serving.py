@@ -225,6 +225,7 @@ def test_batch_runtime_requires_fixed_admission_and_reports_batch_counts(
                     "prepared_batches": 0,
                     "completed_batches": 0,
                     "generator_invocations": 0,
+                    "generator_seconds": 0.0,
                 }
             }
         ],
@@ -239,6 +240,7 @@ def test_batch_runtime_requires_fixed_admission_and_reports_batch_counts(
                     "prepared_batches": 2,
                     "completed_batches": 2,
                     "generator_invocations": 2,
+                    "generator_seconds": 0.002,
                 }
             }
         ],

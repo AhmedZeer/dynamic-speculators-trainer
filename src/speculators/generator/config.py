@@ -10,6 +10,15 @@ from speculators.bank.config import Settings
 
 Condition = Literal["last", "last_mean", "projected"]
 CONDITIONS = ("last", "last_mean", "projected")
+ADAPTER_MODULES = (
+    "up_proj",
+    "down_proj",
+    "gate_proj",
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj",
+)
 
 
 class Architecture(Settings):
@@ -132,10 +141,21 @@ class ExperimentConfig(Settings):
     activation_cache_reserve_gib: float = Field(default=8, ge=0)
     activation_prefetch_workers: int = Field(default=2, ge=1)
     architecture: Architecture = Field(default_factory=Architecture)
+    target_modules: list[str] | None = None
     optimization: Optimization = Field(default_factory=Optimization)
     context: Context = Field(default_factory=Context)
     heatmap: Heatmap = Field(default_factory=Heatmap)
     wandb: WandbSettings = Field(default_factory=WandbSettings)
+
+    @model_validator(mode="after")
+    def valid_target_modules(self):
+        if self.target_modules is not None and (
+            not self.target_modules
+            or len(set(self.target_modules)) != len(self.target_modules)
+            or not set(self.target_modules) <= set(ADAPTER_MODULES)
+        ):
+            raise ValueError("Choose unique, supported LoRA target modules")
+        return self
 
     @model_validator(mode="after")
     def separate_subsets(self):

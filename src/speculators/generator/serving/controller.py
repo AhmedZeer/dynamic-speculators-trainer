@@ -43,6 +43,11 @@ def elapsed(device, operation):
 
 def validate_runtime(config, metadata):
     """Fail before loading GPU weights for unsupported scheduling/precision."""
+    if set(metadata["shapes"]) != {"o_proj", "v_proj"}:
+        raise ValueError(
+            "The vLLM adapter hook currently supports only o_proj/v_proj; "
+            "other module bundles support training and offline evaluation"
+        )
     spec = config.speculative_config
     scheduler = config.scheduler_config
     parallel = config.parallel_config

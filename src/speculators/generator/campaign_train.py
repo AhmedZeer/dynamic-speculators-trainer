@@ -291,10 +291,13 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
     )
     checkpoint = output / "checkpoint.pt"
     epoch_schedule = "epochs" in job
+    hub_backups = "hub_repo" in job
+    if hub_backups:
+        from speculators.generator.epoch_training import backup_checkpoint  # noqa: PLC0415
+
     if epoch_schedule:
         from speculators.generator.epoch_training import (  # noqa: PLC0415
             EpochSchedule,
-            backup_checkpoint,
         )
 
         schedule = EpochSchedule(
@@ -327,9 +330,9 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
         del saved
 
     def backup_if_due():
-        if not epoch_schedule or not progress:
+        if not hub_backups or not progress:
             return
-        epoch = schedule.completed_epochs(progress)
+        epoch = schedule.completed_epochs(progress) if epoch_schedule else None
         if progress % job["hub_upload_interval"] == 0 or progress == job["updates"]:
             backup_checkpoint(output, job, identity, epoch, progress)
 
@@ -529,7 +532,7 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
                     f"session_elapsed={time.perf_counter() - started:.2f}s; "
                     f"cache={cache['cache_bytes'] / 2**30:.2f} GiB"
                 )
-            hub_checkpoint = epoch_schedule and (
+            hub_checkpoint = hub_backups and (
                 progress % job["hub_upload_interval"] == 0 or progress == job["updates"]
             )
             validation_due = (
@@ -572,6 +575,7 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
         }
         if epoch_schedule:
             result["completed_epochs"] = schedule.completed_epochs(progress)
+        if hub_backups:
             result["hub_checkpoints"] = json.loads(
                 (output / "hub_checkpoints.json").read_text()
             )

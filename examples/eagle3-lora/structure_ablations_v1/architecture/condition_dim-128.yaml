@@ -1,0 +1,6 @@
+extends: ../common.yaml
+name: architecture-condition-dim-128-4k-1500
+family: architecture
+repo_id: azeeer/eagle3-generator-structure-v1-architecture-condition-dim-128-4k-1500
+architecture:
+  condition_dim: 128

@@ -341,9 +341,17 @@ def tiny_campaign(tmp_path, monkeypatch):
         torch.manual_seed(config.seed)
         runtime.drafter = tiny_drafter().requires_grad_(False)
         runtime.corpus.prepare(runtime.drafter)
-        runtime.paths = install_adapters(runtime.drafter, 2, 4, 0)
-        runtime.shapes = shapes
-        runtime.cache = FactorCache(1, shapes, 2)
+        runtime.paths = install_adapters(
+            runtime.drafter, 2, 4, 0, target_modules=config.target_modules
+        )
+        runtime.shapes = {
+            name: (
+                runtime.drafter.get_submodule(path).base.in_features,
+                runtime.drafter.get_submodule(path).base.out_features,
+            )
+            for name, path in runtime.paths.items()
+        }
+        runtime.cache = FactorCache(1, runtime.shapes, 2)
         runtime.call_kwargs = {
             "ttt_steps": 3,
             "loss_config": resolve_loss_config("lk_hybrid", "eager"),

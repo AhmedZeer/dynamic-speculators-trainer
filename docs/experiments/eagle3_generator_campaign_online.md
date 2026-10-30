@@ -6,6 +6,9 @@ starting with [the fixed-budget data scaling comparison](results/GEN-001-direct-
 For exact passes over all available training subsets with periodic resumable
 Hub checkpoints, see [full-data epoch training](eagle3_generator_full_data.md).
 
+For independent 4K/1,500-update module and architecture runs using this original
+training protocol, see [structure studies v1](eagle3_generator_structure_v1.md).
+
 Run from the repository root on one A100 80 GB. The trainer replays saved prompt-and-response token IDs through
 an external vLLM extractor. It never downloads activation dumps or restores a
 PEFT directory tree. No speculative decoding benchmark is run.

@@ -1,0 +1,8 @@
+extends: ../common.yaml
+name: modules-mlp-4k-1500
+family: modules
+repo_id: azeeer/eagle3-generator-structure-v1-modules-mlp-4k-1500
+target_modules:
+- up_proj
+- down_proj
+- gate_proj

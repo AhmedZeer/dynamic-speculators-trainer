@@ -153,6 +153,8 @@ def run_one(  # noqa: C901 -- shared online/offline run lifecycle
     started = time.perf_counter()
     job = _source(cfg, original_job)
     local_cfg = job_config(cfg, job, staging_dir=staging_dir)
+    if job.get("tracking_group"):
+        local_cfg.wandb.group = job["tracking_group"]
     output = cfg.output_root / job["stage"] / job.get("profile", "") / job["label"]
     online = cfg.activation_source == "vllm"
     if online:

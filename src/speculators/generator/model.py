@@ -150,16 +150,28 @@ class AdapterLinear(nn.Module):
         )
 
 
-def install_adapters(model, rank, alpha, dropout):
-    """Return stable module names; freeze everything except the two adapters."""
+def install_adapters(model, rank, alpha, dropout, *, target_modules=None):
+    """Install one adapter per selected projection in the single-layer drafter."""
+    selected = set(
+        target_modules if target_modules is not None else ("o_proj", "v_proj")
+    )
+    # Validate all selections before mutating the model.
+    matches = {name: [] for name in selected}
+    for path, layer in model.named_modules():
+        name = path.rsplit(".", 1)[-1]
+        if name in matches:
+            matches[name].append((path, layer))
+    if not selected or any(
+        len(items) != 1 or not isinstance(items[0][1], nn.Linear)
+        for items in matches.values()
+    ):
+        raise ValueError("Expected exactly one linear layer per selected projection")
     model.requires_grad_(False)
     paths = {}
     for path, layer in list(model.named_modules()):
         name = path.rsplit(".", 1)[-1]
-        if name not in ("o_proj", "v_proj"):
+        if name not in selected:
             continue
-        if name in paths or not isinstance(layer, nn.Linear):
-            raise ValueError("Expected exactly one linear o_proj and v_proj")
         parent, _, child = path.rpartition(".")
         setattr(
             model.get_submodule(parent),
@@ -167,8 +179,6 @@ def install_adapters(model, rank, alpha, dropout):
             AdapterLinear(layer, rank, alpha, dropout),
         )
         paths[name] = path
-    if set(paths) != {"o_proj", "v_proj"}:
-        raise ValueError("Drafter must expose o_proj and v_proj")
     return dict(sorted(paths.items()))
 
 

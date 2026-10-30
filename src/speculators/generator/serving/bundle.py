@@ -10,7 +10,7 @@ from safetensors.torch import load_file, save_file
 
 from speculators.bank.artifacts import digest, file_digest, write_json
 from speculators.bank.config import BankConfig
-from speculators.generator.config import Architecture
+from speculators.generator.config import ADAPTER_MODULES, Architecture
 from speculators.generator.model import LoRAGenerator
 
 BUNDLE_VERSION = 1
@@ -49,8 +49,8 @@ def read_bundle(path):
         raise ValueError("Unsupported inference bundle")
     if value["kind"] == "generator" and value["condition"] != "last":
         raise ValueError("The serial runtime supports only last conditioning")
-    if set(value["shapes"]) != set(PROJECTIONS):
-        raise ValueError("Expected o_proj and v_proj in the inference bundle")
+    if not value["shapes"] or not set(value["shapes"]) <= set(ADAPTER_MODULES):
+        raise ValueError("Unsupported adapter projections in the inference bundle")
     if file_digest(path / "model.safetensors") != value["weights_sha256"]:
         raise ValueError("Inference bundle weights do not match their checksum")
     return value
@@ -129,16 +129,17 @@ def export_run(cfg, run_dir, output, *, drafter_model_path=None):  # noqa: C901 
         raise ValueError("Checkpoint and resolved experiment identities differ")
     state = payload["model"]
     rank = identity["lora"]["rank"]
+    projections = sorted(identity["lora"]["target_modules"])
     shapes = {}
     if kind == "generator":
-        for name in PROJECTIONS:
+        for name in projections:
             shapes[name] = [
                 state[f"heads.{name}.A.bias"].numel() // rank,
                 state[f"heads.{name}.B.bias"].numel() // rank,
             ]
     else:
         factors = {}
-        for name in PROJECTIONS:
+        for name in projections:
             for suffix, label in (("a", "A"), ("b", "B")):
                 found = [
                     tensor
@@ -180,7 +181,7 @@ def export_run(cfg, run_dir, output, *, drafter_model_path=None):  # noqa: C901 
             ]
         load_generator(metadata, state)
     else:
-        for name in PROJECTIONS:
+        for name in projections:
             inputs, outputs = shapes[name]
             if state[f"{name}.A"].shape != (rank, inputs) or state[
                 f"{name}.B"

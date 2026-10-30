@@ -1,0 +1,6 @@
+extends: ../common.yaml
+name: architecture-encoder-hidden-1024-4k-1500
+family: architecture
+repo_id: azeeer/eagle3-generator-structure-v1-architecture-encoder-hidden-1024-4k-1500
+architecture:
+  encoder_hidden: 1024

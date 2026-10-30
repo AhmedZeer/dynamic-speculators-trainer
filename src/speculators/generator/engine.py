@@ -98,7 +98,11 @@ class Runtime:
             self.drafter.to(self.device).requires_grad_(False).eval()
         self.corpus.prepare(self.drafter)
         self.paths = install_adapters(
-            self.drafter, bank.lora.rank, bank.lora.alpha, bank.lora.dropout
+            self.drafter,
+            bank.lora.rank,
+            bank.lora.alpha,
+            bank.lora.dropout,
+            target_modules=cfg.target_modules,
         )
         self.shapes = {
             name: (
@@ -319,6 +323,8 @@ class Runtime:
 
 def run_identity(cfg, bank, corpus, job):
     settings = cfg.model_dump(mode="json")
+    if cfg.target_modules is None:
+        settings.pop("target_modules")
     # Preserve identities of existing single-subset experiments.
     if not cfg.additional_bank_configs:
         settings.pop("additional_bank_configs")
@@ -350,7 +356,14 @@ def run_identity(cfg, bank, corpus, job):
         "version": 1,
         "configuration": settings,
         "bank_data": corpus.identity,
-        "lora": bank.lora.model_dump(mode="json"),
+        "lora": {
+            **bank.lora.model_dump(mode="json"),
+            **(
+                {"target_modules": sorted(cfg.target_modules)}
+                if cfg.target_modules is not None
+                else {}
+            ),
+        },
         "drafter_training": {
             **{
                 key: getattr(bank.training, key)
@@ -372,8 +385,12 @@ def begin_run(path, identity):
         )
     write_json(previous, identity)
     if (path / "result.json").exists():
-        report(f"Skipping completed matching experiment: {path}")
-        return False
+        result = json.loads((path / "result.json").read_text())
+        if result.get("status") != "training_snapshot":
+            report(f"Skipping completed matching experiment: {path}")
+            return False
+        if not (path / "checkpoint.pt").is_file():
+            raise FileNotFoundError("Hub snapshot recovery requires checkpoint.pt")
     if (path / "train_command.txt").exists():
         archive = path / "provenance" / f"attempt-{time.time_ns()}"
         archive.mkdir(parents=True)

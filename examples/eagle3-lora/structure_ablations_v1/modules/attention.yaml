@@ -1,0 +1,9 @@
+extends: ../common.yaml
+name: modules-attention-4k-1500
+family: modules
+repo_id: azeeer/eagle3-generator-structure-v1-modules-attention-4k-1500
+target_modules:
+- q_proj
+- k_proj
+- v_proj
+- o_proj

@@ -1,0 +1,6 @@
+extends: ../common.yaml
+name: architecture-residual-blocks-1-4k-1500
+family: architecture
+repo_id: azeeer/eagle3-generator-structure-v1-architecture-residual-blocks-1-4k-1500
+architecture:
+  residual_blocks: 1
