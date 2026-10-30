@@ -1,7 +1,8 @@
 # Structure models: math/chat, shared adapters, concurrency 1
 
-This suite measures the attention/all-module generators and their matched
-static LoRAs, all at **step 1,500**. It uses the existing managed vLLM + GuideLLM
+This suite measures the attention/all-module generators, the attention-only
+decoder-width-256 generator, and two matched static LoRAs: five models, all at
+**step 1,500**. It uses the existing managed vLLM + GuideLLM
 pipeline: one server/model, two category measurements, cleanup, next model.
 No training, response replay, adaptive scale or per-request adapters are enabled.
 
@@ -13,16 +14,19 @@ Checked on 2026-10-30 using the Hub API:
 | --- | --- | --- |
 | Attention generator | `azeeer/eagle3-generator-structure-v1-modules-attention-4k-1500` | Present; revision `a8acae6ac086408a2cbce584c5ceaf1ead57f3c9` |
 | All-module generator | `azeeer/eagle3-generator-structure-v1-modules-all-4k-1500` | Present; revision `b077b468207123d82a8ae57d9e249d6c5508abc6` |
-| Attention static LoRA | `azeeer/eagle3-static-lora-structure-v1-attention-4k-1500` | Pending: latest lookup reached step 1000, revision `23be2c6c345f1e5b7a44006c1ca35c13f8876a2d` |
+| Attention static LoRA | `azeeer/eagle3-static-lora-structure-v1-attention-4k-1500` | Present; latest verified revision `dfb78b270a39f625bc7a39ef75cfaaab5868eb54` |
 | All-module static LoRA | `azeeer/eagle3-static-lora-structure-v1-all-4k-1500` | Present; revision `8ded0674b4e9f9a29c4938596bc2aacea58d1d4f` |
 
-The user chose to wait for attention LoRA step 1500. Its config uses `main`
-and **only** `subfolder: step-00001500`; it never substitutes step 500. Launch
-after that upload is acknowledged. Model resolution pins the current main SHA
-in `resolved_models.json` and `suite.json`, and resume retains that pinned revision. The pending model is
-resolved first; missing snapshots fail before launching GPU servers. Other
-models are already pinned to the verified revisions above. The suite does not
-poll indefinitely or start training the missing model.
+The attention decoder-256 generator is added as
+`azeeer/eagle3-generator-structure-v1-modules-attention-decoder256-4k-1500`.
+At the latest check, revision `afd0df1af02dfb6f379eb4f0d529029a1abdc075`
+contains step 500 and step 1000; step 1500 is pending. Its config uses `main`
+and **only** `subfolder: step-00001500`. No shorter snapshot is substituted.
+Launch after that upload is acknowledged. Attention LoRA also retains `main`
+so already-started suite requests remain compatible. Model resolution pins
+exact SHAs in `resolved_models.json` and `suite.json`; resume keeps those pins.
+Missing snapshots fail before GPU server launch. The suite does not poll
+indefinitely or start training a missing model.
 
 ## Settings
 
@@ -50,7 +54,7 @@ vLLM 0.31.0 and its Speculators patch installed. Stop the training/extraction
 server first: the suite owns GPU 0 and port 8000 and will not kill unrelated
 processes to take that port.
 
-Once attention LoRA step 1500 is uploaded:
+Once decoder-256 step 1500 is uploaded:
 
 ```bash
 speculators benchmark suite \
@@ -60,8 +64,10 @@ speculators benchmark suite \
 ```
 
 `--resume` also works for a new directory. Subsequent invocations retain valid
-completed measurements and retry failed/incomplete tasks. Use this new output
-directory rather than an unrelated old suite directory. Append `--dry-run` to
+completed measurements and retry failed/incomplete tasks. Adding the fifth
+model to the original four-model suite is supported: keep the same output
+directory and `--resume`; only missing measurements run. Existing model definitions,
+workloads and settings must stay identical. Use a new directory for unrelated suites. Append `--dry-run` to
 inspect the config without downloads or GPU launches; it does not establish
 Hub snapshot readiness.
 
@@ -72,7 +78,7 @@ The suite automatically launches/stops its owned servers and clients, includes
 suite.json
 resolved_models.json
 state.json
-summary.md                 # four new rows, math/chat output tokens/s
+summary.md                 # five new rows, math/chat output tokens/s
 summary.csv
 summary.json               # throughput, acceptance, adapter timing, workload hashes
 failures.json

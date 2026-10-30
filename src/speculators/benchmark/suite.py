@@ -196,18 +196,27 @@ def valid_completed(output_root, entry):
 
 
 def validate_resume_request(previous, config):
-    """Allow additive concurrency sweeps, keeping all other settings fixed."""
+    """Allow added models/concurrencies while preserving existing measurements."""
     saved = Suite.model_validate(previous)
     old, new = saved.model_dump(mode="json"), config.model_dump(mode="json")
     for request in (old, new):
         request["settings"].pop("concurrency")
         request["settings"].pop("concurrencies")
-    if old != new or not set(saved.settings.concurrency_values) <= set(
-        config.settings.concurrency_values
+    old_models = {model["name"]: model for model in old.pop("models")}
+    new_models = {model["name"]: model for model in new.pop("models")}
+    models_preserved = all(
+        new_models.get(name) == model for name, model in old_models.items()
+    )
+    if (
+        old != new
+        or not models_preserved
+        or not set(saved.settings.concurrency_values)
+        <= set(config.settings.concurrency_values)
     ):
         raise ValueError(
             "Suite configuration changed; resume only permits adding concurrency "
-            "values with identical models, datasets, and other settings"
+            "values or models, with identical existing models, datasets, "
+            "and other settings"
         )
 
 

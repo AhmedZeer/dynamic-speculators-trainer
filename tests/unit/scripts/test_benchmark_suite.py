@@ -80,10 +80,11 @@ def test_structure_suite_matches_math_chat_c1_and_requires_all_step1500_models(
 ):
     path = Path("examples/eagle3-lora/structure_benchmarks_v1/math_chat_c1.yaml")
     config = Suite.load(path)
-    assert len(config.models) == 4
+    assert len(config.models) == 5
     assert [model.type for model in config.models] == [
         "lora",
         "lora",
+        "generator",
         "generator",
         "generator",
     ]
@@ -106,7 +107,8 @@ def test_structure_suite_matches_math_chat_c1_and_requires_all_step1500_models(
         if model.type == "generator"
     )
     plan = suite.run_suite(path, tmp_path / "dry", dry_run=True)
-    assert len(plan["configuration"]["models"]) == 4
+    assert len(plan["configuration"]["models"]) == 5
+    assert config.models[-1].name == "generator-attention-decoder256-4k-1500"
     assert not (tmp_path / "dry").exists()
 
     def missing_model(spec, *_args, **_kwargs):
@@ -569,7 +571,7 @@ def test_add_concurrency_reuses_serial_results_without_launching_serial_servers(
     assert len(case.launches) == 4
     config["settings"]["max_tokens"] = 128
     case.config.write_text(yaml.safe_dump(config))
-    with pytest.raises(ValueError, match="identical models, datasets"):
+    with pytest.raises(ValueError, match="identical existing models, datasets"):
         suite.run_suite(case.config, case.output, resume=True)
 
 
@@ -581,6 +583,38 @@ def test_resume_rejects_removing_concurrency():
     }
     config = Suite.model_validate(previous)
     config.settings.concurrencies = [1]
+    with pytest.raises(ValueError, match="adding concurrency"):
+        suite.validate_resume_request(previous, config)
+
+
+def test_resume_added_model_reuses_all_completed_measurements(fake_suite):
+    case = fake_suite
+    suite.run_suite(case.config, case.output)
+    config = yaml.safe_load(case.config.read_text())
+    config["models"].append(
+        {"name": "decoder256", "type": "drafter", "model": "owner/decoder256"}
+    )
+    case.config.write_text(yaml.safe_dump(config))
+    result = suite.run_suite(case.config, case.output, resume=True)
+    assert result["completed"] == 6
+    assert case.launches == ["base", "other", "decoder256"]
+    assert len(case.marker.read_text().splitlines()) == 6
+
+
+@pytest.mark.parametrize("change", ["remove", "revision", "dataset"])
+def test_resume_model_addition_does_not_allow_changing_existing_work(change):
+    previous = {
+        "models": [{"name": "base", "type": "drafter", "model": "owner/base"}],
+        "benchmarks": [{"dataset": "nemotron", "categories": ["math", "chat"]}],
+    }
+    config = Suite.model_validate(previous)
+    config.models.append(Model(name="new", type="drafter", model="owner/new"))
+    if change == "remove":
+        config.models.pop(0)
+    elif change == "revision":
+        config.models[0].revision = "a" * 40
+    else:
+        config.benchmarks[0].categories = ["code"]
     with pytest.raises(ValueError, match="adding concurrency"):
         suite.validate_resume_request(previous, config)
 

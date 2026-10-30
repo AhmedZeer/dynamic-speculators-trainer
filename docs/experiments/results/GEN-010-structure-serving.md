@@ -3,15 +3,17 @@
 Status: suite prepared; new GPU throughput/acceptance measurements pending.
 The requested comparison uses step-1500 checkpoints and shared/merged adapters
 at concurrency 1. See [suite, readiness and command](../../../examples/eagle3-lora/structure_benchmarks_v1/README.md).
-On 2026-10-30 the attention static-LoRA repository initially had only step 500
-and reached step 1000 on the latest lookup. The user requested waiting for step
-1500, not substituting either shorter-budget snapshot.
+The attention static LoRA now has step 1500, verified at revision
+`dfb78b270a39f625bc7a39ef75cfaaab5868eb54`. The attention-only decoder-width-256
+generator is now included as a fifth model. Its latest verified revision
+`afd0df1af02dfb6f379eb4f0d529029a1abdc075` has only step 500/1000; the suite waits
+for step 1500 to become available and never substitutes a shorter snapshot.
 
 ## Throughput table to extend
 
 Historical rows are copied from [GEN-003](GEN-003-generator-suite-throughput.md)
 and retain their original evidence limits. They are not fresh measurements
-from the new suite. The four new models use a different training budget/data
+from the new suite. The five new models use a different training budget/data
 pool from the historical 24K generators. Hardware/runtime equivalence and
 prompt hashes must be checked before claiming relative speedups.
 
@@ -25,6 +27,7 @@ prompt hashes must be checked before claiming relative speedups.
 | All-module static LoRA, 4K / 1,500 steps | pending | pending |
 | Attention generator, 4K / 1,500 steps | pending | pending |
 | All-module generator, 4K / 1,500 steps | pending | pending |
+| Attention generator, decoder 256, 4K / 1,500 steps | pending | pending |
 
 Do not fill new cells from offline agreement curves or expected acceptance
 improvements. Aggregate output throughput includes prefill and serving overhead.

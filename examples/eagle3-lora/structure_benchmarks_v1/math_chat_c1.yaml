@@ -1,5 +1,5 @@
 models:
-  # Resolve the pending model first; never substitute its step-500 snapshot.
+  # Require step 1500 for every model; never substitute shorter snapshots.
   - name: static-lora-attention-4k-1500
     type: lora
     model: azeeer/eagle3-static-lora-structure-v1-attention-4k-1500
@@ -21,6 +21,13 @@ models:
     type: generator
     model: azeeer/eagle3-generator-structure-v1-modules-all-4k-1500
     revision: b077b468207123d82a8ae57d9e249d6c5508abc6
+    subfolder: step-00001500
+    adapter_policy: shared
+    conditioning_examples: 1
+  - name: generator-attention-decoder256-4k-1500
+    type: generator
+    model: azeeer/eagle3-generator-structure-v1-modules-attention-decoder256-4k-1500
+    revision: main
     subfolder: step-00001500
     adapter_policy: shared
     conditioning_examples: 1
