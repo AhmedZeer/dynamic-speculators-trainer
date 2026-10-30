@@ -88,3 +88,7 @@ run publishes a `generator` bundle. Existing experiments are not overwritten.
 The present vLLM adapter hook still supports only v/o. These attention/all-module
 bundles support training, offline validation, and export; their serving support
 must be extended before applying the throughput suite to them.
+
+The same commands now record separate generator/drafter forward and backward
+times, plus clipping/AdamW time. See
+[metric scopes and normalization](../../../docs/experiments/eagle3_generator_training_timing.md).

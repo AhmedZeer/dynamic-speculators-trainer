@@ -10,6 +10,9 @@ Three additional configs for matched static attention/all-module LoRAs and a
 width-256 attention-only generator are in the
 [follow-up runbook](../../examples/eagle3-lora/structure_followups_v1/README.md).
 
+For separate generator/drafter forward, backward and optimizer measurements,
+see [training component timings](eagle3_generator_training_timing.md).
+
 ## Shared baseline and protocol
 
 The historical reference for both families is

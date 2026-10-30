@@ -46,6 +46,35 @@ def synchronize(runtime):
         torch.cuda.synchronize(runtime.device)
 
 
+class UpdateTimings:
+    """Disjoint stream intervals, resolved after the existing update-end sync."""
+
+    COMPONENTS = (
+        "generator_forward",
+        "generator_backward",
+        "drafter_forward",
+        "drafter_backward",
+        "optimizer",
+    )
+
+    def __init__(self, runtime):
+        self.runtime = runtime
+        self.events = {name: [] for name in self.COMPONENTS}
+
+    def measure(self, name):
+        return compute_timer(self.runtime, self.events[name])
+
+    def seconds(self):
+        return {
+            name: (
+                sum(start.elapsed_time(stop) for start, stop in events) / 1000
+                if self.runtime.device.type == "cuda"
+                else sum(events)
+            )
+            for name, events in self.events.items()
+        }
+
+
 def conditioning_subset(cohort, size, seed):
     """Choose conditioning members without changing the supervised loss cohort."""
     if size is None or size >= len(cohort):
@@ -130,7 +159,7 @@ def evaluate(runtime, subsets, generator, conditioning_examples=None):
 
 
 def generator_batch(
-    runtime, generator, episodes, *, update, conditioning_examples, events
+    runtime, generator, episodes, *, update, conditioning_examples, timers
 ):
     """Keep each cohort's conditioning independent while batching the hypernetwork."""
     started = time.perf_counter()
@@ -147,7 +176,7 @@ def generator_batch(
         for episode, item in enumerate(episodes)
     ]
     data_seconds = time.perf_counter() - started
-    with compute_timer(runtime, events):
+    with timers.measure("generator_forward"):
         factors = generator.forward_cohorts(contexts)
     return (
         factors,
@@ -175,7 +204,8 @@ def train_update(  # noqa: C901, PLR0917 -- shared serial/batched update API
         generator.train()
     optimizer.zero_grad(set_to_none=True)
     set_learning_rate(optimizer, cfg, update + 1)
-    losses, events = [], []
+    losses, timers = [], UpdateTimings(runtime)
+    drafter_microbatches = 0
     data_seconds = 0.0
     response_tokens = 0
     examples = 0
@@ -189,7 +219,7 @@ def train_update(  # noqa: C901, PLR0917 -- shared serial/batched update API
                 episodes,
                 update=update,
                 conditioning_examples=conditioning_examples,
-                events=events,
+                timers=timers,
             )
         )
     for episode, item in enumerate(episodes):
@@ -218,8 +248,10 @@ def train_update(  # noqa: C901, PLR0917 -- shared serial/batched update API
         data_seconds += time.perf_counter() - started
         if context is not None:
             conditioning_count += context[0].shape[0]
-        with compute_timer(runtime, events):
-            factors = generator(*context) if context is not None else None
+        factors = None
+        if context is not None:
+            with timers.measure("generator_forward"):
+                factors = generator(*context)
         leaves = (
             {
                 name: tuple(value[episode] for value in pair)
@@ -239,43 +271,52 @@ def train_update(  # noqa: C901, PLR0917 -- shared serial/batched update API
             cohort, runtime.device, runtime.dtype, training=True
         ):
             data_seconds += runtime.corpus.last_batch_data_seconds
-            with compute_timer(runtime, events):
+            drafter_microbatches += 1
+            with timers.measure("drafter_forward"):
                 _, loss, _ = runtime.forward(batch, leaves)
-                if not torch.isfinite(loss):
-                    raise ValueError("Non-finite behavioral loss")
-                weight = batch["loss_mask"].sum().item() / total
+            if not torch.isfinite(loss):
+                raise ValueError("Non-finite behavioral loss")
+            weight = batch["loss_mask"].sum().item() / total
+            with timers.measure("drafter_backward"):
                 (loss * weight / len(episodes)).backward()
-                loss_value += loss.detach().item() * weight
+            loss_value += loss.detach().item() * weight
         if factors is not None:
-            with compute_timer(runtime, events):
+            with timers.measure("generator_backward"):
                 backward_factors(factors, leaves)
         losses.append(loss_value)
     if batched:
-        with compute_timer(runtime, events):
+        with timers.measure("generator_backward"):
             backward_factors(generated_batch, leaves_batch)
-    with compute_timer(runtime, events):
+    with timers.measure("optimizer"):
         gradients = clip_gradients(optimizer, cfg.optimization.max_grad_norm)
         optimizer.step()
     synchronize(runtime)
-    compute_seconds = (
-        sum(a.elapsed_time(b) for a, b in events) / 1000
-        if runtime.device.type == "cuda"
-        else sum(events)
-    )
+    component_seconds = timers.seconds()
+    generator_calls = (1 if batched else len(episodes)) if generator is not None else 0
     return {
         "train/drafter_loss": sum(losses) / len(losses),
         "train/data_wait_seconds": data_seconds,
-        "train/gpu_compute_seconds": compute_seconds,
+        "train/gpu_compute_seconds": sum(component_seconds.values()),
+        **{
+            f"train/{name}_seconds": seconds
+            for name, seconds in component_seconds.items()
+        },
+        "train/drafter_microbatches": drafter_microbatches,
+        "train/generator_forward_ms_per_call": 1000
+        * component_seconds["generator_forward"]
+        / max(generator_calls, 1),
+        "train/generator_forward_ms_per_cohort": 1000
+        * component_seconds["generator_forward"]
+        / len(episodes),
+        "train/drafter_forward_ms_per_microbatch": 1000
+        * component_seconds["drafter_forward"]
+        / max(drafter_microbatches, 1),
         "train/response_tokens": response_tokens,
         "train/examples": examples,
         "train/conditioning_examples": conditioning_count,
         "train/conditioning_size_mean": conditioning_count / len(episodes),
-        "train/generator_forward_calls": (1 if batched else len(episodes))
-        if generator is not None
-        else 0,
-        "train/generator_backward_calls": (1 if batched else len(episodes))
-        if generator is not None
-        else 0,
+        "train/generator_forward_calls": generator_calls,
+        "train/generator_backward_calls": generator_calls,
         "train/lr": optimizer.param_groups[0]["lr"],
         **gradients,
     }
@@ -606,6 +647,15 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
                     f"training_total={wall_total:.2f}s; "
                     f"session_elapsed={time.perf_counter() - started:.2f}s; "
                     f"cache={cache['cache_bytes'] / 2**30:.2f} GiB"
+                )
+                report(
+                    f"{job['label']}: timings/update; "
+                    + "; ".join(
+                        f"{name}={values[f'train/{name}_seconds'] * 1000:.2f}ms"
+                        for name in UpdateTimings.COMPONENTS
+                    )
+                    + f"; generator_calls={values['train/generator_forward_calls']}; "
+                    + f"drafter_microbatches={values['train/drafter_microbatches']}"
                 )
             hub_checkpoint = hub_backups and (
                 progress % job["hub_upload_interval"] == 0 or progress == job["updates"]

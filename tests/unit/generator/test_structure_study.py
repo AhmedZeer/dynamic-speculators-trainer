@@ -9,7 +9,7 @@ import torch
 from typer.testing import CliRunner
 
 from speculators.cli import app
-from speculators.generator import campaign, publish, structure_study
+from speculators.generator import campaign, campaign_train, publish, structure_study
 from speculators.generator.campaign_data import EpisodeSchedule
 from speculators.generator.config import Architecture
 from speculators.generator.local_campaign import load_local_inputs
@@ -208,6 +208,30 @@ def test_module_training_exports_and_resumes_failed_upload(  # noqa: C901, PLR09
         )
         assert row["train/generator_forward_calls"] == expected_calls
         assert row["train/generator_backward_calls"] == expected_calls
+        components = {
+            name: row[f"train/{name}_seconds"]
+            for name in campaign_train.UpdateTimings.COMPONENTS
+        }
+        assert all(seconds >= 0 for seconds in components.values())
+        assert row["train/gpu_compute_seconds"] == pytest.approx(
+            sum(components.values())
+        )
+        assert row["train/drafter_microbatches"] >= 4
+        assert components["drafter_forward"] > 0
+        assert components["drafter_backward"] > 0
+        assert components["optimizer"] > 0
+        assert row["train/drafter_forward_ms_per_microbatch"] == pytest.approx(
+            1000 * components["drafter_forward"] / row["train/drafter_microbatches"]
+        )
+        if arm == "static_lora":
+            assert components["generator_forward"] == 0
+            assert components["generator_backward"] == 0
+        else:
+            assert components["generator_forward"] > 0
+            assert components["generator_backward"] > 0
+            assert row["train/generator_forward_ms_per_call"] == pytest.approx(
+                1000 * components["generator_forward"] / expected_calls
+            )
     if migrate:
         resumed = torch.load(run / "checkpoint.pt", weights_only=True)
         assert resumed["identity"] == interrupted["identity"]
