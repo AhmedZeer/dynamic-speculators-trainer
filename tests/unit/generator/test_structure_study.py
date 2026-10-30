@@ -153,6 +153,7 @@ def test_module_training_exports_and_resumes_failed_upload(
             expected_dtype = (
                 torch.float32 if migrate and saved["progress"] == 2 else torch.bfloat16
             )
+            assert all(t.dtype == expected_dtype for t in weights.values())
             assert all(t.dtype == expected_dtype for t in saved["model"].values())
             assert all(
                 state["exp_avg"].dtype == state["exp_avg_sq"].dtype == expected_dtype

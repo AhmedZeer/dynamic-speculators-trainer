@@ -38,6 +38,25 @@ from speculators.generator.serving.worker import adapter_stats, run_worker, runt
 SHAPES = {"o_proj": [4, 4], "v_proj": [8, 2]}
 
 
+def test_export_validation_aliases_weights_without_full_generator_copy():
+    model = LoRAGenerator(12, SHAPES, 2, architecture()).bfloat16()
+    state = model.state_dict()
+    metadata = {
+        "input_dim": 12,
+        "shapes": SHAPES,
+        "rank": 2,
+        "architecture": architecture().model_dump(),
+        "max_examples": 8,
+    }
+    checked = bundle.load_generator(metadata, state, validate_only=True)
+    for name, tensor in checked.state_dict().items():
+        assert tensor.dtype == torch.bfloat16
+        assert tensor.data_ptr() == state[name].data_ptr()
+    broken = {**state, "encoder.0.weight": state["encoder.0.weight"][:1]}
+    with pytest.raises(RuntimeError, match="size mismatch"):
+        bundle.load_generator(metadata, broken, validate_only=True)
+
+
 def architecture():
     return Architecture(
         encoder_hidden=8,

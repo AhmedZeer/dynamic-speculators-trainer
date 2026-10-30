@@ -9,6 +9,8 @@ from huggingface_hub import HfApi
 from huggingface_hub.utils import validate_repo_id
 
 from speculators.bank.artifacts import file_digest, write_json
+from speculators.bank.progress import report as progress_report
+from speculators.bank.progress import stage_progress
 from speculators.generator.serving.bundle import export_run, read_bundle
 
 EXTRACTION_FILES = (
@@ -68,6 +70,7 @@ def push_run(
     run_dir = Path(run_dir).resolve()
     result = json.loads((run_dir / "result.json").read_text())
     checkpoint = run_dir / "checkpoint.pt"
+    progress_report(f"Hub publish: verifying checkpoint checksum: {checkpoint}")
     expected_checksum = snapshot_checksum(run_dir, result)
     if file_digest(checkpoint) != expected_checksum:
         raise ValueError("Completed checkpoint checksum differs from result.json")
@@ -83,9 +86,10 @@ def push_run(
         )
     with tempfile.TemporaryDirectory(prefix="speculators-publish-") as temporary:
         folder = Path(temporary) / "bundle"
-        metadata = export_run(
-            cfg, run_dir, folder, drafter_model_path=drafter_model_path
-        )
+        with stage_progress("Hub publish: exporting inference bundle", interval=30):
+            metadata = export_run(
+                cfg, run_dir, folder, drafter_model_path=drafter_model_path
+            )
         if metadata["source_checkpoint_sha256"] != expected_checksum:
             raise ValueError("Checkpoint changed during export; retry after training")
         if provenance is not None:
@@ -98,7 +102,11 @@ def push_run(
             f"{metadata['source_checkpoint_sha256']}  checkpoint.pt\n"
         )
         if include_training_checkpoint:
-            shutil.copy2(checkpoint, folder / "checkpoint.pt")
+            with stage_progress(
+                "Hub publish: copying resumable checkpoint into upload staging",
+                interval=30,
+            ):
+                shutil.copy2(checkpoint, folder / "checkpoint.pt")
         label = identity["job"].get("label", run_dir.name)
         (folder / "README.md").write_text(
             "---\ntags:\n- speculators\n- eagle3\n---\n\n"
@@ -114,6 +122,7 @@ def push_run(
             "available extraction provenance are included.\n\n"
             f"Source checkpoint SHA256: `{metadata['source_checkpoint_sha256']}`.\n"
         )
+        progress_report("Hub publish: hashing staged files for the upload manifest")
         files = {
             str(path.relative_to(folder)): {
                 "bytes": path.stat().st_size,
@@ -137,17 +146,21 @@ def push_run(
         if path_in_repo:
             report["path_in_repo"] = path_in_repo
         if not dry_run:
+            progress_report(f"Hub publish: connecting to Hugging Face for {repo_id}")
             api = HfApi()
             api.create_repo(
                 repo_id=repo_id, repo_type="model", private=private, exist_ok=True
             )
             upload_options = {"path_in_repo": path_in_repo} if path_in_repo else {}
-            commit = api.upload_folder(
-                repo_id=repo_id,
-                repo_type="model",
-                folder_path=folder,
-                commit_message=f"Publish {label} inference bundle and provenance",
-                **upload_options,
-            )
+            with stage_progress(
+                f"Hub publish: uploading to {repo_id}/{path_in_repo or ''}", interval=30
+            ):
+                commit = api.upload_folder(
+                    repo_id=repo_id,
+                    repo_type="model",
+                    folder_path=folder,
+                    commit_message=f"Publish {label} inference bundle and provenance",
+                    **upload_options,
+                )
             report.update(commit_sha=commit.oid, commit_url=commit.commit_url)
         return report

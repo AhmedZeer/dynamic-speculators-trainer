@@ -56,6 +56,10 @@ def backup_checkpoint(output, job, identity, epoch, progress):
     """Commit a resumable checkpoint and inference bundle before continuing."""
     output = Path(output)
     checkpoint = output / "checkpoint.pt"
+    report(
+        f"{job['label']}: preparing Hub snapshot at update={progress}; "
+        "hashing checkpoint"
+    )
     sha = file_digest(checkpoint)
     ledger_path = output / "hub_checkpoints.json"
     ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {}

@@ -399,10 +399,12 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
         backup_if_due()
 
     def save():
+        report(f"{job['label']}: saving local checkpoint at update={progress}")
         checkpoint_bytes = sum(p.numel() for p in parameters) * 16 + 1024**2
         runtime.corpus.cache.protect([])
         with runtime.corpus.cache.reserve_output(checkpoint_bytes):
             persist_checkpoint()
+        report(f"{job['label']}: local checkpoint saved at update={progress}")
 
     def persist_checkpoint():
         state = (

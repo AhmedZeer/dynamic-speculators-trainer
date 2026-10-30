@@ -107,7 +107,7 @@ def test_cli_dry_run_and_optional_training_checkpoint(completed_run, monkeypatch
         ],
     )
     assert result.exit_code == 0, result.output
-    report = json.loads(result.output)
+    report = json.loads(result.stdout)
     assert report["dry_run"]
     assert "checkpoint.pt" in report["files"]
     assert report["bytes"] > (run / "checkpoint.pt").stat().st_size

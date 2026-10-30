@@ -129,9 +129,12 @@ The extractor command above uses
 more room for training. Restart the extractor for that change to take effect.
 This is not a measured fit or speed guarantee. The total
 per-iteration token budget remains 8,193, so long sequences can limit actual
-parallelism even with 32 outstanding requests. Keep GPU headroom for the trainer,
-especially with the largest heads. The trainer defaults to a 96-GiB activation
-RAM budget plus overhead; adjust this independently to available system RAM.
+parallelism even with 128 outstanding requests. Keep GPU headroom for the trainer,
+especially with the largest heads. The shared config now caps cached activations
+at 120 GiB; the earlier 150-GiB cap left too little host headroom during export
+on the user's approximately 177-GiB machine. Futures/buffering, summaries, model
+serialization, vLLM host allocations, and the notebook use additional RAM.
+`online.reserve_gib` is a free-disk check, not a system-RAM reservation.
 
 ## Independent training commands
 
@@ -221,6 +224,31 @@ marked `training_snapshot`, so it does not masquerade as a completed run.
 Identity mismatches still fail; weights alone are not enough for exact resume.
 The activation cache can be regenerated. Progress after the last acknowledged
 Hub snapshot is lost if local storage is also lost.
+
+### Export RAM and interrupted uploads
+
+Observed console interruptions at update 500 were accompanied by trainer RSS
+around 160–161 GiB. That leaves little headroom on a roughly 177-GiB host.
+It is consistent with memory pressure, but `^C` denotes an interrupt and is not
+evidence of a kernel OOM kill by itself. Saving a checkpoint, copying files on
+Drive, hashing, and uploading are distinct phases and can also take time.
+
+Export now maps the checkpoint lazily, so it does not eagerly allocate all
+optimizer tensors in CPU RAM. Generator shape/key validation uses a meta-device
+model and aliases the saved tensors, avoiding another full generator allocation.
+Safetensors retain the checkpoint's dtype, avoiding a BF16-to-FP32 weight copy;
+the serving loader still reconstructs its normal FP32 inference generator.
+The original full training checkpoint, optimizer/RNG state, checksum checks,
+and provenance remain part of each Hub snapshot.
+
+Logs now distinguish local save, checkpoint hashing, memory-mapped export,
+weight writing, checkpoint staging, manifest hashing, Hub connection, and upload.
+An acknowledged upload ends with the existing commit-SHA confirmation and a
+`hub_checkpoints.json` entry. A completed validation at update 500 does not prove
+the local checkpoint or Hub upload completed. After interruption, inspect
+`checkpoint.pt`'s `progress` using `torch.load(..., mmap=True, weights_only=True)`;
+then rerun the same training command. If the saved progress is an upload boundary,
+the missing upload is retried before further training.
 
 ## Memory and export limits
 

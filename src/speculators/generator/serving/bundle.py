@@ -10,6 +10,7 @@ from safetensors.torch import load_file, save_file
 
 from speculators.bank.artifacts import digest, file_digest, write_json
 from speculators.bank.config import BankConfig
+from speculators.bank.progress import report
 from speculators.generator.config import ADAPTER_MODULES, Architecture
 from speculators.generator.model import LoRAGenerator
 
@@ -56,16 +57,18 @@ def read_bundle(path):
     return value
 
 
-def load_generator(metadata, state):
-    generator = LoRAGenerator(
-        metadata["input_dim"],
-        metadata["shapes"],
-        metadata["rank"],
-        Architecture.model_validate(metadata["architecture"]),
-        metadata["max_examples"],
-        feedback_dim=metadata.get("feedback_dim", 0),
-    ).float()
-    generator.load_state_dict(state, strict=True)
+def load_generator(metadata, state, *, validate_only=False):
+    # Export checks keys/shapes without allocating a second full generator.
+    with torch.device("meta" if validate_only else "cpu"):
+        generator = LoRAGenerator(
+            metadata["input_dim"],
+            metadata["shapes"],
+            metadata["rank"],
+            Architecture.model_validate(metadata["architecture"]),
+            metadata["max_examples"],
+            feedback_dim=metadata.get("feedback_dim", 0),
+        ).float()
+    generator.load_state_dict(state, strict=True, assign=validate_only)
     return generator.eval().requires_grad_(False)
 
 
@@ -124,7 +127,9 @@ def export_run(cfg, run_dir, output, *, drafter_model_path=None):  # noqa: C901 
     if kind == "generator" and job["condition"] != "last":
         raise ValueError("The serial runtime supports only last conditioning")
     checkpoint = run_dir / "checkpoint.pt"
-    payload = torch.load(checkpoint, map_location="cpu", weights_only=True)
+    report(f"Bundle export: mapping checkpoint {checkpoint}")
+    # Only model pages are touched; optimizer tensors remain file-backed.
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=True, mmap=True)
     if payload.get("identity") is not None and payload["identity"] != digest(identity):
         raise ValueError("Checkpoint and resolved experiment identities differ")
     state = payload["model"]
@@ -179,7 +184,10 @@ def export_run(cfg, run_dir, output, *, drafter_model_path=None):  # noqa: C901 
             metadata["training_conditioning_examples"] = job[
                 "training_conditioning_examples"
             ]
-        load_generator(metadata, state)
+        report(
+            "Bundle export: validating generator keys and shapes without a weight copy"
+        )
+        load_generator(metadata, state, validate_only=True)
     else:
         for name in projections:
             inputs, outputs = shapes[name]
@@ -187,7 +195,8 @@ def export_run(cfg, run_dir, output, *, drafter_model_path=None):  # noqa: C901 
                 f"{name}.B"
             ].shape != (outputs, rank):
                 raise ValueError(f"Invalid {name} factor shape")
-    state = {key: tensor.detach().float().contiguous() for key, tensor in state.items()}
+    # Preserve BF16 checkpoints instead of allocating a full FP32 weight copy.
+    state = {key: tensor.detach().contiguous() for key, tensor in state.items()}
     if not all(torch.isfinite(tensor).all() for tensor in state.values()):
         raise ValueError("Non-finite exported weights")
     pending = output.with_name(output.name + ".pending")
@@ -195,6 +204,7 @@ def export_run(cfg, run_dir, output, *, drafter_model_path=None):  # noqa: C901 
         raise FileExistsError(f"Previous partial export exists: {pending}")
     pending.mkdir(parents=True)
     try:
+        report("Bundle export: writing model.safetensors")
         save_file(state, pending / "model.safetensors")
         metadata["weights_sha256"] = file_digest(pending / "model.safetensors")
         write_json(pending / "bundle.json", metadata)

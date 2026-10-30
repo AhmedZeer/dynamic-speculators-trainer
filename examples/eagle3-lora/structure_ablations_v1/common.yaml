@@ -48,7 +48,7 @@ wandb:
 activation_source: vllm
 trajectories_path: ./trajectories
 online:
-  ram_cache_gib: 150
+  ram_cache_gib: 120
   summary_cache_dir: output/generator-summary-cache
   compiler_cache_dir: output/generator-compiler-cache
   lookahead_updates: 2
