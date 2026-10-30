@@ -117,15 +117,14 @@ CUDA_VISIBLE_DEVICES=0 python scripts/launch_vllm.py train ./models/qwen3-8b \
   --provenance-dir output/structure-ablations-v1/provenance/vllm \
   -- --served-model-name Qwen/Qwen3-8B \
   --host 127.0.0.1 --port 8000 --dtype bfloat16 \
-  --max-model-len 8193 --max-num-batched-tokens 8193 --max-num-seqs 32 \
+  --max-model-len 8193 --max-num-batched-tokens 8193 --max-num-seqs 128 \
   --gpu-memory-utilization 0.40 --enforce-eager \
   --no-enable-prefix-caching --no-enable-chunked-prefill
 ```
 
-The checked-in extraction defaults are concurrency 32 and a 64-example buffer;
-retain your local 128-request settings if already tested on your machine.
-Use `--max-num-seqs 128` to match 128 extractor workers, and a buffer of at least
-128 to allow that many outstanding requests. The extractor command above uses
+The checked-in extraction settings retain the user's tested concurrency of 128
+and a 256-example buffer. Use `--max-num-seqs 128` to match the extractor workers.
+The extractor command above uses
 `--gpu-memory-utilization 0.40` rather than the user's previous 0.50, reserving
 more room for training. Restart the extractor for that change to take effect.
 This is not a measured fit or speed guarantee. The total
