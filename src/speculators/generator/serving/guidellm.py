@@ -51,6 +51,43 @@ def copy_server_provenance(source, output):
             shutil.copy2(path, destination)
 
 
+def workload_diagnostics(raw, expected_requests):
+    """Expose scheduler/accounting differences without accepting a partial run."""
+    result = {"expected_requests": expected_requests, "benchmarks": []}
+    for benchmark in raw.get("benchmarks", []):
+        state = benchmark.get("scheduler_state", {})
+        metrics = benchmark.get("metrics", {})
+        requests = benchmark.get("requests", {})
+        result["benchmarks"].append(
+            {
+                "metric_request_totals": metrics.get("request_totals"),
+                "scheduler_counts": {
+                    key: state[key]
+                    for key in (
+                        "created_requests",
+                        "processed_requests",
+                        "successful_requests",
+                        "errored_requests",
+                        "cancelled_requests",
+                        "queued_requests",
+                        "pending_requests",
+                        "processing_requests",
+                    )
+                    if key in state
+                },
+                "stored_request_counts": {
+                    key: len(requests[key])
+                    for key in ("successful", "errored", "incomplete")
+                    if isinstance(requests.get(key), list)
+                },
+                "scheduler_metrics": benchmark.get("scheduler_metrics", {}),
+                "warmup": benchmark.get("config", {}).get("warmup"),
+                "cooldown": benchmark.get("config", {}).get("cooldown"),
+            }
+        )
+    return result
+
+
 def native_summary(path, expected_requests):
     raw = json.loads(Path(path).read_text())
     benchmarks = raw.get("benchmarks", [])
@@ -65,7 +102,17 @@ def native_summary(path, expected_requests):
             or counts["errored"]
             or counts["incomplete"]
         ):
-            raise ValueError(f"Incomplete or failed GuideLLM workload: {counts}")
+            diagnostic_path = Path(path).with_name("guidellm_diagnostics.json")
+            diagnostic = workload_diagnostics(raw, expected_requests)
+            write_json(diagnostic_path, diagnostic)
+            state = benchmark.get("scheduler_state", {})
+            raise ValueError(
+                f"Incomplete or failed GuideLLM workload: {counts}; "
+                f"expected={expected_requests}; "
+                f"scheduler_successful={state.get('successful_requests', 'unknown')}; "
+                f"scheduler_created={state.get('created_requests', 'unknown')}; "
+                f"see {diagnostic_path}. The partial result was not accepted."
+            )
         row = {
             "strategy": benchmark["config"]["strategy"]["type_"],
             "successful_requests": counts["successful"],

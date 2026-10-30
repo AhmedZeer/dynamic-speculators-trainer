@@ -25,7 +25,8 @@ from tests.unit.scripts.test_perf_utils import perf_utils  # noqa: F401
 
 
 @pytest.fixture
-def workload(tmp_path):
+def workload(tmp_path, request):
+    size = getattr(request, "param", 2)
     tokenizer = Tokenizer(
         WordLevel(
             {"<unk>": 0, "one": 1, "two": 2, "three": 3, "four": 4}, unk_token="<unk>"
@@ -45,7 +46,7 @@ def workload(tmp_path):
             "prompt_tokens_count": 2,
             "output_tokens_count": 4,
         }
-        for i in range(2)
+        for i in range(size)
     ]
     data = tmp_path / "math.jsonl"
     data.write_text("".join(json.dumps(row) + "\n" for row in rows))
@@ -58,7 +59,9 @@ def workload(tmp_path):
         "subsets": ["math-00000"],
         "sources": [],
         "max_tokens": 4,
-        "groups": {"math": {"file": data.name, "sha256": file_digest(data), "rows": 2}},
+        "groups": {
+            "math": {"file": data.name, "sha256": file_digest(data), "rows": size}
+        },
     }
     manifest = tmp_path / "manifest.json"
     write_json(manifest, {**identity, "identity": digest(identity)})
@@ -219,8 +222,16 @@ def http_server(request):  # noqa: C901 -- small mock protocol implementation
         server.server_close()
 
 
-@pytest.mark.parametrize("http_server", [4, 2], indirect=True)
-@pytest.mark.parametrize("check_mode", ["reference", "mismatch", "omitted"])
+@pytest.mark.parametrize(
+    ("check_mode", "workload", "http_server"),
+    [
+        (mode, 2, tokens)
+        for mode in ("reference", "mismatch", "omitted")
+        for tokens in (4, 2)
+    ]
+    + [("omitted", 2, 0), ("reference", 50, 4), ("omitted", 50, 2)],
+    indirect=["workload", "http_server"],
+)
 def test_real_guidellm_against_independent_endpoint(  # noqa: PLR0917
     workload, http_server, tmp_path, perf_utils, monkeypatch, check_mode
 ):
@@ -229,6 +240,7 @@ def test_real_guidellm_against_independent_endpoint(  # noqa: PLR0917
             "Install scripts/evaluate/requirements.txt for GuideLLM integration"
         )
     manifest, tokenizer_path = workload
+    size = json.loads(manifest.read_text())["groups"]["math"]["rows"]
     target, counts = http_server
     reference = tmp_path / "check/reference.json"
     if check_mode != "omitted":
@@ -269,14 +281,14 @@ def test_real_guidellm_against_independent_endpoint(  # noqa: PLR0917
 
     monkeypatch.setattr(perf_utils.subprocess, "run", run)
     result = benchmark_endpoint(args, perf_utils)
-    assert result["math"]["performance"][0]["successful_requests"] == 2
-    assert result["math"]["acceptance"]["num_drafts"] == 2
+    assert result["math"]["performance"][0]["successful_requests"] == size
+    assert result["math"]["acceptance"]["num_drafts"] == size
     assert (
         result["math"]["performance"][0]["total_output_tokens"]
-        == 2 * counts.output_tokens
+        == size * counts.output_tokens
     )
-    assert counts.streaming == 2
-    assert counts.completions == (3 if check_mode == "omitted" else 5)
+    assert counts.streaming == size
+    assert counts.completions == (size + 1 if check_mode == "omitted" else 2 * size + 1)
     assert (tmp_path / "performance/perf_results.csv").is_file()
     assert (tmp_path / "performance/math/guidellm_command.json").is_file()
     identity = json.loads(
@@ -314,6 +326,37 @@ def test_incomplete_guidellm_results_are_rejected(tmp_path):
     )
     with pytest.raises(ValueError, match="Incomplete or failed"):
         native_summary(path, 2)
+
+
+@pytest.mark.parametrize("scheduler_successful", [49, 50])
+def test_missing_clean_request_preserves_evidence_and_is_not_accepted(
+    tmp_path, scheduler_successful
+):
+    path = tmp_path / "guidellm.json"
+    totals = {"successful": 49, "errored": 0, "incomplete": 0, "total": 49}
+    write_json(
+        path,
+        {
+            "benchmarks": [
+                {
+                    "metrics": {"request_totals": totals},
+                    "scheduler_state": {
+                        "created_requests": scheduler_successful,
+                        "successful_requests": scheduler_successful,
+                    },
+                    "requests": {"successful": [{}] * scheduler_successful},
+                }
+            ]
+        },
+    )
+    with pytest.raises(ValueError, match="expected=50"):
+        native_summary(path, 50)
+    diagnostic = json.loads((tmp_path / "guidellm_diagnostics.json").read_text())
+    assert diagnostic["expected_requests"] == 50
+    detail = diagnostic["benchmarks"][0]
+    assert detail["metric_request_totals"] == totals
+    assert detail["scheduler_counts"]["successful_requests"] == scheduler_successful
+    assert detail["stored_request_counts"]["successful"] == scheduler_successful
 
 
 def test_profile_capture_wraps_real_guidellm_after_warmup(

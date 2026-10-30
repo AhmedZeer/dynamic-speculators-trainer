@@ -45,3 +45,18 @@ The questions are whether the module coverage gains in
 [GEN-009](GEN-009-generator-structure.md) translate to serving acceptance and
 throughput, and whether generators outperform static LoRAs at matched target
 sets and training budgets. These remain open until the suite is run.
+
+## Reported all-module/chat incomplete workload
+
+The user supplied a failed `generator-all-4k-1500/nemotron/nemo-chat` first
+attempt: expected 50 requests; GuideLLM measured 49 successful, zero errored,
+zero incomplete, total 49. The client failed its completeness check, followed
+by owned-server cleanup. No throughput row from this attempt is accepted.
+This is not evidence by itself of a model crash or a specific GuideLLM bug.
+The native result and complete client log have not been supplied for inspection.
+
+Real GuideLLM 0.7.1 tests against a local HTTP endpoint completed 50-request
+workloads at C1 and C2, including the existing short-response path; empty-output
+requests were also tested. They did not reproduce this failure. Diagnostic
+reporting now preserves scheduler/measurement distinctions on count mismatch,
+and the unchanged suite resume path preserves completed measurements.

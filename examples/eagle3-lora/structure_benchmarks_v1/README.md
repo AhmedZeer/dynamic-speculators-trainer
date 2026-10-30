@@ -109,3 +109,37 @@ restoration, idempotence, failed-merge rollback and controller lifetimes.
 The new attention/all-module GPU serving run is pending; these tests do not
 establish GPU benchmark speed or token equality. Per-request native multi-LoRA
 remains v/o-only and rejects these wider target sets explicitly.
+
+## A workload reports 49 of 50 requests
+
+Do not accept that cell as a completed benchmark or change its expected count.
+Zero errored/incomplete requests in the measured totals does not establish that
+all 50 requests were sent, recorded or included in the measurement window.
+The suite terminates its owned server after a client failure; the resulting
+shutdown messages are not evidence that the model server crashed first.
+
+For count mismatches, the client now writes
+`<attempt>/<category>/guidellm_diagnostics.json` alongside the original native
+`guidellm.json`. It contrasts metric totals, scheduler-created/processed/successful/
+cancelled counts, retained request counts, and measurement timing. The raw
+client log is also important: GuideLLM can log statistics/progress exceptions
+while completing the scheduler. These diagnostics do not relax completeness
+checks or establish the cause without inspecting the actual failed artifacts.
+
+Retry with the same suite command and `--resume`. Valid completed cells are
+retained; failed/incomplete and not-yet-run cells are measured again in new
+attempt directories. If the mismatch repeats, retain the failed attempt's
+`client.log` and category folder, rather than deleting the suite directory.
+
+For the reported first all-module/chat failure, collect the evidence with:
+
+```bash
+attempt_dir=/content/drive/MyDrive/dyn-spec-bench-v1/suites/structure-math-chat-c1/measurements/generator-all-4k-1500/nemotron/nemo-chat/attempt-0001
+zip -r /content/generator-all-chat-debug.zip \
+  "$attempt_dir/client.log" "$attempt_dir/nemo-chat"
+```
+
+The category folder includes the native GuideLLM result, exact client command,
+frozen prompt rows, before/after server status and Prometheus counters. No model
+weights are included. The first failure predates the new diagnostic file;
+the native JSON and full log still contain the evidence needed to investigate.
