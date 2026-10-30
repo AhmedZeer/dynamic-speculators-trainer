@@ -1,0 +1,50 @@
+{
+  "receipt_date": "2026-10-30",
+  "source": "User-supplied Markdown suite summary; transcribed rounded values, not native GuideLLM JSON",
+  "correctness_status": "not_checked",
+  "units": "output tokens/second, including prefill and serving overhead",
+  "configured_training_examples": 4000,
+  "configured_optimizer_steps": 1500,
+  "configured_samples_per_category": 50,
+  "configured_output_token_cap": 256,
+  "missing_evidence": [
+    "native summary.json and request-level results",
+    "acceptance counters",
+    "generator/merge/restore timings",
+    "executed checkpoint and model hashes",
+    "per-run hardware and package provenance",
+    "repeated trials and uncertainty"
+  ],
+  "rows": [
+    {
+      "model": "static-lora-attention-4k-1500",
+      "concurrency": 1,
+      "math_output_tokens_per_second": 75.72,
+      "chat_output_tokens_per_second": 56.48
+    },
+    {
+      "model": "static-lora-all-4k-1500",
+      "concurrency": 1,
+      "math_output_tokens_per_second": 77.9,
+      "chat_output_tokens_per_second": 57.26
+    },
+    {
+      "model": "generator-attention-4k-1500",
+      "concurrency": 1,
+      "math_output_tokens_per_second": 78.18,
+      "chat_output_tokens_per_second": 55.41
+    },
+    {
+      "model": "generator-all-4k-1500",
+      "concurrency": 1,
+      "math_output_tokens_per_second": 76.72,
+      "chat_output_tokens_per_second": 55.05
+    },
+    {
+      "model": "generator-attention-decoder256-4k-1500",
+      "concurrency": 1,
+      "math_output_tokens_per_second": 77.19,
+      "chat_output_tokens_per_second": 55.57
+    }
+  ]
+}

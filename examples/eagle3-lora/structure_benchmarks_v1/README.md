@@ -6,9 +6,12 @@ decoder-width-256 generator, and two matched static LoRAs: five models, all at
 pipeline: one server/model, two category measurements, cleanup, next model.
 No training, response replay, adaptive scale or per-request adapters are enabled.
 
-## Model readiness
+## Pre-run model readiness (historical)
 
-Checked on 2026-10-30 using the Hub API:
+These were pre-run checks on 2026-10-30 using the Hub API, not current
+availability claims. A five-model throughput summary has since been supplied;
+see [GEN-010](../../../docs/experiments/results/GEN-010-structure-serving.md).
+Final executed revisions and native acceptance/latency records remain unavailable.
 
 | Model | Repository | Step-1500 readiness |
 | --- | --- | --- |
@@ -19,8 +22,8 @@ Checked on 2026-10-30 using the Hub API:
 
 The attention decoder-256 generator is added as
 `azeeer/eagle3-generator-structure-v1-modules-attention-decoder256-4k-1500`.
-At the latest check, revision `afd0df1af02dfb6f379eb4f0d529029a1abdc075`
-contains step 500 and step 1000; step 1500 is pending. Its config uses `main`
+At the pre-run check, revision `afd0df1af02dfb6f379eb4f0d529029a1abdc075`
+contained step 500 and step 1000; step 1500 was pending then. Its config uses `main`
 and **only** `subfolder: step-00001500`. No shorter snapshot is substituted.
 Launch after that upload is acknowledged. Attention LoRA also retains `main`
 so already-started suite requests remain compatible. Model resolution pins
@@ -86,9 +89,10 @@ servers/<model>/attempt-*/server.log
 measurements/<model>/nemotron/<category>/attempt-*/client.log
 ```
 
-Send `summary.json` and `summary.md` after completion to extend the archived
-table. [The prepared extension](../../../docs/experiments/results/GEN-010-structure-serving.md)
-retains historical rows and marks new values as pending, not measured zeroes.
+The supplied Markdown results are now included in the
+[extended table](../../../docs/experiments/results/GEN-010-structure-serving.md).
+Provide native `summary.json` to add acceptance, latency, adapter timings and
+workload/checkpoint identity; those cannot be recovered from the rounded table.
 Acceptance rate is accepted/proposed draft tokens; acceptance length includes
 the verifier bonus token. Both are available in detailed JSON when reported
 by the server; neither should be inferred from offline validation agreement.
@@ -106,8 +110,9 @@ Packing was checked against the pinned vLLM sources:
 [Llama attention and MLP](https://github.com/vllm-project/vllm/blob/db9527a46873454610df6dbedf79a36d6bf1a7f6/vllm/model_executor/models/llama.py).
 CPU tests cover explicit LoRA merge parity, untouched packed slices, exact
 restoration, idempotence, failed-merge rollback and controller lifetimes.
-The new attention/all-module GPU serving run is pending; these tests do not
-establish GPU benchmark speed or token equality. Per-request native multi-LoRA
+The user-supplied GPU throughput summary is recorded in GEN-010. CPU checks do
+not establish GPU token equality or identify the source of throughput gaps.
+Per-request native multi-LoRA
 remains v/o-only and rejects these wider target sets explicitly.
 
 ## A workload reports 49 of 50 requests

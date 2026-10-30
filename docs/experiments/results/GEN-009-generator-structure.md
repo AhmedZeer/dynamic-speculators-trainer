@@ -170,3 +170,10 @@ support and a [step-1500 math/chat C1 suite](../../../examples/eagle3-lora/struc
 are now prepared. See [GEN-010](GEN-010-structure-serving.md) for the pending
 throughput-table extension. This does not add GPU measurements to GEN-009;
 per-request serving for these wider target sets remains unsupported.
+
+Subsequent supplied throughput evidence is now recorded in
+[GEN-010](GEN-010-structure-serving.md): attention generation has a modest math
+gain over its matched static LoRA but a chat regression; all-module static LoRA
+beats its generator in both categories. This limits the earlier direction of
+favoring broader generated coverage: the offline agreement ordering alone did
+not predict the serving-throughput ranking. Acceptance measurements remain absent.

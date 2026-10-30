@@ -1,5 +1,12 @@
 # Generation benchmark archive
 
+The five-model structure comparison is recorded in
+[GEN-010](../GEN-010-structure-serving.md), with the
+[supplied math/chat C1 throughput table](2026-10-30-structure-math-chat-c1/summary.md),
+[transcribed metrics](2026-10-30-structure-math-chat-c1/metrics.json), and
+[derived comparisons](2026-10-30-structure-math-chat-c1/analysis.json).
+Native acceptance, timing, checkpoint and workload provenance were not supplied.
+
 The fixed-coefficient step-4000 sweep is recorded in
 [GEN-008](../GEN-008-coefficient-sweep.md), with its
 [six supplied measurements](2026-10-28-coefficient-4000-c1/summary.json),

@@ -1,0 +1,60 @@
+{
+  "source_precision": "Derived from displayed two-decimal rounded throughput values",
+  "definition": "100 * (candidate / reference - 1); positive means higher throughput",
+  "comparisons": [
+    {
+      "candidate": "generator-attention-4k-1500",
+      "reference": "static-lora-attention-4k-1500",
+      "throughput_change_percent": {
+        "math": 3.2488114104596066,
+        "chat": -1.8944759206798834
+      }
+    },
+    {
+      "candidate": "generator-all-4k-1500",
+      "reference": "static-lora-all-4k-1500",
+      "throughput_change_percent": {
+        "math": -1.5147625160462197,
+        "chat": -3.859587844917922
+      }
+    },
+    {
+      "candidate": "generator-attention-decoder256-4k-1500",
+      "reference": "generator-attention-4k-1500",
+      "throughput_change_percent": {
+        "math": -1.2663085188027723,
+        "chat": 0.28875654214042257
+      }
+    },
+    {
+      "candidate": "generator-attention-decoder256-4k-1500",
+      "reference": "static-lora-attention-4k-1500",
+      "throughput_change_percent": {
+        "math": 1.9413629160063284,
+        "chat": -1.6111898016997084
+      }
+    },
+    {
+      "candidate": "static-lora-all-4k-1500",
+      "reference": "static-lora-attention-4k-1500",
+      "throughput_change_percent": {
+        "math": 2.8790279978869515,
+        "chat": 1.3810198300283405
+      }
+    },
+    {
+      "candidate": "generator-all-4k-1500",
+      "reference": "generator-attention-4k-1500",
+      "throughput_change_percent": {
+        "math": -1.8674852903555972,
+        "chat": -0.6497022198159175
+      }
+    }
+  ],
+  "calculated_generator_parameters": {
+    "attention_decoder512": 646297952,
+    "attention_decoder256": 326709344,
+    "decoder256_reduction_percent": 49.44911352589278,
+    "basis": "Configured pinned Qwen3-8B EAGLE3 projection shapes, rank32, original architecture except decoder width; counted on meta-device, not measured from submitted checkpoint files"
+  }
+}
