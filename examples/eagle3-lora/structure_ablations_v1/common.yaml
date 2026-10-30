@@ -46,14 +46,14 @@ wandb:
 activation_source: vllm
 trajectories_path: ./trajectories
 online:
-  ram_cache_gib: 96
+  ram_cache_gib: 150
   summary_cache_dir: output/generator-summary-cache
   compiler_cache_dir: output/generator-compiler-cache
   lookahead_updates: 2
   endpoint: http://127.0.0.1:8000/v1
   shared_dir: /tmp/speculators-online
-  concurrency: 32
-  buffered_examples: 64
+  concurrency: 128
+  buffered_examples: 256
   target_model_path: models/qwen3-8b
   drafter_model_path: models/qwen3-8b-eagle3
   reserve_gib: 8
