@@ -35,6 +35,14 @@ def resume_identity(output, current):
         "configuration"
     ]["optimization"]["pretraining_updates"]
     adjusted["job"]["updates"] = current["job"]["updates"]
+    execution_changed = False
+    for key in ("generator_dtype", "generator_batching"):
+        if adjusted["configuration"].get(key) != current["configuration"].get(key):
+            execution_changed = True
+        if key in current["configuration"]:
+            adjusted["configuration"][key] = current["configuration"][key]
+        else:
+            adjusted["configuration"].pop(key, None)
     for key in ("hub_upload_interval", "save_every_epochs"):
         if key in current["job"]:
             adjusted["job"][key] = current["job"][key]
@@ -49,9 +57,10 @@ def resume_identity(output, current):
             "checkpoint_identity": digest(saved),
             "effective_identity": current,
             "note": (
-                "Budget/output path/upload cadence changed; "
+                "Budget/output path/upload cadence or generator execution changed; "
                 "saved checkpoint identity retained."
             ),
+            "generator_execution_changed": execution_changed,
         },
     )
     report(

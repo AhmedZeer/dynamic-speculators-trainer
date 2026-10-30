@@ -9,3 +9,5 @@ and the shared historical baseline. `common.yaml` holds shared settings;
 Each config starts a fresh generator, uses 1K training rows per category,
 runs 1,500 optimizer updates, validates every 250 updates, and saves a resumable
 Hub checkpoint every 500 updates. Run the configs separately, in any order.
+Generator weights and optimizer moments use BF16. The four independent cohorts
+share a batched generator call and backward pass while retaining separate LoRAs.

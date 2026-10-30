@@ -140,10 +140,11 @@ class Runtime:
             self.bank.lora.rank,
             self.cfg.architecture,
             self.cfg.context.max_examples,
-        ).to(self.device)
+        ).to(device=self.device, dtype=getattr(torch, self.cfg.generator_dtype))
         report(
             f"Generator parameters={sum(p.numel() for p in generator.parameters()):,}; "
-            f"condition={condition}"
+            f"condition={condition}; dtype={self.cfg.generator_dtype}; "
+            f"independent_cohort_batching={self.cfg.generator_batching}"
         )
         return generator
 
@@ -325,6 +326,10 @@ def run_identity(cfg, bank, corpus, job):
     settings = cfg.model_dump(mode="json")
     if cfg.target_modules is None:
         settings.pop("target_modules")
+    if cfg.generator_dtype == "float32":
+        settings.pop("generator_dtype")
+    if not cfg.generator_batching:
+        settings.pop("generator_batching")
     # Preserve identities of existing single-subset experiments.
     if not cfg.additional_bank_configs:
         settings.pop("additional_bank_configs")

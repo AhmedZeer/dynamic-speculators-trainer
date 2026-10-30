@@ -129,7 +129,35 @@ def evaluate(runtime, subsets, generator, conditioning_examples=None):
     }
 
 
-def train_update(  # noqa: PLR0917 -- preserve the shared update API
+def generator_batch(
+    runtime, generator, episodes, *, update, conditioning_examples, events
+):
+    """Keep each cohort's conditioning independent while batching the hypernetwork."""
+    started = time.perf_counter()
+    contexts = [
+        runtime.corpus.context(
+            conditioning_subset(
+                item["indices"],
+                conditioning_examples,
+                runtime.cfg.seed + update * 100003 + episode * 1009,
+            ),
+            "last",
+            runtime.device,
+        )
+        for episode, item in enumerate(episodes)
+    ]
+    data_seconds = time.perf_counter() - started
+    with compute_timer(runtime, events):
+        factors = generator.forward_cohorts(contexts)
+    return (
+        factors,
+        detached_factors(factors),
+        data_seconds,
+        sum(len(c[0]) for c in contexts),
+    )
+
+
+def train_update(  # noqa: C901, PLR0917 -- shared serial/batched update API
     runtime,
     generator,
     optimizer,
@@ -152,6 +180,18 @@ def train_update(  # noqa: PLR0917 -- preserve the shared update API
     response_tokens = 0
     examples = 0
     conditioning_count = 0
+    batched = generator is not None and cfg.generator_batching
+    if batched:
+        generated_batch, leaves_batch, data_seconds, conditioning_count = (
+            generator_batch(
+                runtime,
+                generator,
+                episodes,
+                update=update,
+                conditioning_examples=conditioning_examples,
+                events=events,
+            )
+        )
     for episode, item in enumerate(episodes):
         cohort = item["indices"]
         started = time.perf_counter()
@@ -172,15 +212,24 @@ def train_update(  # noqa: PLR0917 -- preserve the shared update API
                 "last",
                 runtime.device,
             )
-            if generator is not None
+            if generator is not None and not batched
             else None
         )
         data_seconds += time.perf_counter() - started
         if context is not None:
             conditioning_count += context[0].shape[0]
         with compute_timer(runtime, events):
-            factors = generator(*context) if generator is not None else None
-        leaves = detached_factors(factors) if factors is not None else None
+            factors = generator(*context) if context is not None else None
+        leaves = (
+            {
+                name: tuple(value[episode] for value in pair)
+                for name, pair in leaves_batch.items()
+            }
+            if batched
+            else detached_factors(factors)
+            if factors is not None
+            else None
+        )
         total = sum(sum(runtime.corpus.rows[i]["loss_mask"][1:]) for i in cohort)
         if not total:
             raise ValueError("Episode has no supervised response tokens")
@@ -201,6 +250,9 @@ def train_update(  # noqa: PLR0917 -- preserve the shared update API
             with compute_timer(runtime, events):
                 backward_factors(factors, leaves)
         losses.append(loss_value)
+    if batched:
+        with compute_timer(runtime, events):
+            backward_factors(generated_batch, leaves_batch)
     with compute_timer(runtime, events):
         gradients = clip_gradients(optimizer, cfg.optimization.max_grad_norm)
         optimizer.step()
@@ -218,6 +270,12 @@ def train_update(  # noqa: PLR0917 -- preserve the shared update API
         "train/examples": examples,
         "train/conditioning_examples": conditioning_count,
         "train/conditioning_size_mean": conditioning_count / len(episodes),
+        "train/generator_forward_calls": (1 if batched else len(episodes))
+        if generator is not None
+        else 0,
+        "train/generator_backward_calls": (1 if batched else len(episodes))
+        if generator is not None
+        else 0,
         "train/lr": optimizer.param_groups[0]["lr"],
         **gradients,
     }

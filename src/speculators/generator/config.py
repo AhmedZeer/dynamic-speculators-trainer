@@ -142,6 +142,8 @@ class ExperimentConfig(Settings):
     activation_prefetch_workers: int = Field(default=2, ge=1)
     architecture: Architecture = Field(default_factory=Architecture)
     target_modules: list[str] | None = None
+    generator_dtype: Literal["float32", "bfloat16"] = "float32"
+    generator_batching: bool = False
     optimization: Optimization = Field(default_factory=Optimization)
     context: Context = Field(default_factory=Context)
     heatmap: Heatmap = Field(default_factory=Heatmap)

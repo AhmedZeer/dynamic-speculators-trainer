@@ -38,6 +38,34 @@ GEN-001 has visual evidence and lacks an immutable historical configuration/run
 export. This reconstructs its documented protocol; do not claim bitwise matched
 historical execution or statistically significant gains from one seed.
 
+### Generator execution update
+
+The shared config now enables `generator_dtype: bfloat16` and
+`generator_batching: true`. Generator parameters, gradients, and AdamW moments
+are BF16, without FP32 master weights. Scalar loss/norm reductions may still
+use FP32 internally. The small set encoders retain separate pooling; the
+condition/decoder/factor heads process all four cohorts in one batch. Each
+cohort receives its own LoRA. Drafter microbatches still run sequentially with
+the original token weighting and one AdamW update after all four cohorts.
+The factor gradients are accumulated into a batched leaf tensor, followed by
+one generator backward pass. Data membership, loss, cohort sampling, and budgets
+stay the same. Precision changes can change the numerical training trajectory.
+
+This is a new execution setting relative to the historical FP32 generator.
+Tiny-model checks establish FP32 serial/batched output and gradient agreement,
+BF16 optimizer/checkpoint operation, and FP32-to-BF16 checkpoint migration.
+RTX PRO 6000 speed and validation effects remain to be measured.
+
+On resuming an existing run, model parameters and AdamW moments are converted
+to the selected dtype; optimizer progress and RNG are restored. The original
+checkpoint identity and W&B run ID are retained. Effective execution settings
+are saved in `configuration.json`, W&B configuration, and an archived
+`provenance/resume-*/configuration.json` record. A completed result remains
+completed; this does not restart finished experiments. New configs retain the
+same project and run naming. Log counters
+`training_performance/generator_forward_calls` and
+`training_performance/generator_backward_calls` should both be 1 per update.
+
 ## Config organization
 
 All paths below are relative to `examples/eagle3-lora/structure_ablations_v1/`.
@@ -94,8 +122,13 @@ CUDA_VISIBLE_DEVICES=0 python scripts/launch_vllm.py train ./models/qwen3-8b \
   --no-enable-prefix-caching --no-enable-chunked-prefill
 ```
 
-Extraction concurrency is 32, with a 64-example buffer. This is the next trial
-for the user's RTX PRO 6000, not a measured fit or speed guarantee. The total
+The checked-in extraction defaults are concurrency 32 and a 64-example buffer;
+retain your local 128-request settings if already tested on your machine.
+Use `--max-num-seqs 128` to match 128 extractor workers, and a buffer of at least
+128 to allow that many outstanding requests. The extractor command above uses
+`--gpu-memory-utilization 0.40` rather than the user's previous 0.50, reserving
+more room for training. Restart the extractor for that change to take effect.
+This is not a measured fit or speed guarantee. The total
 per-iteration token budget remains 8,193, so long sequences can limit actual
 parallelism even with 32 outstanding requests. Keep GPU headroom for the trainer,
 especially with the largest heads. The trainer defaults to a 96-GiB activation
@@ -193,23 +226,25 @@ Hub snapshot is lost if local storage is also lost.
 ## Memory and export limits
 
 Calculated counts for the pinned Qwen3-8B EAGLE3 shape, rank 32, input_dim 12288.
-The final column counts only FP32 parameters, gradients and two AdamW moments
-(16 bytes/parameter), excluding frozen models, activations, temporaries and vLLM.
+The final column counts only BF16 parameters, gradients and two AdamW moments
+(8 bytes/parameter), excluding frozen models, activations, temporaries and vLLM.
+These are estimates for the updated execution settings, not historical memory
+measurements. The original FP32 estimates were twice these unrounded values.
 
 | Variant | Generator parameters | Optimizer training storage, GiB |
 | --- | ---: | ---: |
-| Historical v/o baseline | 293,288,224 | 4.37 |
-| MLP | 814,397,760 | 12.14 |
-| Attention | 646,297,952 | 9.63 |
-| All modules | 1,453,177,280 | 21.65 |
-| encoder_hidden=256 | 290,109,216 | 4.32 |
-| encoder_hidden=1024 | 299,646,240 | 4.47 |
-| residual_blocks=1 | 292,761,888 | 4.36 |
-| residual_blocks=4 | 294,340,896 | 4.39 |
-| condition_dim=32 | 293,267,712 | 4.37 |
-| condition_dim=128 | 293,329,248 | 4.37 |
-| decoder_width=256 | 149,860,384 | 2.23 |
-| decoder_width=1024 | 581,716,768 | 8.67 |
+| v/o baseline architecture | 293,288,224 | 2.19 |
+| MLP | 814,397,760 | 6.07 |
+| Attention | 646,297,952 | 4.82 |
+| All modules | 1,453,177,280 | 10.83 |
+| encoder_hidden=256 | 290,109,216 | 2.16 |
+| encoder_hidden=1024 | 299,646,240 | 2.23 |
+| residual_blocks=1 | 292,761,888 | 2.18 |
+| residual_blocks=4 | 294,340,896 | 2.19 |
+| condition_dim=32 | 293,267,712 | 2.19 |
+| condition_dim=128 | 293,329,248 | 2.19 |
+| decoder_width=256 | 149,860,384 | 1.12 |
+| decoder_width=1024 | 581,716,768 | 4.33 |
 
 Hub export and offline generator loading support all seven module names.
 The existing vLLM merge/per-request serving hooks currently support only v/o;

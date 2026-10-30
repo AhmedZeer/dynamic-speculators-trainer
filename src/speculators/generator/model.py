@@ -81,24 +81,52 @@ class LoRAGenerator(nn.Module):
             )
 
     def forward(self, summaries, lengths, feedback=None):
+        encoded = self.encode_examples(summaries, lengths)
+        condition = self.condition(self.pool_examples(encoded))
+        return self.decode_factors(condition, feedback)
+
+    def encode_examples(self, summaries, lengths):
         count = summaries.shape[0]
         if summaries.ndim != SUMMARY_NDIM or not 1 <= count <= self.max_examples:
             raise ValueError(f"Expected 1–{self.max_examples} conditioning examples")
         if lengths.shape != (count,) or torch.any(lengths <= 0):
             raise ValueError("Each conditioning example needs a positive prompt length")
-        encoded = self.encoder(
-            torch.cat([summaries, lengths.to(summaries).log1p().unsqueeze(-1)], dim=-1)
+        dtype = self.encoder[0].weight.dtype
+        return self.encoder(
+            torch.cat(
+                [summaries.to(dtype), lengths.float().log1p().to(dtype).unsqueeze(-1)],
+                dim=-1,
+            )
         )
-        pooled = torch.cat(
+
+    @staticmethod
+    def pool_examples(encoded):
+        return torch.cat(
             [
                 encoded.mean(0),
                 encoded.std(0, correction=0),
-                encoded.new_tensor([math.log1p(count)]),
+                encoded.new_tensor([math.log1p(len(encoded))]),
             ]
         )
-        condition = self.condition(pooled)
+
+    def forward_cohorts(self, contexts, feedback=None):
+        """Batch independent variable-sized sets; never pool across cohorts."""
+        if not contexts:
+            raise ValueError("At least one conditioning cohort is required")
+        # Encode each set with its own size validation, then batch the large
+        # shared condition/decoder/factor-head operations across all cohorts.
+        pooled = torch.stack(
+            [
+                self.pool_examples(self.encode_examples(summaries, lengths))
+                for summaries, lengths in contexts
+            ]
+        )
+        return self.decode_factors(self.condition(pooled), feedback)
+
+    def decode_factors(self, condition, feedback):
+        leading = condition.shape[:-1]
         if self.feedback_dim:
-            if feedback is None or feedback.shape != (self.feedback_dim,):
+            if feedback is None or feedback.shape != (*leading, self.feedback_dim):
                 raise ValueError("Feedback generator requires a causal feedback vector")
             condition = condition + self.feedback_encoder(feedback.to(condition))
         elif feedback is not None:
@@ -110,14 +138,15 @@ class LoRAGenerator(nn.Module):
             descriptor = torch.cat(
                 [
                     condition,
-                    self.module_embedding.weight[index],
-                    self.layer_embedding.weight[0],
-                ]
+                    self.module_embedding.weight[index].expand(*leading, -1),
+                    self.layer_embedding.weight[0].expand(*leading, -1),
+                ],
+                dim=-1,
             )
             decoded = self.decoder(descriptor)
             result[name] = (
-                self.heads[name]["A"](decoded).view(self.rank, in_features),
-                self.heads[name]["B"](decoded).view(out_features, self.rank),
+                self.heads[name]["A"](decoded).view(*leading, self.rank, in_features),
+                self.heads[name]["B"](decoded).view(*leading, out_features, self.rank),
             )
         return result
 
