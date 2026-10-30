@@ -1,4 +1,4 @@
-# Matched static-LoRA baselines and compact all-module generator
+# Matched static-LoRA baselines and compact attention generator
 
 Three independent training jobs following
 [GEN-009](../../../docs/experiments/results/GEN-009-generator-structure.md).
@@ -21,7 +21,7 @@ The original saved-response training pipeline is retained.
 | --- | --- | --- |
 | `static_lora/attention.yaml` | One fixed LoRA on q/k/v/o | Existing attention generator, same targets and data/update budget |
 | `static_lora/all.yaml` | One fixed LoRA on all seven projections | Existing all-module generator, same targets and data/update budget |
-| `generator/all_decoder256.yaml` | All-module generator, decoder_width=256 | Existing all-module generator with decoder_width=512 |
+| `generator/attention_decoder256.yaml` | Attention-only generator, decoder_width=256 | Existing attention-only generator with decoder_width=512 |
 
 Both static baselines train only the LoRA A/B parameters, with BF16 parameters,
 gradients, and AdamW moments. They have no hypernetwork or conditioning input;
@@ -33,7 +33,7 @@ in the common file are ignored for static arms.
 
 The compact generator uses BF16 and independent-cohort batching. Only its decoder
 width changes; encoder width, condition dimension, residual depth, adapter rank,
-and the all-module target set retain their existing settings. It starts from
+and the q/k/v/o target set retain their existing settings. It starts from
 scratch and does not attempt to resize an old generator checkpoint.
 
 All settings inherit the latest common YAML. Numerical execution changes during
@@ -57,11 +57,11 @@ speculators generator train-structure \
   --config examples/eagle3-lora/structure_followups_v1/static_lora/all.yaml
 ```
 
-All-module generator with decoder width 256:
+Attention-only generator with decoder width 256:
 
 ```bash
 speculators generator train-structure \
-  --config examples/eagle3-lora/structure_followups_v1/generator/all_decoder256.yaml
+  --config examples/eagle3-lora/structure_followups_v1/generator/attention_decoder256.yaml
 ```
 
 Append `--dry-run` to inspect a config without loading data/models or creating
@@ -73,12 +73,12 @@ Run one trainer at a time alongside the extractor.
 W&B project remains **`eagle3-generator-ablations-v3`**. Static arms use group
 `structure-v1/baseline`; the compact generator uses `structure-v1/architecture`.
 Run names carry `static-lora-attention`, `static-lora-all`, or
-`modules-all-decoder256`, plus the 4K/1,500 budget and seed. Each has a new local
+`modules-attention-decoder256`, plus the 4K/1,500 budget and seed. Each has a new local
 directory under `<output_root>/pretraining/<name>/` and its own Hub repository:
 
 - `azeeer/eagle3-static-lora-structure-v1-attention-4k-1500`
 - `azeeer/eagle3-static-lora-structure-v1-all-4k-1500`
-- `azeeer/eagle3-generator-structure-v1-modules-all-decoder256-4k-1500`
+- `azeeer/eagle3-generator-structure-v1-modules-attention-decoder256-4k-1500`
 
 Snapshots are `step-00000500/`, `step-00001000/`, and `step-00001500/`, including
 the full optimizer/RNG checkpoint, portable bundle, checksums, and training and

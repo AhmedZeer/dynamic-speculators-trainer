@@ -88,7 +88,7 @@ def test_eleven_configs_share_original_budget_data_and_schedule():
         ("mlp", True, "generator"),
         ("attention", False, "static_lora"),
         ("all", False, "static_lora"),
-        ("all", False, "compact_generator"),
+        ("attention", False, "compact_generator"),
     ],
 )
 def test_module_training_exports_and_resumes_failed_upload(  # noqa: C901, PLR0917 -- shared recovery checks for generator/static arms
@@ -252,7 +252,7 @@ def test_followups_match_the_original_data_schedule_and_budget():
         assert [schedule.update(i) for i in range(1500)] == [
             reference_schedule.update(i) for i in range(1500)
         ]
-        target = "attention" if path.stem == "attention" else "all"
+        target = "attention" if path.stem.startswith("attention") else "all"
         assert set(cfg.target_modules) == MODULE_SETS[target]
         if cfg.arm == "static_lora":
             assert job["arm"] == "fresh_lora"

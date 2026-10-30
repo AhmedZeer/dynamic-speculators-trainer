@@ -145,7 +145,7 @@ Priorities:
    inference precision and adapter scale fixed. If appropriate conditioning
    does not outperform these controls, prompt-specific adaptation is not yet
    established, even if generator training beats the pretrained drafter.
-4. Evaluate the strongest coverage set with a width-256 decoder, first as a
+4. Evaluate attention-only coverage with a width-256 decoder, first as a
    single change. Measure losses/agreement, generator parameters and latency,
    then real acceptance length and output tokens/s at concurrency 1. The current
    vLLM hook supports only v/o: attention/all-module serving support is still
@@ -161,5 +161,6 @@ retain compact-trunk candidates. Do not record architecture failure, actual
 acceptance improvement, or a throughput win from these screenshots alone.
 
 Implementation follow-up: [three independent training configs and commands](../../../examples/eagle3-lora/structure_followups_v1/README.md)
-now cover static attention LoRA, static all-module LoRA, and an all-module
-generator with decoder width 256. Execution/results are pending.
+now cover static attention LoRA, static all-module LoRA, and an
+attention-only generator with decoder width 256.
+Execution/results are pending.
