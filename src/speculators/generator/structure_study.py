@@ -1,4 +1,4 @@
-"""One fresh generator run using the original GEN-001 training protocol."""
+"""One fresh generator or static-LoRA run using the GEN-001 protocol."""
 
 from pathlib import Path
 from typing import Literal
@@ -15,6 +15,8 @@ from speculators.generator.campaign_config import DOMAINS, CampaignConfig
 class StructureStudy(CampaignConfig):
     name: str = Field(pattern=r"^[a-z0-9][a-z0-9-]*$")
     family: Literal["modules", "architecture", "baseline"]
+    arm: Literal["generator", "static_lora"] = "generator"
+    lora_dtype: Literal["float32", "bfloat16"] = "bfloat16"
     repo_id: str
     provenance_dir: Path
     private: bool = False
@@ -24,7 +26,8 @@ class StructureStudy(CampaignConfig):
         validate_repo_id(self.repo_id)
         if self.activation_source != "vllm" or self.pretrained_checkpoint is not None:
             raise ValueError(
-                "Structure studies train fresh generators from saved trajectories"
+                "Structure studies train fresh adapters/generators "
+                "from saved trajectories"
             )
         if (
             self.training_cohort_size is not None
@@ -60,12 +63,12 @@ class StructureStudy(CampaignConfig):
 
 def training_job(cfg):
     subsets = [f"{domain}-00000" for domain in DOMAINS]
-    return {
+    job = {
         "kind": "pretraining",
         "stage": "pretraining",
         "condition": "last",
         "label": cfg.name,
-        "arm": "direct",
+        "arm": "fresh_lora" if cfg.arm == "static_lora" else "direct",
         "objective": "direct",
         "subsets": subsets,
         "validation_subsets": subsets,
@@ -77,6 +80,9 @@ def training_job(cfg):
         "vllm_provenance_dir": str(cfg.provenance_dir.resolve()),
         "drafter_model_path": str(cfg.online.drafter_model_path.resolve()),
     }
+    if cfg.arm == "static_lora":
+        job["adapter_dtype"] = cfg.lora_dtype
+    return job
 
 
 def train_structure(cfg, *, dry_run=False):

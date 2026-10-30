@@ -82,14 +82,22 @@ def test_eleven_configs_share_original_budget_data_and_schedule():
 
 
 @pytest.mark.parametrize(
-    ("variant", "migrate"), [*((name, False) for name in MODULE_SETS), ("mlp", True)]
+    ("variant", "migrate", "arm"),
+    [
+        *((name, False, "generator") for name in MODULE_SETS),
+        ("mlp", True, "generator"),
+        ("attention", False, "static_lora"),
+        ("all", False, "static_lora"),
+        ("all", False, "compact_generator"),
+    ],
 )
-def test_module_training_exports_and_resumes_failed_upload(
+def test_module_training_exports_and_resumes_failed_upload(  # noqa: C901, PLR0917 -- shared recovery checks for generator/static arms
     online_campaign,  # noqa: F811
     tmp_path,
     monkeypatch,
     variant,
     migrate,
+    arm,
 ):
     cfg, _, _ = online_campaign
     values = cfg.model_dump()
@@ -106,10 +114,13 @@ def test_module_training_exports_and_resumes_failed_upload(
         repo_id="example/structure",
         provenance_dir=provenance,
         target_modules=sorted(MODULE_SETS[variant]),
+        arm="static_lora" if arm == "static_lora" else "generator",
     )
     study = StructureStudy.model_validate(values)
     study.generator_dtype = "float32" if migrate else "bfloat16"
     study.generator_batching = not migrate
+    if arm == "compact_generator":
+        study.architecture.decoder_width = 4
     factory = campaign.Runtime
 
     def bf16_runtime(*args, **kwargs):
@@ -139,15 +150,25 @@ def test_module_training_exports_and_resumes_failed_upload(
             path = Path(kwargs["folder_path"])
             metadata, weights = bundle_state(path)
             assert set(metadata["shapes"]) == MODULE_SETS[variant]
-            assert all(
-                torch.count_nonzero(weights[f"heads.{name}.B.bias"]) > 0
-                for name in MODULE_SETS[variant]
-            )
-            generator = load_generator(metadata, weights)
-            factors = generator(
-                torch.randn(2, metadata["input_dim"]), torch.tensor([2, 3])
-            )
-            assert set(factors) == MODULE_SETS[variant]
+            if arm == "static_lora":
+                assert metadata["kind"] == "static_lora"
+                assert all(
+                    torch.count_nonzero(weights[f"{name}.B"]) > 0
+                    for name in MODULE_SETS[variant]
+                )
+            else:
+                assert metadata["kind"] == "generator"
+                assert all(
+                    torch.count_nonzero(weights[f"heads.{name}.B.bias"]) > 0
+                    for name in MODULE_SETS[variant]
+                )
+                generator = load_generator(metadata, weights)
+                factors = generator(
+                    torch.randn(2, metadata["input_dim"]), torch.tensor([2, 3])
+                )
+                assert set(factors) == MODULE_SETS[variant]
+                if arm == "compact_generator":
+                    assert metadata["architecture"]["decoder_width"] == 4
             saved = torch.load(path / "checkpoint.pt", weights_only=True)
             assert saved["optimizer"]["state"]
             expected_dtype = (
@@ -182,13 +203,19 @@ def test_module_training_exports_and_resumes_failed_upload(
     assert result["completed_updates"] == 4
     timing = json.loads((run / "timing.json").read_text())
     for row in timing:
-        expected_calls = 4 if migrate and row["update"] <= 2 else 1
+        expected_calls = (
+            0 if arm == "static_lora" else 4 if migrate and row["update"] <= 2 else 1
+        )
         assert row["train/generator_forward_calls"] == expected_calls
         assert row["train/generator_backward_calls"] == expected_calls
     if migrate:
         resumed = torch.load(run / "checkpoint.pt", weights_only=True)
         assert resumed["identity"] == interrupted["identity"]
         assert list((run / "provenance").glob("resume-*/configuration.json"))
+    if arm == "static_lora":
+        assert result["trainable_parameters"] == sum(
+            value.numel() for value in states[-1].values()
+        )
     assert [record["update"] for record in result["history"]] == [0, 2, 4]
     assert result["hub_checkpoints"]["step-00000004"]["commit_sha"] == "test"
     assert any(not torch.equal(states[0][key], states[1][key]) for key in states[0])
@@ -198,6 +225,51 @@ def test_module_training_exports_and_resumes_failed_upload(
     configuration = json.loads((run / "configuration.json").read_text())
     assert configuration["wandb"]["group"] == "structure-v1/modules"
     assert job["subsets"] == identity["job"]["subsets"]
+
+
+def test_followups_match_the_original_data_schedule_and_budget():
+    root = Path("examples/eagle3-lora/structure_followups_v1")
+    paths = sorted(root.glob("*/*.yaml"))
+    assert len(paths) == 3
+    corpus = SimpleNamespace(indices=lambda _: list(range(1000)))
+    reference_cfg = StructureStudy.load(ROOT / "modules/all.yaml")
+    reference_job = training_job(reference_cfg)
+    reference_schedule = EpisodeSchedule(
+        reference_cfg, corpus, reference_job["subsets"]
+    )
+    destinations = set()
+    for path in paths:
+        cfg = StructureStudy.load(path)
+        job = training_job(cfg)
+        assert job["subsets"] == reference_job["subsets"]
+        assert job["validation_subsets"] == reference_job["validation_subsets"]
+        assert job["updates"] == 1500
+        assert job["training_examples"] == 4000
+        assert cfg.optimization == reference_cfg.optimization
+        assert cfg.hub_upload_interval == 500
+        assert cfg.wandb.pretraining_project == "eagle3-generator-ablations-v3"
+        schedule = EpisodeSchedule(cfg, corpus, job["subsets"])
+        assert [schedule.update(i) for i in range(1500)] == [
+            reference_schedule.update(i) for i in range(1500)
+        ]
+        target = "attention" if path.stem == "attention" else "all"
+        assert set(cfg.target_modules) == MODULE_SETS[target]
+        if cfg.arm == "static_lora":
+            assert job["arm"] == "fresh_lora"
+            assert job["adapter_dtype"] == "bfloat16"
+        else:
+            assert job["arm"] == "direct"
+            expected = reference_cfg.architecture.model_copy(
+                update={"decoder_width": 256}
+            )
+            assert cfg.architecture == expected
+        destinations.add((cfg.name, cfg.repo_id))
+        result = CliRunner().invoke(
+            app, ["generator", "train-structure", "--config", str(path), "--dry-run"]
+        )
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.stdout)["job"]["arm"] == job["arm"]
+    assert len(destinations) == 3
 
 
 def test_module_override_is_part_of_checkpoint_identity(online_campaign):  # noqa: F811

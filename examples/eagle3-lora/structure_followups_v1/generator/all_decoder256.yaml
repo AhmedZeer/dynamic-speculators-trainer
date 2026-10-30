@@ -1,0 +1,15 @@
+extends: ../../structure_ablations_v1/common.yaml
+name: modules-all-decoder256-4k-1500
+family: architecture
+arm: generator
+repo_id: azeeer/eagle3-generator-structure-v1-modules-all-decoder256-4k-1500
+target_modules:
+  - up_proj
+  - down_proj
+  - gate_proj
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+architecture:
+  decoder_width: 256

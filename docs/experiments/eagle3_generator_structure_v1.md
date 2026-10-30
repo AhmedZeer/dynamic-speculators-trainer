@@ -6,6 +6,10 @@ Several supplied curves are partial; raw histories and serving measurements
 remain pending. These are eleven independent training jobs, launched
 manually using the same CLI. There is no multi-job ablation command.
 
+Three additional configs for matched static attention/all-module LoRAs and a
+width-256 all-module generator are in the
+[follow-up runbook](../../examples/eagle3-lora/structure_followups_v1/README.md).
+
 ## Shared baseline and protocol
 
 The historical reference for both families is

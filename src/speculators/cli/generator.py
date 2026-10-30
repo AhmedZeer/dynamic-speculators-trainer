@@ -19,7 +19,7 @@ def train_structure_command(
     config: ConfigOption,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
 ):
-    """Train one module/architecture config with the original saved-response loop."""
+    """Train one generator/static-LoRA config with the saved-response loop."""
     import json  # noqa: PLC0415
 
     from speculators.generator.structure_study import (  # noqa: PLC0415

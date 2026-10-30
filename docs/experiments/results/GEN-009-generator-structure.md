@@ -159,3 +159,7 @@ Priorities:
 Working decision: prioritize useful target coverage and efficient generation;
 retain compact-trunk candidates. Do not record architecture failure, actual
 acceptance improvement, or a throughput win from these screenshots alone.
+
+Implementation follow-up: [three independent training configs and commands](../../../examples/eagle3-lora/structure_followups_v1/README.md)
+now cover static attention LoRA, static all-module LoRA, and an all-module
+generator with decoder width 256. Execution/results are pending.

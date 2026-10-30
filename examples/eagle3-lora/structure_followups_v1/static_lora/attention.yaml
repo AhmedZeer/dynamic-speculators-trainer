@@ -1,0 +1,11 @@
+extends: ../../structure_ablations_v1/common.yaml
+name: static-lora-attention-4k-1500
+family: baseline
+arm: static_lora
+lora_dtype: bfloat16
+repo_id: azeeer/eagle3-static-lora-structure-v1-attention-4k-1500
+target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj

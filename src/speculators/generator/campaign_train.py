@@ -339,6 +339,21 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
     generator = None if job["arm"] == "fresh_lora" else runtime.new_generator("last")
     if generator is None:
         runtime.initialize_direct()
+        if "adapter_dtype" in job:
+            for path in runtime.paths.values():
+                adapter = runtime.drafter.get_submodule(path)
+                for name in ("a", "b"):
+                    factor = getattr(adapter, name)
+                    setattr(
+                        adapter,
+                        name,
+                        torch.nn.Parameter(
+                            factor.detach().to(
+                                dtype=getattr(torch, job["adapter_dtype"])
+                            ),
+                            requires_grad=factor.requires_grad,
+                        ),
+                    )
         parameters = [p for p in runtime.drafter.parameters() if p.requires_grad]
     else:
         runtime.drafter.requires_grad_(False)
