@@ -1,34 +1,57 @@
 # GEN-010 — Structure generators and static LoRAs: math/chat C1
 
-Status: preliminary throughput received for all five models; acceptance and
-native request-level evidence remain unavailable. One supplied result per cell,
-no repeated-trial uncertainty. Correctness was not checked.
+Status: preliminary aggregate throughput, acceptance and adapter timings received
+for all five models. One supplied result per model/category, no repeated-trial
+uncertainty. Correctness was not checked. Request-level results and executed
+checkpoint/hardware/code provenance remain unavailable.
+
 The requested comparison uses step-1500 checkpoints and shared/merged adapters
 at concurrency 1. See [suite, readiness and command](../../../examples/eagle3-lora/structure_benchmarks_v1/README.md).
 During preparation, attention static LoRA step 1500 was verified at revision
 `dfb78b270a39f625bc7a39ef75cfaaab5868eb54`. The attention-only decoder-width-256
 generator was included as a fifth model. Its pre-run revision
 `afd0df1af02dfb6f379eb4f0d529029a1abdc075` had only step 500/1000, so the suite
-required waiting for step 1500. The subsequently supplied five-row table is
-archived below. Executed bundle/checkpoint hashes and final Hub pins were not
-supplied, so the named budgets are reported/configured rather than independently
-verified from the final native run artifacts.
+required waiting for step 1500. Executed bundle/checkpoint hashes and final Hub
+pins were not supplied; the named budgets are configured/reported rather than
+independently verified from final native run artifacts.
 
-## Supplied measurements
+## Supplied measurements and checks
 
-Receipt date: 2026-10-30; execution date and per-run hardware provenance not
-provided with the table. [Original supplied Markdown](benchmarks/2026-10-30-structure-math-chat-c1/summary.md),
-[transcribed metrics](benchmarks/2026-10-30-structure-math-chat-c1/metrics.json), and
-[derived comparisons](benchmarks/2026-10-30-structure-math-chat-c1/analysis.json).
-The metrics JSON is an explicit transcription, not a native suite export.
+Receipt date: 2026-10-30; execution date and per-run hardware provenance were
+not provided. The initial [Markdown throughput table](benchmarks/2026-10-30-structure-math-chat-c1/summary.md),
+[rounded transcription](benchmarks/2026-10-30-structure-math-chat-c1/metrics.json)
+and [rounded-value analysis](benchmarks/2026-10-30-structure-math-chat-c1/analysis.json)
+are preserved as the original evidence. Their missing-evidence statements
+describe that first receipt. The subsequently supplied
+[detailed suite summary](benchmarks/2026-10-30-structure-math-chat-c1/suite_summary_detailed.json)
+adds full-precision throughput, acceptance counters, workload hashes and adapter
+timings; it is archived from the user's JSON, not retrieved from their runtime.
+Current comparisons use the [full-precision analysis](benchmarks/2026-10-30-structure-math-chat-c1/detailed_analysis.json),
+reproducible with [analyze.py](benchmarks/2026-10-30-structure-math-chat-c1/analyze.py).
+
+Suite identity: `ff2115d88b483658a62c2a6ba0791c3f042ed126dbbd309606afbafbb3124fab`.
+All ten measurements report 50 successful requests and 50 prepared/completed
+adapters/batches, mean batch size 1, with no output-mismatch override. Each
+category has the same dataset hash across all five models:
+
+- Math: `d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28`;
+  12,800 output tokens per measurement.
+- Chat: `4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f`;
+  11,032 output tokens per measurement.
+
+Acceptance identities and output tokens / measured seconds match the summary,
+and all rounded throughput values match the initial table. Equal hashes and
+output-token totals strengthen workload comparability; they do not establish
+identical output sequences or correctness. Native request files, server/client
+logs and reproducibility artifacts are still absent.
 
 ## Extended throughput table
 
 Historical rows are copied from [GEN-003](GEN-003-generator-suite-throughput.md)
 and retain their original evidence limits. They are not fresh measurements
-from the new suite. The five new models use a different training budget/data
-pool from the historical 24K generators. Hardware/runtime equivalence and
-prompt hashes must be checked before claiming relative speedups.
+from this suite. The five new models use a different training budget/data pool
+from the historical 24K generators. Hardware/runtime equivalence and historical
+workload identity must be checked before claiming historical relative speedups.
 
 | Model | Nemo math output tok/s | Nemo chat output tok/s |
 | --- | ---: | ---: |
@@ -42,87 +65,153 @@ prompt hashes must be checked before claiming relative speedups.
 | All-module generator, 4K / 1,500 steps | 76.72 | 55.05 |
 | Attention generator, decoder 256, 4K / 1,500 steps | 77.19 | 55.57 |
 
-The five new rows come directly from the supplied table, not offline agreement
-curves or inferred acceptance improvements. Aggregate output throughput includes
-prefill and serving overhead.
-Correctness is not checked in the timing suite.
+Aggregate output throughput includes prefill and serving overhead. It differs
+from GuideLLM's median per-request output token rate.
 
-## Matched comparisons and interpretation
+## Acceptance and matched comparisons
 
-Changes below are calculated from the supplied, two-decimal rounded values;
-positive means higher output throughput. They are descriptive differences,
-not statistically established wins.
+Acceptance rate is accepted draft tokens / proposed draft tokens. With three
+proposals per cycle, the reported acceptance length equals
+`1 + accepted_tokens / draft_cycles = 1 + 3 * draft_acceptance_rate`.
+It includes one verifier/bonus token; accepted draft prefix length excludes that
+one. These are aggregate speculative acceptance measurements, not task accuracy
+or offline teacher-forced agreement. Their scope is the whole invocation; here
+each model/category has one concurrency point.
 
-| Candidate vs reference | Math | Chat |
-| --- | ---: | ---: |
-| Attention generator vs attention static LoRA | +3.25% | −1.89% |
-| All-module generator vs all-module static LoRA | −1.51% | −3.86% |
-| Attention decoder-256 generator vs decoder-512 generator | −1.27% | +0.29% |
-| Attention decoder-256 generator vs attention static LoRA | +1.94% | −1.61% |
-| All-module static LoRA vs attention static LoRA | +2.88% | +1.38% |
-| All-module generator vs attention generator | −1.87% | −0.65% |
+| Model | Math draft acceptance | Chat draft acceptance | Math acceptance length | Chat acceptance length |
+| --- | ---: | ---: | ---: | ---: |
+| Attention static LoRA | 61.11% | 38.83% | 2.833 | 2.165 |
+| All-module static LoRA | 63.72% | 39.30% | 2.911 | 2.179 |
+| Attention generator | 66.68% | 38.74% | 3.000 | 2.162 |
+| All-module generator | 67.79% | 38.80% | 3.034 | 2.164 |
+| Attention generator, decoder 256 | 66.52% | 39.32% | 2.996 | 2.179 |
 
-- **Conditional generation has mixed throughput evidence.** The original
-  attention generator beats its matched static LoRA on math, but loses on chat.
-  The all-module generator loses to its matched static LoRA on both categories.
-  Prompt-dependent adaptation is not established as an overall throughput win.
-- **Coverage gains depend on the adaptation method.** All-module static LoRA
-  is faster than attention-only static LoRA in both categories, whereas the
-  all-module generator is slower than the attention generator in both. Broad
-  module coverage is not a universal end-to-end speed improvement.
-- **Best displayed values are close on math.** Attention generator is highest
-  at 78.18 tok/s, only 0.36% above all-module static LoRA at 77.90. All-module
-  static LoRA is highest on chat at 57.26. Repeats are needed to assess small gaps.
-- **The compact generator preserves similar throughput with fewer parameters.**
-  Its math result is slightly lower and chat result slightly higher than the
-  larger attention generator. Calculated configured parameter counts are
-  326,709,344 versus 646,297,952 (about 49.45% fewer). This supports a compact
-  candidate for parameter efficiency; it does not measure a generator-latency,
-  peak-memory or statistically significant throughput improvement.
+Changes below use full-precision values; percentage points (pp) describe absolute
+acceptance-rate changes. They are descriptive differences without trial-level
+uncertainty estimates.
 
-The all-module generator's stronger offline validation agreement in GEN-009
-did not coincide with the strongest serving throughput here. This does not
-show that its verifier acceptance regressed: acceptance counters are absent.
-Higher generation/merge cost, different actual acceptance, response-length
-differences, and run variability are possible explanations, not diagnoses.
+| Candidate vs reference | Math throughput | Chat throughput | Math acceptance change | Chat acceptance change |
+| --- | ---: | ---: | ---: | ---: |
+| Attention generator vs attention static LoRA | +3.25% | −1.88% | +5.58 pp | −0.09 pp |
+| All-module generator vs all-module static LoRA | −1.51% | −3.86% | +4.07 pp | −0.49 pp |
+| Attention decoder-256 vs decoder-512 generator | −1.27% | +0.29% | −0.16 pp | +0.58 pp |
+| Attention decoder-256 generator vs attention static LoRA | +1.94% | −1.60% | +5.41 pp | +0.49 pp |
+| All-module static LoRA vs attention static LoRA | +2.87% | +1.39% | +2.61 pp | +0.47 pp |
+| All-module generator vs attention generator | −1.87% | −0.65% | +1.10 pp | +0.07 pp |
 
-Working decision: retain attention generation and the compact attention variant
-as candidates, with all-module static LoRA as a strong throughput control. Do
-not favor maximum generated weight count solely from offline agreement. Collect
-native acceptance and overhead metrics before redesigning the hypernetwork or
-attributing these gaps to infrastructure.
+The detailed evidence updates the earlier throughput-only interpretation:
 
-## Acceptance measurements to add
+- **Generation improves math acceptance over matched static LoRA.** Attention
+  increases acceptance length by 5.90%, while all modules increase it by 4.20%.
+  The attention gain accompanies higher throughput; the all-module gain does
+  not. The all-module generator has the highest math acceptance in this set.
+- **Chat has no consistent acceptance advantage from generation.** The two
+  original generators are slightly below their matched static LoRAs. The compact
+  attention generator is effectively level with all-module static LoRA
+  (39.316% versus 39.298%). This workload does not show a clear conditional
+  adaptation benefit on chat.
+- **Module coverage improves math acceptance, without guaranteeing throughput.**
+  All modules beat attention-only acceptance for both adaptation methods on math.
+  On chat the changes are small. The all-module generator is slower than the
+  attention generator despite better math acceptance. GEN-009's offline coverage
+  result therefore has some serving-acceptance support, but throughput needs a
+  separate explanation.
+- **The compact generator retains similar acceptance and takes less generation
+  time in this run.** Configured parameter counts are 326,709,344 versus
+  646,297,952, about 49.45% fewer (calculated from pinned projection shapes, not
+  measured from submitted checkpoints). The timed generator call is 16–17%
+  shorter, as detailed below. Peak memory and repeatability remain unmeasured.
 
-Retain math/chat draft acceptance rate, per-position acceptance, acceptance
-length, accepted/proposed token counts and draft cycles from `summary.json`.
-Record generator/merge/restore timing, TTFT, TPOT, model/weight hashes, selected
-step/revision, workload hashes, server/client logs and reproducibility artifacts.
-Those fields were not included in the supplied Markdown and cannot be inferred
-from its throughput values. Native results also establish workload hashes,
-response-token totals and request counts needed for more controlled comparisons.
+## Adapter timing and the unresolved throughput gap
 
-The questions are whether the module coverage gains in
-[GEN-009](GEN-009-generator-structure.md) translate to serving acceptance and
-throughput, and whether generators outperform static LoRAs at matched target
-sets and training budgets. Throughput now has the mixed evidence above;
-the acceptance/cost mechanisms remain open.
+The counters report 50 generator invocations for 50 completed requests for each
+generator, mean conditioning size 1. The adapter is generated once per prompt
+and merged for that request; these measurements do not regenerate LoRA at each
+decoding step. Static LoRA has zero generator calls and zero per-request
+merge/restore timing because its weights are merged permanently before serving.
+Zero per-request cost does not mean model loading/setup has no cost.
+
+The runtime uses CUDA events for generation, merge and restore
+([elapsed](../../../src/speculators/generator/serving/controller.py)); the table
+uses arithmetic means, not latency medians or percentiles. Each aggregate duration
+is divided by 50 completed requests. Adapter total is the sum of those three
+reported durations; its wall fraction divides by benchmark `measured_seconds`.
+
+| Generator | Category | Generate ms/request | Merge ms/request | Restore ms/request | Timed adapter total ms/request | Timed total / measured wall |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Attention, decoder 512 | Math | 3.152 | 3.181 | 0.256 | 6.590 | 0.201% |
+| Attention, decoder 512 | Chat | 3.209 | 3.192 | 0.260 | 6.662 | 0.167% |
+| All modules | Math | 5.668 | 9.702 | 0.714 | 16.084 | 0.482% |
+| All modules | Chat | 5.735 | 9.709 | 0.709 | 16.153 | 0.403% |
+| Attention, decoder 256 | Math | 2.604 | 3.186 | 0.270 | 6.060 | 0.183% |
+| Attention, decoder 256 | Chat | 2.692 | 3.206 | 0.271 | 6.169 | 0.155% |
+
+Decoder 256 reduces generator-call duration by 17.40% on math and 16.11% on chat;
+merge cost remains similar. All-module generation takes about 79–80% longer
+than attention-only, while merging takes about three times as long.
+
+**These recorded one-time durations alone do not explain the full throughput
+gaps.** Their summed fraction is below 0.5%, including for all-module generation,
+whose throughput is 1.51% below its static counterpart on math and 3.86% below
+on chat. CUDA-event durations are not a complete wall-time partition. Host-side
+work, synchronization, persistent memory effects, prefill/decoding interactions
+and run variability are not isolated by these counters. They remain hypotheses,
+not diagnosed causes.
+
+| Model | Math median TTFT ms | Chat median TTFT ms | Math median TPOT ms | Chat median TPOT ms |
+| --- | ---: | ---: | ---: | ---: |
+| Attention static LoRA | 43.48 | 45.10 | 12.906 | 16.753 |
+| All-module static LoRA | 43.46 | 44.56 | 12.408 | 16.787 |
+| Attention generator | 50.89 | 52.11 | 12.187 | 17.667 |
+| All-module generator | 61.72 | 62.92 | 12.691 | 17.761 |
+| Attention generator, decoder 256 | 50.99 | 52.05 | 12.467 | 17.535 |
+
+Compared with matched static LoRA, median TTFT is about 7 ms higher for attention
+generation and 18 ms higher for all-module generation. All-module math TPOT is
+also higher despite better acceptance, so setup alone is not an adequate causal
+account. Medians are separate request statistics and cannot be subtracted from
+aggregate durations to construct an exact time budget.
+
+There is **no isolated drafter-forward latency or verifier latency** in the
+supplied summary. End-to-end TPOT contains drafting, verification and serving
+work; subtracting generator seconds from benchmark wall time would not isolate
+the drafter. Profiling those components under matched runtime conditions and
+repeating trials is needed to locate the remaining gap.
+
+## Working interpretation and open evidence
+
+Keep the attention generator and its compact variant as candidates, with
+all-module static LoRA as a strong throughput control. Attention generation has
+a math acceptance advantage over matched static LoRA; all-module generation
+has the strongest math acceptance here. Neither establishes a general throughput
+win. Best math throughput is attention generation at 78.18 tok/s, only 0.37%
+above all-module static LoRA at 77.90; best chat throughput is all-module static
+LoRA at 57.26. Small rankings need repeated trials.
+
+These results do not establish that the hypernetwork architecture is inadequate.
+They support compact generation and a domain-dependent acceptance benefit.
+They also do not justify maximizing generated weight count from offline
+agreement alone. Before architectural redesign, collect matched drafter/verifier
+profiling and repeated serving measurements. Preserve request-level results,
+selected checkpoint/revision and weight hashes, hardware/package/code provenance,
+server/client logs, and training/eval/vLLM command and patch artifacts.
 
 ## Reported all-module/chat incomplete workload
 
-The user supplied a failed `generator-all-4k-1500/nemotron/nemo-chat` first
-attempt: expected 50 requests; GuideLLM measured 49 successful, zero errored,
-zero incomplete, total 49. The client failed its completeness check, followed
-by owned-server cleanup. No throughput row from this attempt is accepted.
-This is not evidence by itself of a model crash or a specific GuideLLM bug.
-The native result and complete client log have not been supplied for inspection.
+The user previously supplied a failed `generator-all-4k-1500/nemotron/nemo-chat`
+first attempt: expected 50 requests; GuideLLM measured 49 successful, zero
+errored, zero incomplete, total 49. The client failed its completeness check,
+followed by owned-server cleanup. No throughput row from that incomplete attempt
+is accepted. This is not evidence by itself of a model crash or a specific
+GuideLLM bug. The failed attempt's native result and complete client log have
+not been supplied for inspection.
 
 Real GuideLLM 0.7.1 tests against a local HTTP endpoint completed 50-request
-workloads at C1 and C2, including the existing short-response path; empty-output
-requests were also tested. They did not reproduce this failure. Diagnostic
-reporting now preserves scheduler/measurement distinctions on count mismatch,
-and the unchanged suite resume path preserves completed measurements.
+workloads at C1 and C2, including short-response and empty-output paths. They did
+not reproduce the failure. Diagnostic reporting now preserves scheduler/measurement
+distinctions on count mismatch; suite resume preserves completed measurements.
 
-The later supplied summary includes a numeric all-module/chat row. The native
-files and retry history were not supplied, so it does not retrospectively
-establish the cause of the first failed attempt or validate accepting 49/50.
+The subsequent detailed all-module/chat summary reports 50 successful and 50
+completed requests. Its aggregate completeness checks pass. This establishes
+completeness for the supplied later measurement, without retrospectively
+establishing the earlier failure's cause or validating acceptance of 49/50.

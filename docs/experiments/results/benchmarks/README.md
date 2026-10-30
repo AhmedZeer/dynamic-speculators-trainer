@@ -3,9 +3,12 @@
 The five-model structure comparison is recorded in
 [GEN-010](../GEN-010-structure-serving.md), with the
 [supplied math/chat C1 throughput table](2026-10-30-structure-math-chat-c1/summary.md),
-[transcribed metrics](2026-10-30-structure-math-chat-c1/metrics.json), and
-[derived comparisons](2026-10-30-structure-math-chat-c1/analysis.json).
-Native acceptance, timing, checkpoint and workload provenance were not supplied.
+[initial transcribed metrics](2026-10-30-structure-math-chat-c1/metrics.json),
+[later detailed suite summary](2026-10-30-structure-math-chat-c1/suite_summary_detailed.json), and
+[full-precision comparisons](2026-10-30-structure-math-chat-c1/detailed_analysis.json).
+Aggregate acceptance, adapter timing and matching workload hashes are now supplied.
+Request-level data, checkpoint/runtime provenance and isolated drafter/verifier
+timings remain unavailable.
 
 The fixed-coefficient step-4000 sweep is recorded in
 [GEN-008](../GEN-008-coefficient-sweep.md), with its

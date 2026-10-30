@@ -163,12 +163,13 @@ acceptance improvement, or a throughput win from these screenshots alone.
 Implementation follow-up: [three independent training configs and commands](../../../examples/eagle3-lora/structure_followups_v1/README.md)
 now cover static attention LoRA, static all-module LoRA, and an
 attention-only generator with decoder width 256.
-Execution/results are pending.
+Subsequent aggregate serving results are recorded in GEN-010 below; the original
+screenshot observations above remain separate evidence.
 
 Serving implementation follow-up: shared merged attention/all-module projection
 support and a [step-1500 math/chat C1 suite](../../../examples/eagle3-lora/structure_benchmarks_v1/README.md)
-are now prepared. See [GEN-010](GEN-010-structure-serving.md) for the pending
-throughput-table extension. This does not add GPU measurements to GEN-009;
+are now prepared. See [GEN-010](GEN-010-structure-serving.md) for the supplied
+throughput-table extension and subsequent aggregate acceptance/timing evidence. This does not add GPU measurements to GEN-009;
 per-request serving for these wider target sets remains unsupported.
 
 Subsequent supplied throughput evidence is now recorded in
@@ -176,4 +177,14 @@ Subsequent supplied throughput evidence is now recorded in
 gain over its matched static LoRA but a chat regression; all-module static LoRA
 beats its generator in both categories. This limits the earlier direction of
 favoring broader generated coverage: the offline agreement ordering alone did
-not predict the serving-throughput ranking. Acceptance measurements remain absent.
+not predict the serving-throughput ranking.
+
+The later detailed summary in GEN-010 adds serving acceptance: attention and
+all-module generators exceed their matched static LoRAs on math by 5.58 and
+4.07 percentage points, respectively. Chat shows no consistent acceptance
+advantage. All-module generation has the highest math acceptance but lower
+throughput than attention generation. Decoder 256 retains similar acceptance
+with a 16–17% shorter timed generator call. Timed adapter costs are below 0.5%
+of measured benchmark wall time and do not explain the entire throughput gap.
+These measurements support compact generation and a math acceptance benefit;
+isolated drafter/verifier profiling and repeated trials remain open.

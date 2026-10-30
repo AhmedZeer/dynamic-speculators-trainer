@@ -1,0 +1,276 @@
+{
+  "source": "suite_summary_detailed.json",
+  "source_sha256": "f78e4b37b483861c3f7273279786083c4bab9dfdf661e5f56a947603e47efee0",
+  "suite_identity": "ff2115d88b483658a62c2a6ba0791c3f042ed126dbbd309606afbafbb3124fab",
+  "source_precision": "Full-precision numbers in user-supplied detailed suite summary",
+  "validation": "All ten aggregate measurements pass counts, acceptance identities, throughput identities, row/rounded-table agreement and shared workload checks.",
+  "dataset_sha256": {
+    "math": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28",
+    "chat": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f"
+  },
+  "measurements": [
+    {
+      "model": "static-lora-attention-4k-1500",
+      "domain": "math",
+      "draft_acceptance_percent": 61.10620120783621,
+      "acceptance_length": 2.8331860362350865,
+      "generator_ms_per_request": 0.0,
+      "merge_ms_per_request": 0.0,
+      "restore_ms_per_request": 0.0,
+      "timed_adapter_ms_per_request": 0.0,
+      "timed_adapter_percent_of_measured_wall": 0.0,
+      "ttft_median_ms": 43.48182678222656,
+      "tpot_median_ms": 12.906286865472794
+    },
+    {
+      "model": "static-lora-attention-4k-1500",
+      "domain": "chat",
+      "draft_acceptance_percent": 38.828987780173826,
+      "acceptance_length": 2.164869633405215,
+      "generator_ms_per_request": 0.0,
+      "merge_ms_per_request": 0.0,
+      "restore_ms_per_request": 0.0,
+      "timed_adapter_ms_per_request": 0.0,
+      "timed_adapter_percent_of_measured_wall": 0.0,
+      "ttft_median_ms": 45.099496841430664,
+      "tpot_median_ms": 16.75320416688919
+    },
+    {
+      "model": "static-lora-all-4k-1500",
+      "domain": "math",
+      "draft_acceptance_percent": 63.71547483919788,
+      "acceptance_length": 2.9114642451759365,
+      "generator_ms_per_request": 0.0,
+      "merge_ms_per_request": 0.0,
+      "restore_ms_per_request": 0.0,
+      "timed_adapter_ms_per_request": 0.0,
+      "timed_adapter_percent_of_measured_wall": 0.0,
+      "ttft_median_ms": 43.463706970214844,
+      "tpot_median_ms": 12.40797434002161
+    },
+    {
+      "model": "static-lora-all-4k-1500",
+      "domain": "chat",
+      "draft_acceptance_percent": 39.29769185243638,
+      "acceptance_length": 2.1789307555730915,
+      "generator_ms_per_request": 0.0,
+      "merge_ms_per_request": 0.0,
+      "restore_ms_per_request": 0.0,
+      "timed_adapter_ms_per_request": 0.0,
+      "timed_adapter_percent_of_measured_wall": 0.0,
+      "ttft_median_ms": 44.55709457397461,
+      "tpot_median_ms": 16.78664330393076
+    },
+    {
+      "model": "generator-attention-4k-1500",
+      "domain": "math",
+      "draft_acceptance_percent": 66.682261208577,
+      "acceptance_length": 3.00046783625731,
+      "generator_ms_per_request": 3.1524249505996704,
+      "merge_ms_per_request": 3.181301751136782,
+      "restore_ms_per_request": 0.25636864066123943,
+      "timed_adapter_ms_per_request": 6.590095342397692,
+      "timed_adapter_percent_of_measured_wall": 0.20126567907517334,
+      "ttft_median_ms": 50.88639259338379,
+      "tpot_median_ms": 12.187124229967594
+    },
+    {
+      "model": "generator-attention-4k-1500",
+      "domain": "chat",
+      "draft_acceptance_percent": 38.737680308073884,
+      "acceptance_length": 2.1621304092422164,
+      "generator_ms_per_request": 3.2093593597412116,
+      "merge_ms_per_request": 3.1922995328903205,
+      "restore_ms_per_request": 0.2598790407180786,
+      "timed_adapter_ms_per_request": 6.66153793334961,
+      "timed_adapter_percent_of_measured_wall": 0.167306200890832,
+      "ttft_median_ms": 52.114248275756836,
+      "tpot_median_ms": 17.666750587522984
+    },
+    {
+      "model": "generator-all-4k-1500",
+      "domain": "math",
+      "draft_acceptance_percent": 67.78671714781511,
+      "acceptance_length": 3.0336015144344533,
+      "generator_ms_per_request": 5.667778587341303,
+      "merge_ms_per_request": 9.70244089126587,
+      "restore_ms_per_request": 0.7136217594146728,
+      "timed_adapter_ms_per_request": 16.083841238021847,
+      "timed_adapter_percent_of_measured_wall": 0.4820277442828872,
+      "ttft_median_ms": 61.722755432128906,
+      "tpot_median_ms": 12.690600007772446
+    },
+    {
+      "model": "generator-all-4k-1500",
+      "domain": "chat",
+      "draft_acceptance_percent": 38.80499444335491,
+      "acceptance_length": 2.1641498333006473,
+      "generator_ms_per_request": 5.735280637741088,
+      "merge_ms_per_request": 9.709404106140136,
+      "restore_ms_per_request": 0.708598401546478,
+      "timed_adapter_ms_per_request": 16.1532831454277,
+      "timed_adapter_percent_of_measured_wall": 0.40304104012023756,
+      "ttft_median_ms": 62.920331954956055,
+      "tpot_median_ms": 17.761477269232273
+    },
+    {
+      "model": "generator-attention-decoder256-4k-1500",
+      "domain": "math",
+      "draft_acceptance_percent": 66.518760703721,
+      "acceptance_length": 2.99556282111163,
+      "generator_ms_per_request": 2.603991041183471,
+      "merge_ms_per_request": 3.186196465492247,
+      "restore_ms_per_request": 0.2702483201026917,
+      "timed_adapter_ms_per_request": 6.060435826778409,
+      "timed_adapter_percent_of_measured_wall": 0.18273388085570286,
+      "ttft_median_ms": 50.985097885131836,
+      "tpot_median_ms": 12.4668525531888
+    },
+    {
+      "model": "generator-attention-decoder256-4k-1500",
+      "domain": "chat",
+      "draft_acceptance_percent": 39.315564330371835,
+      "acceptance_length": 2.179466929911155,
+      "generator_ms_per_request": 2.6921984004974377,
+      "merge_ms_per_request": 3.20577537059784,
+      "restore_ms_per_request": 0.2711020788550377,
+      "timed_adapter_ms_per_request": 6.169075849950315,
+      "timed_adapter_percent_of_measured_wall": 0.15538501847861727,
+      "ttft_median_ms": 52.05273628234863,
+      "tpot_median_ms": 17.534851096570492
+    }
+  ],
+  "comparisons": [
+    {
+      "candidate": "generator-attention-4k-1500",
+      "reference": "static-lora-attention-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 3.2519197146163803,
+          "draft_acceptance_change_percentage_points": 5.576060000740791,
+          "acceptance_length_change_percent": 5.904370481951049,
+          "ttft_median_change_ms": 7.404565811157227,
+          "tpot_median_change_ms": -0.7191626355051994
+        },
+        "chat": {
+          "throughput_change_percent": -1.8785363905701957,
+          "draft_acceptance_change_percentage_points": -0.0913074720999385,
+          "acceptance_length_change_percent": -0.12653067513769267,
+          "ttft_median_change_ms": 7.014751434326172,
+          "tpot_median_change_ms": 0.9135464206337929
+        }
+      }
+    },
+    {
+      "candidate": "generator-all-4k-1500",
+      "reference": "static-lora-all-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": -1.5081743094301547,
+          "draft_acceptance_change_percentage_points": 4.071242308617229,
+          "acceptance_length_change_percent": 4.1950461682944695,
+          "ttft_median_change_ms": 18.259048461914062,
+          "tpot_median_change_ms": 0.2826256677508354
+        },
+        "chat": {
+          "throughput_change_percent": -3.8593701012280768,
+          "draft_acceptance_change_percentage_points": -0.49269740908147175,
+          "acceptance_length_change_percent": -0.6783566772206373,
+          "ttft_median_change_ms": 18.363237380981445,
+          "tpot_median_change_ms": 0.9748339653015137
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-decoder256-4k-1500",
+      "reference": "generator-attention-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": -1.2727146246534482,
+          "draft_acceptance_change_percentage_points": -0.16350050485599565,
+          "acceptance_length_change_percent": -0.16347501167679468,
+          "ttft_median_change_ms": 0.09870529174804688,
+          "tpot_median_change_ms": 0.27972832322120667,
+          "generator_ms_per_call_change_percent": -17.39720748346042
+        },
+        "chat": {
+          "throughput_change_percent": 0.2885844675676985,
+          "draft_acceptance_change_percentage_points": 0.5778840222979476,
+          "acceptance_length_change_percent": 0.8018258563328162,
+          "ttft_median_change_ms": -0.061511993408203125,
+          "tpot_median_change_ms": -0.13189949095249176,
+          "generator_ms_per_call_change_percent": -16.11414931375823
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-decoder256-4k-1500",
+      "reference": "static-lora-attention-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 1.937817432173028,
+          "draft_acceptance_change_percentage_points": 5.4125594958847945,
+          "acceptance_length_change_percent": 5.731243299939437,
+          "ttft_median_change_ms": 7.503271102905273,
+          "tpot_median_change_ms": -0.43943431228399277
+        },
+        "chat": {
+          "throughput_change_percent": -1.5953730872432792,
+          "draft_acceptance_change_percentage_points": 0.48657655019800905,
+          "acceptance_length_change_percent": 0.6742806255256806,
+          "ttft_median_change_ms": 6.953239440917969,
+          "tpot_median_change_ms": 0.7816469296813011
+        }
+      }
+    },
+    {
+      "candidate": "static-lora-all-4k-1500",
+      "reference": "static-lora-attention-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 2.8731836667977406,
+          "draft_acceptance_change_percentage_points": 2.609273631361675,
+          "acceptance_length_change_percent": 2.762903951230511,
+          "ttft_median_change_ms": -0.01811981201171875,
+          "tpot_median_change_ms": -0.4983125254511833
+        },
+        "chat": {
+          "throughput_change_percent": 1.3930033223514826,
+          "draft_acceptance_change_percentage_points": 0.4687040722625546,
+          "acceptance_length_change_percent": 0.649513575824856,
+          "ttft_median_change_ms": -0.5424022674560547,
+          "tpot_median_change_ms": 0.033439137041568756
+        }
+      }
+    },
+    {
+      "candidate": "generator-all-4k-1500",
+      "reference": "generator-attention-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": -1.8694499632639139,
+          "draft_acceptance_change_percentage_points": 1.1044559392381137,
+          "acceptance_length_change_percent": 1.104283731248823,
+          "ttft_median_change_ms": 10.836362838745117,
+          "tpot_median_change_ms": 0.5034757778048515,
+          "generator_ms_per_call_change_percent": 79.79107119625954
+        },
+        "chat": {
+          "throughput_change_percent": -0.6538748184517273,
+          "draft_acceptance_change_percentage_points": 0.06731413528102137,
+          "acceptance_length_change_percent": 0.0933997343452786,
+          "ttft_median_change_ms": 10.806083679199219,
+          "tpot_median_change_ms": 0.09472668170928955,
+          "generator_ms_per_call_change_percent": 78.70484401608286
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "One measurement per model/domain; no repeated-trial uncertainty.",
+    "Correctness not checked; equal output-token counts do not imply identical token sequences.",
+    "CUDA-event adapter durations are not a wall-time partition; host, synchronization and persistent-memory effects are not isolated.",
+    "No isolated drafter-forward or verifier timings in supplied summary.",
+    "Checkpoint hashes, executed hardware/code provenance and request-level results not supplied."
+  ]
+}
