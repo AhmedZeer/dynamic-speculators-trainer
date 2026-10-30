@@ -75,6 +75,57 @@ def test_config_and_dry_run(tmp_path):
         Model(name="bad", type="lora", model="owner/repo", conditioning_examples=2)
 
 
+def test_structure_suite_matches_math_chat_c1_and_requires_all_step1500_models(
+    tmp_path, monkeypatch
+):
+    path = Path("examples/eagle3-lora/structure_benchmarks_v1/math_chat_c1.yaml")
+    config = Suite.load(path)
+    assert len(config.models) == 4
+    assert [model.type for model in config.models] == [
+        "lora",
+        "lora",
+        "generator",
+        "generator",
+    ]
+    assert all(model.subfolder == "step-00001500" for model in config.models)
+    assert config.models[0].name == "static-lora-attention-4k-1500"
+    assert config.models[0].revision == "main"
+    assert config.settings.concurrency_values == [1]
+    assert config.settings.max_samples == 50
+    assert config.settings.max_tokens == 256
+    assert config.settings.speculative_tokens == 3
+    assert config.settings.warmups == 3
+    assert config.settings.seed == 42
+    assert not config.settings.continue_on_error
+    assert len(config.benchmarks) == 1
+    assert config.benchmarks[0].categories == ["math", "chat"]
+    assert all(model.adapter_policy == "shared" for model in config.models)
+    assert all(
+        model.conditioning_examples == 1
+        for model in config.models
+        if model.type == "generator"
+    )
+    plan = suite.run_suite(path, tmp_path / "dry", dry_run=True)
+    assert len(plan["configuration"]["models"]) == 4
+    assert not (tmp_path / "dry").exists()
+
+    def missing_model(spec, *_args, **_kwargs):
+        assert spec.name == config.models[0].name
+        assert spec.subfolder == "step-00001500"
+        raise FileNotFoundError("Pending step-00001500/bundle.json")
+
+    monkeypatch.setattr(suite, "resolve_model", missing_model)
+    monkeypatch.setattr(
+        suite,
+        "owned_process",
+        lambda *_a, **_kw: pytest.fail(
+            "GPU process launched before all models were available"
+        ),
+    )
+    with pytest.raises(FileNotFoundError, match="step-00001500"):
+        suite.run_suite(path, tmp_path / "pending", resume=True)
+
+
 def test_benchmark_diagnostics_include_failure_excerpt_and_heartbeats(tmp_path, capsys):
     log = tmp_path / "client.log"
     log.write_text("\n".join(["old detail"] * 20 + ["ValueError: failed prompt check"]))

@@ -283,10 +283,12 @@ measurements. The original FP32 estimates were twice these unrounded values.
 | decoder_width=1024 | 581,716,768 | 4.33 |
 
 Hub export and offline generator loading support all seven module names.
-The existing vLLM merge/per-request serving hooks currently support only v/o;
-they reject these new module sets explicitly. Extending serving hooks for
-attention/MLP/all-module bundles is a separate follow-up. Architecture variants
-retain the currently supported v/o set.
+The shared merged vLLM hook now supports attention/MLP/all-module sets; the
+new math/chat C1 suite is documented in the
+[serving runbook](../../examples/eagle3-lora/structure_benchmarks_v1/README.md).
+CPU merge/controller tests pass; GPU serving measurements remain pending.
+The per-request native multi-LoRA hook still supports only v/o and rejects
+other sets explicitly. Architecture variants retaining v/o remain supported.
 
 ## Measurement record to add after execution
 

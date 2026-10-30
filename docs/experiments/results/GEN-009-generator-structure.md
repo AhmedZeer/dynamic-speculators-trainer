@@ -164,3 +164,9 @@ Implementation follow-up: [three independent training configs and commands](../.
 now cover static attention LoRA, static all-module LoRA, and an
 attention-only generator with decoder width 256.
 Execution/results are pending.
+
+Serving implementation follow-up: shared merged attention/all-module projection
+support and a [step-1500 math/chat C1 suite](../../../examples/eagle3-lora/structure_benchmarks_v1/README.md)
+are now prepared. See [GEN-010](GEN-010-structure-serving.md) for the pending
+throughput-table extension. This does not add GPU measurements to GEN-009;
+per-request serving for these wider target sets remains unsupported.

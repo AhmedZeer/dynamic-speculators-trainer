@@ -9,6 +9,7 @@ from pathlib import Path
 
 import torch
 
+from speculators.generator.config import ADAPTER_MODULES
 from speculators.generator.serving.bundle import (
     VLLM_VERSION,
     bundle_state,
@@ -43,11 +44,8 @@ def elapsed(device, operation):
 
 def validate_runtime(config, metadata):
     """Fail before loading GPU weights for unsupported scheduling/precision."""
-    if set(metadata["shapes"]) != {"o_proj", "v_proj"}:
-        raise ValueError(
-            "The vLLM adapter hook currently supports only o_proj/v_proj; "
-            "other module bundles support training and offline evaluation"
-        )
+    if not metadata["shapes"] or not set(metadata["shapes"]) <= set(ADAPTER_MODULES):
+        raise ValueError("Unsupported adapter projection set")
     spec = config.speculative_config
     scheduler = config.scheduler_config
     parallel = config.parallel_config
@@ -57,6 +55,11 @@ def validate_runtime(config, metadata):
         serving.get("conditioning_examples") or scheduler.max_num_seqs,
     )
     continuous = serving.get("adapter_policy") == "per_request"
+    if continuous and set(metadata["shapes"]) != {"o_proj", "v_proj"}:
+        raise ValueError(
+            "Per-request adapters support only o_proj/v_proj; "
+            "use shared merged serving for other projections"
+        )
     if continuous:
         conditioning_limit = 1
     checks = {
@@ -133,23 +136,26 @@ def validate_runtime(config, metadata):
 
 
 class AdapterMerger:
-    """Merge V only in packed QKV; never alter Q/K or accumulate updates."""
+    """Merge selected projections into TP=1 packed weights without accumulation."""
 
     def __init__(self, draft, metadata):
         inner = draft.model
         if len(inner.layers) != 1:
             raise ValueError("The prototype supports exactly one draft layer")
-        attention = inner.layers[0].self_attn
-        qkv = attention.qkv_proj.weight
-        output = attention.o_proj.weight
-        inputs, values = metadata["shapes"]["v_proj"]
-        if (
-            qkv.ndim != MATRIX_NDIM
-            or qkv.shape[1] != inputs
-            or qkv.shape[0] <= 2 * values
-        ):
-            raise ValueError("Packed QKV does not match exported V dimensions")
-        self.weights = {"v_proj": qkv[-values:], "o_proj": output}
+        layer = inner.layers[0]
+        shapes = metadata["shapes"]
+        if not shapes or not set(shapes) <= set(ADAPTER_MODULES):
+            raise ValueError("Unsupported adapter projection set")
+        attention = layer.self_attn
+        self.weights = {}
+        if set(shapes) & {"q_proj", "k_proj", "v_proj"}:
+            self.weights.update(packed_attention_weights(attention, shapes))
+        if "o_proj" in shapes:
+            self.weights["o_proj"] = attention.o_proj.weight.detach()
+        if set(shapes) & {"gate_proj", "up_proj"}:
+            self.weights.update(packed_mlp_weights(layer.mlp, shapes))
+        if "down_proj" in shapes:
+            self.weights["down_proj"] = layer.mlp.down_proj.weight.detach()
         for name, weight in self.weights.items():
             in_features, out_features = metadata["shapes"][name]
             if tuple(weight.shape) != (out_features, in_features):
@@ -159,11 +165,20 @@ class AdapterMerger:
         }
         self.rank = metadata["rank"]
         self.scale = metadata["alpha"] / self.rank
-        self.device = output.device
+        self.device = next(iter(self.weights.values())).device
 
     @torch.inference_mode()
     @traced("speculators.adapter_merge")
     def apply(self, factors):
+        if set(factors) != set(self.weights):
+            raise ValueError("Adapter factor projections differ from the bundle")
+        try:
+            self._apply_factors(factors)
+        except Exception:
+            self.restore()
+            raise
+
+    def _apply_factors(self, factors):
         for name, weight in self.weights.items():
             a, b = factors[name]
             if a.shape != (self.rank, weight.shape[1]) or b.shape != (
@@ -175,7 +190,6 @@ class AdapterMerger:
             update.mul_(self.scale).add_(self.base[name].float())
             merged = update.to(weight.dtype)
             if not torch.isfinite(merged).all():
-                self.restore()
                 raise ValueError("Non-finite merged adapter")
             weight.copy_(merged)
 
@@ -184,6 +198,54 @@ class AdapterMerger:
     def restore(self):
         for name, weight in self.weights.items():
             weight.copy_(self.base[name])
+
+
+def packed_mlp_weights(mlp, shapes):
+    """vLLM LlamaMLP packs gate first and up second along output rows."""
+    packed = mlp.gate_up_proj.weight.detach()
+    if packed.ndim != MATRIX_NDIM or packed.shape[0] % 2:
+        raise ValueError("Packed gate/up projection must have two equal row blocks")
+    width = packed.shape[0] // 2
+    return {
+        name: weight
+        for name, weight in zip(
+            ("gate_proj", "up_proj"), (packed[:width], packed[width:]), strict=True
+        )
+        if name in shapes
+    }
+
+
+def packed_attention_weights(attention, shapes):
+    """vLLM packs Q, K, V along rows; GQA uses equal K/V widths."""
+    packed = attention.qkv_proj.weight.detach()
+    if packed.ndim != MATRIX_NDIM:
+        raise ValueError("Packed QKV must be a matrix")
+    kv_width = getattr(attention, "kv_size", None)
+    if kv_width is None:
+        kv_width = next(
+            (shapes[name][1] for name in ("v_proj", "k_proj") if name in shapes), None
+        )
+    q_width = getattr(attention, "q_size", None)
+    if q_width is None:
+        q_width = (
+            shapes["q_proj"][1]
+            if "q_proj" in shapes
+            else packed.shape[0] - 2 * kv_width
+        )
+    if kv_width is None:
+        kv_width = (packed.shape[0] - q_width) // 2
+    if q_width < 1 or kv_width < 1 or q_width + 2 * kv_width != packed.shape[0]:
+        raise ValueError("Packed QKV dimensions differ from the exported projections")
+    parts = (
+        packed[:q_width],
+        packed[q_width : q_width + kv_width],
+        packed[q_width + kv_width :],
+    )
+    return {
+        name: weight
+        for name, weight in zip(("q_proj", "k_proj", "v_proj"), parts, strict=True)
+        if name in shapes
+    }
 
 
 class DraftAdapterController:

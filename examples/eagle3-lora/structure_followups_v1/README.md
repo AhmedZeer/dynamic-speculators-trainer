@@ -85,9 +85,9 @@ the full optimizer/RNG checkpoint, portable bundle, checksums, and training and
 extraction provenance. Static runs publish `static_lora` bundles; the compact
 run publishes a `generator` bundle. Existing experiments are not overwritten.
 
-The present vLLM adapter hook still supports only v/o. These attention/all-module
-bundles support training, offline validation, and export; their serving support
-must be extended before applying the throughput suite to them.
+Attention/all-module shared merged serving is now implemented for the
+[math/chat C1 suite](../structure_benchmarks_v1/README.md). GPU measurements are
+pending. Per-request native multi-LoRA remains v/o-only.
 
 The same commands now record separate generator/drafter forward and backward
 times, plus clipping/AdamW time. See

@@ -1,0 +1,44 @@
+models:
+  # Resolve the pending model first; never substitute its step-500 snapshot.
+  - name: static-lora-attention-4k-1500
+    type: lora
+    model: azeeer/eagle3-static-lora-structure-v1-attention-4k-1500
+    revision: main
+    subfolder: step-00001500
+  - name: static-lora-all-4k-1500
+    type: lora
+    model: azeeer/eagle3-static-lora-structure-v1-all-4k-1500
+    revision: 8ded0674b4e9f9a29c4938596bc2aacea58d1d4f
+    subfolder: step-00001500
+  - name: generator-attention-4k-1500
+    type: generator
+    model: azeeer/eagle3-generator-structure-v1-modules-attention-4k-1500
+    revision: a8acae6ac086408a2cbce584c5ceaf1ead57f3c9
+    subfolder: step-00001500
+    adapter_policy: shared
+    conditioning_examples: 1
+  - name: generator-all-4k-1500
+    type: generator
+    model: azeeer/eagle3-generator-structure-v1-modules-all-4k-1500
+    revision: b077b468207123d82a8ae57d9e249d6c5508abc6
+    subfolder: step-00001500
+    adapter_policy: shared
+    conditioning_examples: 1
+benchmarks:
+  - dataset: nemotron
+    categories: [math, chat]
+settings:
+  batching_policy: fixed_shared_adapter
+  concurrency: 1
+  max_samples: 50
+  max_tokens: 256
+  speculative_tokens: 3
+  warmups: 3
+  seed: 42
+  gpu: 0
+  continue_on_error: false
+wandb:
+  enabled: true
+  project: eagle3-generator-structure-bench-v1
+  group: structure-4k-1500-math-chat-c1
+  mode: online

@@ -81,9 +81,10 @@ def draft(dtype=torch.float32):
     return model
 
 
-def write_bundle(path, kind="generator"):
+def write_bundle(path, kind="generator", *, shapes=None):
+    shapes = shapes or SHAPES
     path.mkdir()
-    generator = LoRAGenerator(12, SHAPES, 2, architecture())
+    generator = LoRAGenerator(12, shapes, 2, architecture())
     with torch.no_grad():
         for head in generator.heads.values():
             head["B"].bias.normal_(std=0.02)
@@ -92,7 +93,7 @@ def write_bundle(path, kind="generator"):
         "kind": kind,
         "rank": 2,
         "alpha": 4,
-        "shapes": SHAPES,
+        "shapes": shapes,
         "condition": "last" if kind == "generator" else None,
         "input_dim": 12,
         "architecture": architecture().model_dump(),
@@ -112,7 +113,7 @@ def write_bundle(path, kind="generator"):
             metadata.pop(field)
         state = {
             f"{name}.{label}": torch.randn(*shape) * 0.02
-            for name, (inputs, outputs) in SHAPES.items()
+            for name, (inputs, outputs) in shapes.items()
             for label, shape in (("A", (2, inputs)), ("B", (outputs, 2)))
         }
     save_file(state, path / "model.safetensors")
