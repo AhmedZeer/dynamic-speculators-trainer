@@ -15,6 +15,41 @@ required waiting for step 1500. Executed bundle/checkpoint hashes and final Hub
 pins were not supplied; the named budgets are configured/reported rather than
 independently verified from final native run artifacts.
 
+## Working summary retained for future experiments — 2026-10-31
+
+These are the corrected working findings from the discussion, scoped to the
+experiments measured so far:
+
+- **Generate all attention projections rather than only V/O.** Expanding the
+  generator target set from V/O to Q/K/V/O improves acceptance under the same
+  training data and update budget. The user explicitly confirmed the matched
+  data/step budget on 2026-10-31; do not dismiss this comparison merely because
+  the latest five-model serving table omits the earlier V/O row. See the
+  earlier module ablation in [GEN-009](GEN-009-generator-structure.md).
+- **Generator versus static LoRA is domain dependent.** Generated attention
+  and all-module adapters improve math acceptance over their matched static
+  LoRAs by 5.58 and 4.07 percentage points. Chat shows no consistent advantage;
+  the evidence does not support saying generators always beat static LoRA.
+- **Generation/merge latency is a cost, not an established explanation for the
+  entire throughput gap.** Recorded generation, merge and restore durations
+  total less than 0.5% of benchmark wall time. Optimized CUDA kernels may reduce
+  those operations, but cannot yet be claimed to solve the throughput gap.
+  Separate drafter/verifier profiling and wall-time accounting remain needed.
+- **Smaller decoder, lower generation latency, similar acceptance.** Decoder
+  256 reduces timed generation latency by 16–17%. End-to-end throughput is mixed:
+  decoder 512 leads on math (78.18 versus 77.19 tok/s), while decoder 256 leads
+  slightly on chat (55.57 versus 55.41). Neither is always faster.
+- **All-module generation is feasible, but its extra coverage has not yielded
+  a throughput advantage here.** It completed serving and attained the highest
+  math draft acceptance (67.79%). Attention-only generation is the current
+  promising cost–acceptance tradeoff; efficient broader generation remains an
+  open direction, rather than a demonstrated infeasibility.
+
+Correctness remains unchecked and repeated-trial uncertainty is unavailable.
+Target-module coverage has a clearer observed benefit than increasing the
+hypernetwork's internal size; these findings do not establish architecture
+failure or universal rankings.
+
 ## Supplied measurements and checks
 
 Receipt date: 2026-10-30; execution date and per-run hardware provenance were
