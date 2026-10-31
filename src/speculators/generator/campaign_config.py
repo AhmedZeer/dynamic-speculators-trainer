@@ -56,6 +56,8 @@ class CampaignConfig(ExperimentConfig):
     """Three direct pretraining jobs and one ordinary-LoRA baseline."""
 
     training_recipe: Path | None = None
+    # Optional provenance recipe for saved target responses when changing drafter.
+    trajectory_recipe: Path | None = None
     max_training_updates: int | None = Field(default=None, ge=1)
     training_cohort_size: int | None = Field(default=None, ge=1, le=8)
     training_conditioning_examples: int | None = Field(default=None, ge=1, le=8)
@@ -88,6 +90,14 @@ class CampaignConfig(ExperimentConfig):
     )
     downloads: DownloadSettings = Field(default_factory=DownloadSettings)
     pilot: PilotSettings = Field(default_factory=PilotSettings)
+
+    @model_validator(mode="after")
+    def separate_response_source(self):
+        if self.trajectory_recipe is not None and (
+            self.activation_source != "vllm" or self.training_recipe is None
+        ):
+            raise ValueError("A separate trajectory recipe requires online extraction")
+        return self
 
     @model_validator(mode="after")
     def campaign_contract(self):
@@ -130,10 +140,13 @@ class CampaignConfig(ExperimentConfig):
         values = yaml.safe_load(path.read_text())
         if "training_recipe" not in values:
             return super().load(path)
-        recipe = Path(values["training_recipe"])
-        if not recipe.is_absolute():
-            recipe = path.resolve().parent / recipe
-        values["training_recipe"] = recipe
+        for key in ("training_recipe", "trajectory_recipe"):
+            if values.get(key) is not None:
+                recipe = Path(values[key])
+                if not recipe.is_absolute():
+                    recipe = path.resolve().parent / recipe
+                values[key] = recipe
+        recipe = values["training_recipe"]
         # Shared runtime configuration still uses this internal recipe alias.
         values["bank_config"] = recipe
         return cls.model_validate(values)

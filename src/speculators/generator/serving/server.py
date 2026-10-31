@@ -32,6 +32,18 @@ def pinned_model(model, revision, *, local_only=False):
                 "Local model directories must be named by their revision SHA"
             )
         return str(Path(model).resolve())
+    # DeepSpec's original metadata needs the same translation used for its
+    # measured baseline. Generated adapters must retain that frozen drafter.
+    from speculators.benchmark.deepspec import (  # noqa: PLC0415
+        REPOSITORY,
+        REVISION,
+        prepare,
+    )
+
+    if model == REPOSITORY and revision == REVISION:
+        if local_only:
+            raise ValueError("Prepare the DeepSpec drafter before local-only serving")
+        return str(prepare("output/deepseek-eagle3-ttt7-vllm").resolve())
     return (
         snapshot_download(model, revision=revision, local_files_only=True)
         if local_only

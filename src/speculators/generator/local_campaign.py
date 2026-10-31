@@ -1,6 +1,8 @@
 """Local token trajectories; no bank files, Hub calls, or archive extraction."""
 
+import copy
 import json
+import re
 import shlex
 from dataclasses import dataclass
 
@@ -167,9 +169,56 @@ def read_trajectories(cfg, banks):  # noqa: C901 -- local membership validation
     return manifests, subsets, concatenate_datasets(tables), sources
 
 
+def runtime_trajectory_manifests(banks, source_banks, manifests):
+    """Reuse target tokens with new extraction metadata; retain source lineage."""
+    result = {}
+    for domain in DOMAINS:
+        bank, source = banks[domain], source_banks[domain]
+        original = manifests[domain]
+        if (
+            bank.models.target != source.models.target
+            or bank.models.target_revision != original["revisions"]["target_sha"]
+            or bank.dataset != source.dataset
+            or bank.hub != source.hub
+            or bank.hidden_states.sequence_length
+            != source.hidden_states.sequence_length
+        ):
+            raise ValueError("Saved responses require the same pinned target and data")
+        if not re.fullmatch(r"[0-9a-f]{40}", bank.models.drafter_revision):
+            raise ValueError("Runtime drafter requires an immutable revision")
+        effective = copy.deepcopy(original)
+        effective["trajectory_source"] = {
+            key: copy.deepcopy(original[key])
+            for key in ("cache_spec", "revisions", "prepared_fingerprint")
+        }
+        effective["cache_spec"]["models"] = {
+            role: getattr(bank.models, role) for role in ("target", "drafter")
+        }
+        effective["cache_spec"]["hidden_states"] = bank.hidden_states.model_dump(
+            mode="json"
+        )
+        effective["revisions"]["drafter_sha"] = bank.models.drafter_revision
+        result[domain] = effective
+        write_json(bank.output_root / "manifest.json", effective)
+        write_json(
+            bank.output_root.parent / f"bank_{domain}.json",
+            bank.model_dump(mode="json"),
+        )
+    return result
+
+
 def load_local_inputs(cfg):
     banks = campaign_banks(cfg)
-    manifests, subsets, rows, sources = read_trajectories(cfg, banks)
+    if cfg.trajectory_recipe is None:
+        manifests, subsets, rows, sources = read_trajectories(cfg, banks)
+    else:
+        source_cfg = cfg.model_copy(deep=True)
+        source_cfg.training_recipe = cfg.trajectory_recipe
+        source_cfg.bank_config = cfg.trajectory_recipe
+        source_cfg.input_root = cfg.input_root / "trajectory_sources"
+        source_banks = campaign_banks(source_cfg)
+        manifests, subsets, rows, sources = read_trajectories(source_cfg, source_banks)
+        manifests = runtime_trajectory_manifests(banks, source_banks, manifests)
     primary = manifests[DOMAINS[0]]
     identity = {
         "version": 2,
@@ -178,6 +227,8 @@ def load_local_inputs(cfg):
         "revisions": primary["revisions"],
         "sources": sources,
     }
+    if cfg.trajectory_recipe is not None:
+        identity["trajectory_source"] = primary["trajectory_source"]
     # Record trajectory identity without consulting saved adapter artifacts.
     write_json(
         cfg.input_root / "local_inputs.json",

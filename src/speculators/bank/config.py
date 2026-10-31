@@ -8,6 +8,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 CACHED_LAYER_COUNT = 4
+MIN_CONSUMER_LAYER_COUNT = 2
 
 
 class Settings(BaseModel):
@@ -192,12 +193,23 @@ class BankConfig(Settings):
             raise ValueError("Training seeds must be nonempty and unique")
         if set(self.lora.target_modules) != {"o_proj", "v_proj"}:
             raise ValueError("Bank v1 targets exactly o_proj and v_proj")
+        layers = self.hidden_states.layer_ids
+        # Consumer recipes also describe on-demand direct training with external
+        # drafters. Producer bank-v1 releases retain their four-layer contract.
+        consumer = self.hub is not None and self.hub.mode == "consumer"
+        valid_count = (
+            len(layers) >= MIN_CONSUMER_LAYER_COUNT
+            if consumer
+            else len(layers) == CACHED_LAYER_COUNT
+        )
         if (
-            len(self.hidden_states.layer_ids) != CACHED_LAYER_COUNT
-            or len(set(self.hidden_states.layer_ids)) != CACHED_LAYER_COUNT
+            not valid_count
+            or len(set(layers)) != len(layers)
+            or layers != sorted(layers)
         ):
             raise ValueError(
-                "Use three input layers followed by the final target layer"
+                "Use unique ordered input layers followed by the final target layer; "
+                "bank producers require three input layers"
             )
         if self.hidden_states.sequence_length > self.responses.context_length:
             raise ValueError("Extraction length cannot exceed generation context")

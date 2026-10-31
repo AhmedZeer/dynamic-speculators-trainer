@@ -219,6 +219,17 @@ def run_one(  # noqa: C901 -- shared online/offline run lifecycle
             return result
         record_validation_change(output, local_cfg)
         write_json(output / "configuration.json", local_cfg.model_dump(mode="json"))
+        if online and cfg.trajectory_recipe is not None:
+            for name in ("config.json", "original_config.json", "preparation.json"):
+                source = cfg.online.drafter_model_path / name
+                if not source.is_file():
+                    raise FileNotFoundError(
+                        f"Missing native drafter provenance: {source}"
+                    )
+                write_json(
+                    output / "provenance" / "drafter" / name,
+                    json.loads(source.read_text()),
+                )
         runtime_args = {}
         if online:
             cache.check_server()
@@ -258,6 +269,8 @@ def run_one(  # noqa: C901 -- shared online/offline run lifecycle
 
 def campaign_identity(cfg):
     values = cfg.model_dump(mode="json")
+    if values.get("trajectory_recipe") is None:
+        values.pop("trajectory_recipe", None)
     if cfg.activation_source == "hub":
         for key in (
             "activation_source",

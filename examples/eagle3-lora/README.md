@@ -12,6 +12,10 @@ For a fresh attention generator on the original 24K pool through 6,000 updates,
 with checkpoints and math/chat C1 benchmarks at steps 2,000/4,000/6,000, see
 [the attention 24K/6K runbook](attention_24k_6k_v1/README.md).
 
+For an attention generator on the frozen DeepSeek EAGLE3 ttt7 drafter using
+4K rows and 1,500 updates, see the
+[DeepSeek generator config and launch commands](deepseek_ttt7_generator_v1/README.md).
+
 This note describes the Colab workflow in
 [`eagle3_qwen3_8b_nemotronchat_1k_lora.sh`](eagle3_qwen3_8b_nemotronchat_1k_lora.sh).
 It is intended for repeated training runs and hyperparameter sweeps that reuse

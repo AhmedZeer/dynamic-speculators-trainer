@@ -53,11 +53,13 @@ class StructureStudy(CampaignConfig):
                 else:
                     common[key] = value
             values = common
-        recipe = Path(values["training_recipe"])
-        if not recipe.is_absolute():
-            recipe = base_path.parent / recipe
-        values["training_recipe"] = recipe.resolve()
-        values["bank_config"] = recipe.resolve()
+        for key in ("training_recipe", "trajectory_recipe"):
+            if values.get(key) is not None:
+                recipe = Path(values[key])
+                if not recipe.is_absolute():
+                    recipe = base_path.parent / recipe
+                values[key] = recipe.resolve()
+        values["bank_config"] = values["training_recipe"]
         return cls.model_validate(values)
 
 
