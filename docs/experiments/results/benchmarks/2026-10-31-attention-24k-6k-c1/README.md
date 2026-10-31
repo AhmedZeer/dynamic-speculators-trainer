@@ -31,3 +31,9 @@ also change both data pool and update count. Preserve those evidence limits.
 See [GEN-011](../../GEN-011-attention-24k-6k.md) for acceptance tables and
 interpretation, and [GEN-010](../../GEN-010-structure-serving.md) for the extended
 math/chat throughput table.
+
+
+[Extended historical all-category table](extended_historical_table.md) combines
+the original four-model, seven-category comparison with the three new checkpoints.
+New Red Hat out-of-distribution cells are explicitly missing; all new measured
+cells are Nemotron math/code/STEM/chat.

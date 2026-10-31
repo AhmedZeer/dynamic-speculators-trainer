@@ -84,6 +84,11 @@ all three checkpoints: math 12,800, code 12,785, STEM 12,751, chat 11,032 tokens
 Math/chat hashes also match the earlier structure and DeepSeek summaries.
 Equal totals/hashes do not establish identical output sequences or correctness.
 
+The [historical all-category table in GEN-003](GEN-003-generator-suite-throughput.md)
+is extended with these rows. A [combined seven-category view](benchmarks/2026-10-31-attention-24k-6k-c1/extended_historical_table.md)
+shows all four historical models and all three new checkpoints, leaving the new
+HumanEval/math-reasoning/summarization cells unmeasured.
+
 ## Working findings and limits
 
 - **More updates improve acceptance relative to step 2,000.** At 6,000 the
