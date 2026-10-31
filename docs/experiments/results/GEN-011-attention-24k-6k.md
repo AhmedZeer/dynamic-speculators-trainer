@@ -88,7 +88,7 @@ Equal totals/hashes do not establish identical output sequences or correctness.
 The [historical all-category table in GEN-003](GEN-003-generator-suite-throughput.md)
 is extended with these rows. A [combined seven-category view](benchmarks/2026-10-31-attention-24k-6k-c1/extended_historical_table.md)
 shows the historical models, the attention checkpoints and the later DeepSeek
-pair. Attention-generator OOD cells are now filled; DeepSeek OOD remains unmeasured.
+pair. All attention-generator and paired DeepSeek OOD cells are now filled.
 
 ## Working findings and limits
 
@@ -187,4 +187,6 @@ Working update:
 Keep 2,000 as the ID-throughput candidate, 4,000 as the OOD-throughput candidate,
 and 6,000 for its stronger math/code/chat ID acceptance. Correctness, statistical
 uncertainty and executed checkpoint/hardware provenance remain unchecked. The
-DeepSeek pair in GEN-012 still has no supplied OOD measurements.
+DeepSeek pair
+in GEN-012 subsequently supplied its OOD measurements; those now fill the
+remaining cells of the combined table.

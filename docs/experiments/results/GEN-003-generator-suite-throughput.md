@@ -49,14 +49,15 @@ The new attention rows come from [GEN-011](GEN-011-attention-24k-6k.md),
 three checkpoints × four Nemotron categories at C1. The
 [combined all-seven-category table](benchmarks/2026-10-31-attention-24k-6k-c1/extended_historical_table.md)
 retains the historical Red Hat results and now includes all nine OOD cells
-from the resumed attention-generator suite. DeepSeek OOD cells remain unmeasured. Historical timing/precision/runtime equivalence is unverified, so the
+from the resumed attention-generator suite, plus the six paired DeepSeek OOD
+cells. The combined table is now filled across all seven categories. Historical timing/precision/runtime equivalence is unverified, so the
 extended table is descriptive rather than a controlled speedup experiment.
 
 The subsequent paired baseline/generator rows come from [GEN-012](GEN-012-deepseek-generator-4k.md).
 They use a different frozen drafter from the earlier models; compare adaptation
 gains against their same-suite baseline. The historical earlier DeepSeek math/chat
-baseline is preserved separately in GEN-010. No new OOD cells have been supplied
-for the DeepSeek pair.
+baseline is preserved separately in GEN-010. The resumed paired suite now also
+provides DeepSeek baseline/generator OOD measurements.
 
 Follow-up: [GEN-008](GEN-008-coefficient-sweep.md) archives the supplied fixed
 coefficient 0.5/4/8 results for the step-4000 generator, shared/merged execution,
@@ -72,8 +73,10 @@ reference rather than presenting it as a same-session measurement.
 | V/O generator · 24K · 2,000 steps — historical | 69.24 | 67.99 | 58.81 |
 | V/O generator · 24K · 4,000 steps — historical | 69.44 | 68.32 | 58.69 |
 | Attention generator · 24K · 2,000 steps | 71.26 | 69.62 | 59.94 |
-| Attention generator · 24K · 4,000 steps | **72.32** | **70.69** | **60.65** |
+| Attention generator · 24K · 4,000 steps | **72.32** | 70.69 | 60.65 |
 | Attention generator · 24K · 6,000 steps | 71.96 | 70.11 | 60.04 |
+| DeepSeek EAGLE3 ttt7 — paired-suite baseline | 61.23 | 73.54 | 59.62 |
+| DeepSeek attention generator · 4K · 1,500 steps | 62.03 | **76.74** | **62.80** |
 
 ## Interpretation and limits
 
@@ -110,3 +113,8 @@ record. Existing historical records are not merged into these tables.
 - 2026-10-31: Completed the attention-generator OOD columns from the resumed
   21-cell suite; all twelve previously supplied Nemotron cells remain unchanged.
   New source: [summary_with_ood.json](benchmarks/2026-10-31-attention-24k-6k-c1/summary_with_ood.json).
+
+- 2026-10-31: Filled the DeepSeek pair's three OOD columns from the complete
+  resumed GEN-012 suite. The generator exceeds its paired baseline in all seven
+  categories; the Red Hat attention generator retains highest displayed HumanEval
+  throughput. Separate-run evidence limits and unchecked correctness remain.

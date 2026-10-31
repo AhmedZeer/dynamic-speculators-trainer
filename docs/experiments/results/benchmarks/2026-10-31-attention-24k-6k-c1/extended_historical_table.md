@@ -15,16 +15,16 @@ hardware/runtime/precision and repeatability limitations.
 | Attention generator, 24K / 2,000 | 82.80 | 73.14 | 70.71 | 59.77 | 71.26 | 69.62 | 59.94 |
 | Attention generator, 24K / 4,000 | 81.17 | 71.64 | 69.40 | 59.44 | 72.32 | 70.69 | 60.65 |
 | Attention generator, 24K / 6,000 | 81.89 | 71.81 | 69.41 | 59.16 | 71.96 | 70.11 | 60.04 |
-| DeepSeek EAGLE3 ttt7 — paired-suite baseline | 86.58 | 75.40 | 67.20 | 56.68 | — | — | — |
-| DeepSeek attention generator, 4K / 1,500 | 92.26 | 83.73 | 78.01 | 65.46 | — | — | — |
+| DeepSeek EAGLE3 ttt7 — paired-suite baseline | 86.58 | 75.40 | 67.20 | 56.68 | 61.23 | 73.54 | 59.62 |
+| DeepSeek attention generator, 4K / 1,500 | 92.26 | 83.73 | 78.01 | 65.46 | 62.03 | 76.74 | 62.80 |
 
-— marks the unmeasured DeepSeek OOD cells. The three 24K attention rows now
-include all seven measured categories. HumanEval, math reasoning and summarization are the Red Hat out-of-distribution workloads;
-new Nemotron code/STEM values must not be substituted into those columns.
+All displayed rows now have measurements for all seven categories. HumanEval,
+math reasoning and summarization are the Red Hat out-of-distribution workloads;
+Nemotron math/code/STEM/chat are the in-distribution workloads.
 
 Sources: [historical four-model metrics](../2026-10-22-comparison-v2/metrics.json),
 [complete resumed 21-cell summary](summary_with_ood.json), and
-[paired DeepSeek summary](../2026-10-31-deepseek-generator-4k-c1/summary.json). See
+[paired DeepSeek summary](../2026-10-31-deepseek-generator-4k-c1/summary_with_ood.json). See
 [GEN-003](../../GEN-003-generator-suite-throughput.md),
 [GEN-011](../../GEN-011-attention-24k-6k.md), and
 [GEN-012](../../GEN-012-deepseek-generator-4k.md) for their evidence limits.

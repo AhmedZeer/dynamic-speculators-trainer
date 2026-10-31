@@ -12,9 +12,9 @@ timings remain unavailable.
 
 The paired DeepSeek baseline/generator experiment is recorded in
 [GEN-012](../GEN-012-deepseek-generator-4k.md), with the
-[eight supplied cells](2026-10-31-deepseek-generator-4k-c1/summary.json) and
-[validated paired comparisons](2026-10-31-deepseek-generator-4k-c1/analysis.json).
-Acceptance and throughput improve in all four Nemotron domains. Use its paired
+[complete 14-cell resumed summary](2026-10-31-deepseek-generator-4k-c1/summary_with_ood.json) and
+[validated paired comparisons](2026-10-31-deepseek-generator-4k-c1/analysis_with_ood.json).
+Acceptance and throughput improve over the paired baseline in all seven categories. Use its paired
 baseline rather than the earlier standalone timing; correctness remains unchecked.
 
 The 24K attention-generator checkpoint study is recorded in

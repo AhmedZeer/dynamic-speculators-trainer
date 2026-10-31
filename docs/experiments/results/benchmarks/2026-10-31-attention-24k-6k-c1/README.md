@@ -35,8 +35,7 @@ math/chat throughput table.
 
 [Extended historical all-category table](extended_historical_table.md) combines
 the original four-model, seven-category comparison with the three new checkpoints.
-The later OOD extension fills the attention rows; the DeepSeek pair still has
-no supplied out-of-distribution measurements.
+The later OOD extension fills the attention rows; the paired DeepSeek OOD results are now supplied separately in GEN-012.
 
 
 ## Completed OOD extension
@@ -50,5 +49,5 @@ its analysis remain unchanged to preserve the initial receipt and existing refer
 
 All 21 cells pass aggregate checks. The twelve ID cells are identical to the
 previous archive. Step 4,000 leads OOD throughput in all three categories;
-step 2,000 still leads ID throughput. DeepSeek OOD cells remain unmeasured.
+step 2,000 still leads ID throughput. The later GEN-012 DeepSeek OOD extension now completes the combined table.
 The historical all-category table now fills the attention rows' OOD cells.

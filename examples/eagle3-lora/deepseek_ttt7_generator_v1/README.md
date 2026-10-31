@@ -175,7 +175,7 @@ Executed training/checkpoint/preparation provenance and numerical parity remain
 unverified from the supplied aggregate summary.
 
 
-The OOD extension is configured but not yet measured for this pair. Once it
-completes, `summary.json`/`summary.md` contain all 14 cells and can fill the
-remaining DeepSeek columns in the combined historical table. Keep the current
+The user subsequently supplied the completed OOD extension: all 14 cells are
+archived in GEN-012 and the combined historical table is filled. OOD throughput
+gains are +1.32% HumanEval, +4.36% math reasoning and +5.32% summarization. Keep the current
 paired baseline as the denominator for each new OOD training comparison.

@@ -29,4 +29,20 @@ There is no matched DeepSeek static-LoRA arm or conditioning-control experiment.
 
 See [GEN-012](../../GEN-012-deepseek-generator-4k.md) for the detailed working
 findings and [GEN-010](../../GEN-010-structure-serving.md) for the extended table.
-These are in-distribution Nemotron results; new OOD cells remain unmeasured.
+The initial receipt contained in-distribution Nemotron cells; the subsequent
+OOD extension below completes the suite without changing that initial archive.
+
+
+## Complete resumed OOD extension
+
+[summary_with_ood.json](summary_with_ood.json) archives the subsequent complete
+14-cell suite; [summary_with_ood.md](summary_with_ood.md) shows the seven-category
+table, and [analysis_with_ood.json](analysis_with_ood.json) records validation,
+source/reference hashes and paired changes. The original eight ID cells and
+initial archive are unchanged. All 14 cells pass aggregate checks; OOD hashes,
+subsets and output totals match both DeepSeek models and the GEN-011 workloads.
+
+Generator OOD throughput gains are 1.32% HumanEval, 4.36% math reasoning and
+5.32% summarization, with acceptance gains of 3.60/7.16/6.43 percentage points.
+This completes the pair's table columns. Correctness, repeats, task accuracy,
+matched static-LoRA/conditioning controls and executed provenance remain open.

@@ -1,0 +1,203 @@
+{
+  "source": "User-supplied complete resumed paired DeepSeek suite",
+  "source_sha256": "39236b17abedfd5e6b23cd016c4adfe06a98f3bfb3a8470f131820e17e563928",
+  "suite_identity": "4c8ff44062d89196d9d242dc8033616e65f6d23cbe3dbfc9a0aea10e28854419",
+  "original_id_source_sha256": "f5abc8788b0789f60b1140c1b1f983bc3f0387a68d6a9b8dbb52b50a0dbac2dc",
+  "retained_id_cells": 8,
+  "new_ood_cells": 6,
+  "validation": "All 14 cells pass request/acceptance/throughput checks; generator counts and means pass. Eight ID result objects are unchanged. All per-category hashes, subsets and output totals match both models and the complete 24K attention suite.",
+  "workloads": {
+    "nemotron/nemo-chat": {
+      "dataset_sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f",
+      "subsets": [
+        "chat-00000",
+        "chat-00002",
+        "chat-00003",
+        "chat-00004",
+        "chat-00005"
+      ],
+      "total_output_tokens": 11032.0
+    },
+    "nemotron/nemo-code": {
+      "dataset_sha256": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748",
+      "subsets": [
+        "code-00000",
+        "code-00002",
+        "code-00003",
+        "code-00004",
+        "code-00005"
+      ],
+      "total_output_tokens": 12785.0
+    },
+    "nemotron/nemo-math": {
+      "dataset_sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28",
+      "subsets": [
+        "math-00000",
+        "math-00002",
+        "math-00003",
+        "math-00004",
+        "math-00005"
+      ],
+      "total_output_tokens": 12800.0
+    },
+    "nemotron/nemo-stem": {
+      "dataset_sha256": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757",
+      "subsets": [
+        "stem-00000",
+        "stem-00002",
+        "stem-00003",
+        "stem-00004",
+        "stem-00005"
+      ],
+      "total_output_tokens": 12751.0
+    },
+    "specbench/specbench-humaneval": {
+      "dataset_sha256": "5c2808767dbf4c36c2bc98496dd3493b5db42666131e6ef951c7a9a9b444c69e",
+      "subsets": [
+        "specbench-humaneval-HumanEval"
+      ],
+      "total_output_tokens": 12800.0
+    },
+    "specbench/specbench-math-reasoning": {
+      "dataset_sha256": "58c0374ea14e62cf0574d828ebb0a6bc030640a9fb45a9f59b5d85e0ec41b0f8",
+      "subsets": [
+        "specbench-math-reasoning-math_reasoning"
+      ],
+      "total_output_tokens": 12800.0
+    },
+    "specbench/specbench-summarization": {
+      "dataset_sha256": "594bff32eae0f0ba49613637f2b41137d41f0738907266eb7eab7a16b915488b",
+      "subsets": [
+        "specbench-summarization-summarization"
+      ],
+      "total_output_tokens": 12800.0
+    }
+  },
+  "comparisons": {
+    "nemotron/nemo-chat": {
+      "baseline_tps": 56.67902319701516,
+      "generator_tps": 65.46224362350192,
+      "throughput_gain_percent": 15.496421658426351,
+      "baseline_acceptance_percent": 37.132822477650066,
+      "generator_acceptance_percent": 47.80276308054086,
+      "draft_acceptance_gain_percentage_points": 10.669940602890799,
+      "baseline_acceptance_length": 2.113984674329502,
+      "generator_acceptance_length": 2.4340828924162254,
+      "acceptance_length_gain_percent": 15.141936551089241,
+      "ttft_median_increase_ms": 6.557464599609375,
+      "tpot_median_change_ms": -2.672668546438217,
+      "timed_adapter_ms_per_request": 6.56766144514084,
+      "timed_adapter_percent_of_wall": 0.19485762035827156
+    },
+    "nemotron/nemo-code": {
+      "baseline_tps": 75.40380028586333,
+      "generator_tps": 83.72611276452534,
+      "throughput_gain_percent": 11.036993423555973,
+      "baseline_acceptance_percent": 60.69750367107195,
+      "generator_acceptance_percent": 70.64555420219246,
+      "draft_acceptance_gain_percentage_points": 9.9480505311205,
+      "baseline_acceptance_length": 2.8209251101321584,
+      "generator_acceptance_length": 3.1193666260657733,
+      "acceptance_length_gain_percent": 10.579561820399874,
+      "ttft_median_increase_ms": 7.4024200439453125,
+      "tpot_median_change_ms": -1.3979459181427956,
+      "timed_adapter_ms_per_request": 6.561258238553998,
+      "timed_adapter_percent_of_wall": 0.21484108218941841
+    },
+    "nemotron/nemo-math": {
+      "baseline_tps": 86.57838643848083,
+      "generator_tps": 92.26016070068042,
+      "throughput_gain_percent": 6.562578139795683,
+      "baseline_acceptance_percent": 74.03870319175672,
+      "generator_acceptance_percent": 81.74474959612277,
+      "draft_acceptance_gain_percentage_points": 7.7060464043660515,
+      "baseline_acceptance_length": 3.2211610957527017,
+      "generator_acceptance_length": 3.4523424878836835,
+      "acceptance_length_gain_percent": 7.176958409059653,
+      "ttft_median_increase_ms": 6.88624382019043,
+      "tpot_median_change_ms": -0.5582878366112709,
+      "timed_adapter_ms_per_request": 6.549637120366096,
+      "timed_adapter_percent_of_wall": 0.23604319267817103
+    },
+    "nemotron/nemo-stem": {
+      "baseline_tps": 67.2045393991405,
+      "generator_tps": 78.01326969088353,
+      "throughput_gain_percent": 16.083333638443587,
+      "baseline_acceptance_percent": 49.92818905862384,
+      "generator_acceptance_percent": 62.84981519197406,
+      "draft_acceptance_gain_percentage_points": 12.921626133350216,
+      "baseline_acceptance_length": 2.497845671758715,
+      "generator_acceptance_length": 2.8854944557592215,
+      "acceptance_length_gain_percent": 15.519324847942496,
+      "ttft_median_increase_ms": 6.406307220458984,
+      "tpot_median_change_ms": -2.1491525694727898,
+      "timed_adapter_ms_per_request": 6.535495680868634,
+      "timed_adapter_percent_of_wall": 0.1999276084680454
+    },
+    "specbench/specbench-humaneval": {
+      "baseline_tps": 61.22581258493681,
+      "generator_tps": 62.03398267262904,
+      "throughput_gain_percent": 1.319982624274818,
+      "baseline_acceptance_percent": 41.36018680677175,
+      "generator_acceptance_percent": 44.96209342137442,
+      "draft_acceptance_gain_percentage_points": 3.6019066146026733,
+      "baseline_acceptance_length": 2.2408056042031523,
+      "generator_acceptance_length": 2.3488628026412326,
+      "acceptance_length_gain_percent": 4.822247777111666,
+      "ttft_median_increase_ms": 8.451461791992188,
+      "tpot_median_change_ms": -0.4595397040247917,
+      "timed_adapter_ms_per_request": 6.565686386227607,
+      "timed_adapter_percent_of_wall": 0.1590998732488905
+    },
+    "specbench/specbench-math-reasoning": {
+      "baseline_tps": 73.53829104791757,
+      "generator_tps": 76.74426230724889,
+      "throughput_gain_percent": 4.3595944556861,
+      "baseline_acceptance_percent": 56.76093991839032,
+      "generator_acceptance_percent": 63.92049764830829,
+      "draft_acceptance_gain_percentage_points": 7.159557729917976,
+      "baseline_acceptance_length": 2.7028281975517094,
+      "generator_acceptance_length": 2.917614929449249,
+      "acceptance_length_gain_percent": 7.946740088478399,
+      "ttft_median_increase_ms": 7.913827896118164,
+      "tpot_median_change_ms": -0.6777597591280937,
+      "timed_adapter_ms_per_request": 6.562431997358803,
+      "timed_adapter_percent_of_wall": 0.19673007913233873
+    },
+    "specbench/specbench-summarization": {
+      "baseline_tps": 59.623862634716765,
+      "generator_tps": 62.79878604691365,
+      "throughput_gain_percent": 5.324920714459447,
+      "baseline_acceptance_percent": 39.98165978908757,
+      "generator_acceptance_percent": 46.40742817972207,
+      "draft_acceptance_gain_percentage_points": 6.42576839063449,
+      "baseline_acceptance_length": 2.199449793672627,
+      "generator_acceptance_length": 2.392222845391662,
+      "acceptance_length_gain_percent": 8.764603414617778,
+      "ttft_median_increase_ms": 8.120536804199219,
+      "tpot_median_change_ms": -0.7993830367922783,
+      "timed_adapter_ms_per_request": 6.578263699412344,
+      "timed_adapter_percent_of_wall": 0.16136991196077127
+    }
+  },
+  "attention_reference": {
+    "path": "../2026-10-31-attention-24k-6k-c1/summary_with_ood.json",
+    "sha256": "b1f03fa4b769aca253dbcf70ebbd17b3f8c6ff8a91b91f57423bd3eae5461581"
+  },
+  "formulas": {
+    "throughput_gain_percent": "100 * (generator_tps / paired_baseline_tps - 1)",
+    "draft_acceptance_gain_percentage_points": "100 * (generator_rate - baseline_rate)",
+    "acceptance_length_gain_percent": "100 * (generator_length / baseline_length - 1)",
+    "timed_adapter_ms_per_request": "1000 * sum(generator_seconds, merge_seconds, restore_seconds) / completed_requests",
+    "timed_adapter_percent_of_wall": "100 * sum(generator_seconds, merge_seconds, restore_seconds) / measured_seconds"
+  },
+  "limitations": [
+    "Correctness and task accuracy not checked; acceptance is not task accuracy.",
+    "One supplied measurement per model/category; no repeated-trial uncertainty.",
+    "ID cells retained from previous invocation; complete suite is not a fresh repeat.",
+    "Executed model/preparation/training membership/hardware/code/package provenance not supplied.",
+    "No matched DeepSeek static-LoRA or fixed/shuffled-conditioning control.",
+    "Separate-model-family table rankings are descriptive, without verified runtime equivalence.",
+    "Adapter CUDA timings do not isolate drafter/verifier or form a full wall-time partition."
+  ]
+}
