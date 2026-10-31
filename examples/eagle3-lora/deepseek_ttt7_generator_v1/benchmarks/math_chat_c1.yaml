@@ -1,0 +1,30 @@
+# Trained generator only; require the completed step-1500 HF snapshot.
+# Math/chat C1 settings match the measured DeepSeek drafter baseline.
+models:
+- name: generator-deepseek-ttt7-attention-4k-1500
+  type: generator
+  model: azeeer/eagle3-generator-deepseek-ttt7-attention-4k-1500
+  revision: main
+  subfolder: step-00001500
+  adapter_policy: shared
+  conditioning_examples: 1
+benchmarks:
+- dataset: nemotron
+  categories:
+  - math
+  - chat
+settings:
+  batching_policy: fixed_shared_adapter
+  concurrency: 1
+  max_samples: 50
+  max_tokens: 256
+  speculative_tokens: 3
+  warmups: 3
+  seed: 42
+  gpu: 0
+  continue_on_error: false
+wandb:
+  enabled: true
+  project: eagle3-generator-structure-bench-v1
+  group: deepseek-ttt7-generator-4k-1500-math-chat-c1
+  mode: online

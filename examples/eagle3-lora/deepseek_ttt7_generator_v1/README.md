@@ -99,6 +99,41 @@ Rerun the identical command to resume interrupted training or retry a failed
 checkpoint upload. Preserve the output and provenance directories. Run files
 are under `<output-root>/pretraining/deepseek-ttt7-attention-4k-1500/`.
 
+## Benchmark the trained generator
+
+After HF upload of `step-00001500` succeeds, stop the training extractor and run
+this independent suite from the repository root:
+
+```bash
+speculators benchmark suite \
+  --config examples/eagle3-lora/deepseek_ttt7_generator_v1/benchmarks/math_chat_c1.yaml \
+  --output-root /content/drive/MyDrive/dyn-spec-bench-v1/suites/deepseek-ttt7-generator-4k-1500-math-chat-c1 \
+  --resume
+```
+
+The [benchmark config](benchmarks/math_chat_c1.yaml) measures only the trained
+step-1500 generator, on math/chat at concurrency 1: 50 prompts/category,
+256 output-token cap, three warmups, **three draft tokens**, seed 42.
+It uses a prompt-conditioned shared/merged adapter with one conditioning example.
+Benchmark/settings sections match the measured DeepSeek drafter baseline exactly;
+that baseline is not rerun. W&B project remains
+`eagle3-generator-structure-bench-v1`, with a separate generator-run group.
+
+The suite resolves and records an immutable Hub revision from `main`, requires
+the exact `step-00001500` folder, and launches the frozen DeepSeek drafter with
+the baseline's metadata translation. Earlier snapshots are not substituted.
+Use the existing patched vLLM/GuideLLM environment; the suite manages its own
+server and records extraction-independent serving/eval provenance. Keep the
+new output directory separate from the measured baseline. `--resume` preserves
+successful cells and retries failures. Add `--dry-run` to inspect the config
+without model downloads or serving; it does not verify snapshot availability.
+
+`summary.md` reports throughput; `summary.json` includes acceptance, acceptance
+length, generator/merge/restore timings, TTFT/TPOT and workload hashes. Compare
+against the baseline's 82.50 math / 54.10 chat tok/s only after checking runtime
+conditions and workload hashes. Correctness remains unchecked by this timing
+suite; no generated-adapter results are recorded until the suite is run.
+
 ## Validation status
 
 The actual published tensor header matches all native model keys/shapes; only

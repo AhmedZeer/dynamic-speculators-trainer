@@ -45,3 +45,10 @@ native parameter shape except the two intentionally verifier-owned tensors.
 These checks do not establish full-size GPU numerical parity or an acceptance
 improvement. Future serving must use the same math/chat C1 workload and three
 draft tokens before extending the baseline comparison.
+
+
+A [standalone step-1500 math/chat C1 benchmark config](../../../examples/eagle3-lora/deepseek_ttt7_generator_v1/benchmarks/math_chat_c1.yaml)
+is prepared, with the [command in the runbook](../../../examples/eagle3-lora/deepseek_ttt7_generator_v1/README.md).
+It measures only the trained generator and matches the baseline's benchmark
+settings, including three draft tokens. Config/schema and actual CLI dry-run
+validation pass; executed checkpoint availability and GPU results remain pending.
