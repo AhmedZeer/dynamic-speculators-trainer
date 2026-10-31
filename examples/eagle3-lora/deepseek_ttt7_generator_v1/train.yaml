@@ -59,7 +59,7 @@ online:
   target_model_path: models/qwen3-8b
   drafter_model_path: output/deepseek-eagle3-ttt7-training/f6485ba8d21e11942958617dbe7e71b467f38f38
   reserve_gib: 8
-provenance_dir: output/deepseek-ttt7-generator-v1/provenance/vllm
+provenance_dir: output/attention-24k-6k-v1/provenance/vllm #output/deepseek-ttt7-generator-v1/provenance/vllm
 target_modules:
 - q_proj
 - k_proj
