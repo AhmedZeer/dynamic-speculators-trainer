@@ -131,3 +131,14 @@ under controlled conditions; do not discard later checkpoints as failed training
 or infer that more training universally reduces serving speed. Use the paired
 DeepSeek baseline/generator experiment in GEN-012 to study whether generated
 adapters also help that different frozen drafter.
+
+
+## OOD benchmark extension (prepared; measurements pending)
+
+The same checkpoint suite now appends `RedHatAI/speculator_benchmarks` with
+HumanEval, math reasoning and summarization. Rerun the existing command/output
+root with `--resume` after pulling the updated code. Safe additive-dataset resume
+keeps the twelve valid completed Nemotron results, frozen workloads and checkpoint
+pins, and runs nine new OOD cells. Existing workload/settings changes remain
+rejected. Previous suite metadata/state is archived on extension. No new OOD
+throughput values are recorded until the results are supplied.

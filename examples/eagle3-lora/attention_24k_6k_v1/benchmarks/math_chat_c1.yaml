@@ -1,4 +1,4 @@
-# Run after all three snapshots are uploaded; exact step subfolders are required.
+# Three checkpoints, Nemotron + Red Hat OOD, C1; resume retains existing cells.
 models:
 - name: generator-attention-24k-step2000
   type: generator
@@ -28,6 +28,11 @@ benchmarks:
   - chat
   - stem
   - code
+- dataset: RedHatAI/speculator_benchmarks
+  categories:
+  - HumanEval
+  - math_reasoning
+  - summarization
 settings:
   batching_policy: fixed_shared_adapter
   concurrency: 1

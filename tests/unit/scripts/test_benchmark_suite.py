@@ -735,3 +735,78 @@ if len(sys.argv) > 7:
         assert resumed["tasks"][key] == task
     assert all(child.poll() is not None for child in case.children)
     ensure_port_free(case.port)
+
+
+def test_resume_added_ood_dataset_preserves_completed_native_results(
+    fake_suite, monkeypatch
+):
+    case = fake_suite
+    suite.run_suite(case.config, case.output)
+    original = json.loads((case.output / "state.json").read_text())["tasks"]
+    artifacts = {
+        name: (case.output / name).read_bytes()
+        for entry in original.values()
+        for name in entry["checksums"]
+    }
+    manifest = case.output / "workloads/nemotron/manifest.json"
+    original_manifest = manifest.read_bytes()
+    prepare_original = suite.prepare_workload
+
+    def prepare_extended(benchmark, cfg, output, settings, tokenizer):
+        if benchmark.dataset == "RedHatAI/speculator_benchmarks":
+            return workload(
+                output, categories=("HumanEval", "math_reasoning", "summarization")
+            )
+        return prepare_original(benchmark, cfg, output, settings, tokenizer)
+
+    monkeypatch.setattr(suite, "prepare_workload", prepare_extended)
+    config = yaml.safe_load(case.config.read_text())
+    config["benchmarks"].append(
+        {
+            "dataset": "RedHatAI/speculator_benchmarks",
+            "categories": ["HumanEval", "math_reasoning", "summarization"],
+        }
+    )
+    case.config.write_text(yaml.safe_dump(config))
+    result = suite.run_suite(case.config, case.output, resume=True)
+    assert result["completed"] == 10
+    assert result["failed"] == 0
+    assert case.launches == ["base", "other", "base", "other"]
+    clients = case.marker.read_text().splitlines()
+    assert len(clients) == 10
+    assert all("nemo-" not in line for line in clients[4:])
+    state = json.loads((case.output / "state.json").read_text())["tasks"]
+    for key, entry in original.items():
+        assert state[key] == entry
+    for name, contents in artifacts.items():
+        assert (case.output / name).read_bytes() == contents
+    assert manifest.read_bytes() == original_manifest
+    archived = list(
+        (case.output / "suite_attempts").glob("*/previous_suite_request.json")
+    )
+    assert len(archived) == 1
+    suite.run_suite(case.config, case.output, resume=True)
+    assert len(case.marker.read_text().splitlines()) == 10
+    assert len(case.launches) == 4
+
+
+@pytest.mark.parametrize("change", ["remove", "category", "prompt_format", "name"])
+def test_adding_dataset_cannot_modify_or_remove_existing_workload(change):
+    previous = {
+        "models": [{"name": "base", "type": "drafter", "model": "owner/base"}],
+        "benchmarks": [{"dataset": "nemotron", "categories": ["math", "chat"]}],
+    }
+    config = Suite.model_validate(previous)
+    config.benchmarks.append(
+        Benchmark(dataset="RedHatAI/speculator_benchmarks", categories=["HumanEval"])
+    )
+    if change == "remove":
+        config.benchmarks.pop(0)
+    elif change == "category":
+        config.benchmarks[0].categories = ["math", "chat", "code"]
+    elif change == "prompt_format":
+        config.benchmarks[0].prompt_format = "raw"
+    else:
+        config.benchmarks[0].name = "renamed"
+    with pytest.raises(ValueError, match="identical existing models, datasets"):
+        suite.validate_resume_request(previous, config)

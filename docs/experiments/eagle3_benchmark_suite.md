@@ -21,8 +21,11 @@ attempt directory. A completed suite resumes without launching any servers.
 
 `--dry-run` validates and prints the configuration without downloads, exports,
 or processes. It does not check Hub availability, model compatibility, or GPU
-capacity. Adding concurrency values is supported with `--resume`; other
-configuration changes require a new output root.
+capacity. Adding concurrency values, model entries or new benchmark datasets
+is supported with `--resume`. Existing models, workloads (including category
+lists), and all other settings must remain identical. Removed or changed
+existing work requires a new output root. Added datasets receive new frozen
+workload directories; valid completed tasks are retained.
 
 ## Model entries
 
@@ -116,7 +119,7 @@ stay unchanged. No C=1 server or inference is launched for valid completed
 measurements. Missing/damaged/incomplete measurements still need to run.
 Only added concurrency values are otherwise executed. The previous suite
 configuration, plan, and state are archived under `suite_attempts/` before
-updating them. Removing concurrency values or changing workloads/models requires
+updating them. Removing concurrency values or changing existing workloads/models requires
 a new output root. The updated vLLM patch is still needed for new batched runs.
 
 At each concurrency, the server admits a closed group. It collects up to the

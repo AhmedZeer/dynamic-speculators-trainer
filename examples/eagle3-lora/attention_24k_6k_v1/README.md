@@ -87,12 +87,15 @@ training/eval configuration and available extraction command/patch provenance.
 ## Benchmark the three checkpoints
 
 After all three HF snapshots are uploaded, stop the training extractor. The
-suite owns its servers and benchmarks **math, chat, STEM and code at concurrency 1**
-(the user expanded the original two-category config), retaining 50 prompts/category,
-256 output tokens, three draft tokens,
+suite owns its servers and benchmarks **math, chat, STEM and code**, plus
+**HumanEval, math reasoning and summarization** from the Red Hat OOD dataset,
+at concurrency 1. It retains 50 prompts/category, 256 output tokens,
+three draft tokens,
 three warmups, seed 42, shared/merged adapters with one conditioning prompt.
-There is one row per training snapshot, twelve measurements total. The filename
-and group retain the original math/chat label for compatibility.
+There is one row per training snapshot, **21 measurements total**. The filename
+and group retain the original math/chat label for compatibility. The OOD dataset
+is appended as a separate benchmark; existing Nemotron categories/settings stay
+identical.
 
 ```bash
 speculators benchmark suite \
@@ -100,6 +103,17 @@ speculators benchmark suite \
   --output-root /content/drive/MyDrive/dyn-spec-bench-v1/suites/attention-24k-6k-v1-math-chat-c1 \
   --resume
 ```
+
+After pulling the updated code, rerun the same command and **same output root**
+with `--resume`. Added-dataset resume preserves the resolved checkpoint revisions,
+frozen Nemotron workloads and valid completed results. If all twelve Nemotron
+cells are complete and their artifact checksums pass, only the **nine new OOD
+cells** run (three checkpoints × three OOD categories). Failed/corrupt existing
+cells are retried normally. The prior suite request, plan and state are archived
+under `suite_attempts/`; `summary.md` and `summary.json` expand to seven categories.
+Do not delete old results, change existing categories or switch output directories
+for this additive OOD run. Changing an existing workload/settings still requires
+a separate suite directory.
 
 `--dry-run` validates the suite without downloading weights or starting servers.
 The actual suite requires the existing patched vLLM/GuideLLM environment and

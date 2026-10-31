@@ -196,12 +196,28 @@ def valid_completed(output_root, entry):
 
 
 def validate_resume_request(previous, config):
-    """Allow added models/concurrencies while preserving existing measurements."""
+    """Allow new models, concurrencies or datasets; preserve existing work."""
     saved = Suite.model_validate(previous)
     old, new = saved.model_dump(mode="json"), config.model_dump(mode="json")
     for request in (old, new):
         request["settings"].pop("concurrency")
         request["settings"].pop("concurrencies")
+    old_benchmarks = {
+        benchmark.label: value
+        for benchmark, value in zip(
+            saved.benchmarks, old.pop("benchmarks"), strict=True
+        )
+    }
+    new_benchmarks = {
+        benchmark.label: value
+        for benchmark, value in zip(
+            config.benchmarks, new.pop("benchmarks"), strict=True
+        )
+    }
+    benchmarks_preserved = all(
+        new_benchmarks.get(name) == benchmark
+        for name, benchmark in old_benchmarks.items()
+    )
     old_models = {model["name"]: model for model in old.pop("models")}
     new_models = {model["name"]: model for model in new.pop("models")}
     models_preserved = all(
@@ -210,12 +226,13 @@ def validate_resume_request(previous, config):
     if (
         old != new
         or not models_preserved
+        or not benchmarks_preserved
         or not set(saved.settings.concurrency_values)
         <= set(config.settings.concurrency_values)
     ):
         raise ValueError(
             "Suite configuration changed; resume only permits adding concurrency "
-            "values or models, with identical existing models, datasets, "
+            "values, models or datasets, with identical existing models, datasets, "
             "and other settings"
         )
 
