@@ -26,6 +26,8 @@ benchmarks:
   categories:
   - math
   - chat
+  - stem
+  - code
 settings:
   batching_policy: fixed_shared_adapter
   concurrency: 1
