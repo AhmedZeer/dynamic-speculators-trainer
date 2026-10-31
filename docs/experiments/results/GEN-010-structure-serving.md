@@ -104,9 +104,19 @@ workload identity must be checked before claiming historical relative speedups.
 | All-module generator, 4K / 1,500 steps | 76.72 | 55.05 |
 | Attention generator, decoder 256, 4K / 1,500 steps | 77.19 | 55.57 |
 | DeepSeek EAGLE3 ttt7 — external pretrained drafter | 82.50 | 54.10 |
+| Attention generator, 24K / 2,000 steps | 82.80 | 59.77 |
+| Attention generator, 24K / 4,000 steps | 81.17 | 59.44 |
+| Attention generator, 24K / 6,000 steps | 81.89 | 59.16 |
 
 Aggregate output throughput includes prefill and serving overhead. It differs
 from GuideLLM's median per-request output token rate.
+
+The later 24K attention rows are detailed in [GEN-011](GEN-011-attention-24k-6k.md),
+including code/STEM results. Step 2,000 is now the highest displayed math/chat
+throughput; its 0.36% math difference from DeepSeek is too small to establish
+superiority without repeats. Step 6,000 improves acceptance but has lower measured
+throughput than step 2,000. Historical rows and separate-run comparisons retain
+their runtime/provenance limits.
 
 ## External DeepSeek EAGLE3 ttt7 follow-up — 2026-10-31
 
@@ -136,8 +146,9 @@ they provide no isolated drafter/verifier timings.
 | Median TTFT ms | 45.31 | 46.35 |
 | Median TPOT ms | 11.647 | 18.451 |
 
-- **Math:** highest reported throughput in the extended table and higher draft
-  acceptance than all five structure models. Versus the attention generator,
+- **Math:** at receipt, highest reported throughput in the table; the later
+  24K attention step-2,000 row is slightly higher. Draft acceptance exceeds all
+  five structure models and all three later 24K attention checkpoints. Versus the attention generator,
   throughput is 5.52% higher and draft
   acceptance is 7.36 percentage points higher. Versus the all-module generator,
   acceptance is 6.25 points higher and throughput is 7.53% higher. The gain is

@@ -1,0 +1,544 @@
+{
+  "receipt_date": "2026-10-31",
+  "source": "User-supplied full-precision suite summary",
+  "source_sha256": "6117b6efa54ae762dadb44f25f5f67f08d742f1b8649a04aa251d3119e7107b2",
+  "suite_identity": "7bbe505379c8768498a4f1a3de611ef1168e69fdfe6ca9c4103ee68e10bca6c9",
+  "validation": "All twelve cells pass 50-request/adapter counts, three-token acceptance identities, timing means and throughput identities. Per-category hashes, subsets and output totals match across checkpoints; math/chat also match all five prior structure models and the DeepSeek baseline.",
+  "formulas": {
+    "throughput_change_percent": "100 * (candidate_tps / reference_tps - 1)",
+    "draft_acceptance_change_percentage_points": "100 * (candidate_rate - reference_rate)",
+    "acceptance_length_change_percent": "100 * (candidate_length / reference_length - 1)",
+    "adapter_ms_per_request": "1000 * sum(generator_seconds, merge_seconds, restore_seconds) / completed_requests",
+    "timed_adapter_percent_of_wall": "100 * sum(generator_seconds, merge_seconds, restore_seconds) / measured_seconds"
+  },
+  "dataset_sha256": {
+    "math": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28",
+    "code": "226286752c2806183558b22dfadd0b60292d56e27895f48dd95c35d598ae4748",
+    "stem": "9583f207a90fd32d8d34481cf76dab1280af200fb35c2db3b03771e9aa7d3757",
+    "chat": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f"
+  },
+  "total_output_tokens": {
+    "math": 12800.0,
+    "code": 12785.0,
+    "stem": 12751.0,
+    "chat": 11032.0
+  },
+  "checkpoint_comparisons": [
+    {
+      "candidate": "generator-attention-24k-step4000",
+      "reference": "generator-attention-24k-step2000",
+      "changes": {
+        "math": {
+          "throughput_change_percent": -1.9592047128131784,
+          "draft_acceptance_change_percentage_points": 1.083251787601025,
+          "acceptance_length_change_percent": 1.0813089623425531
+        },
+        "code": {
+          "throughput_change_percent": -2.042518792759618,
+          "draft_acceptance_change_percentage_points": 0.4810088540131874,
+          "acceptance_length_change_percent": 0.5429108373355751
+        },
+        "stem": {
+          "throughput_change_percent": -1.8488697424135614,
+          "draft_acceptance_change_percentage_points": 0.517595994851805,
+          "acceptance_length_change_percent": 0.6067499266973142
+        },
+        "chat": {
+          "throughput_change_percent": -0.5524102109998541,
+          "draft_acceptance_change_percentage_points": 0.8451273318325292,
+          "acceptance_length_change_percent": 1.1586447782756526
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step6000",
+      "reference": "generator-attention-24k-step2000",
+      "changes": {
+        "math": {
+          "throughput_change_percent": -1.0900271465166145,
+          "draft_acceptance_change_percentage_points": 1.9942395804675495,
+          "acceptance_length_change_percent": 1.9906628875206778
+        },
+        "code": {
+          "throughput_change_percent": -1.8121761578740458,
+          "draft_acceptance_change_percentage_points": 0.6066917946022432,
+          "acceptance_length_change_percent": 0.684768164793681
+        },
+        "stem": {
+          "throughput_change_percent": -1.8460501675532925,
+          "draft_acceptance_change_percentage_points": 0.46949052740535846,
+          "acceptance_length_change_percent": 0.550358476343793
+        },
+        "chat": {
+          "throughput_change_percent": -1.0267983863765595,
+          "draft_acceptance_change_percentage_points": 1.2794090389052604,
+          "acceptance_length_change_percent": 1.7540322580644974
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step6000",
+      "reference": "generator-attention-24k-step4000",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 0.8865468336425764,
+          "draft_acceptance_change_percentage_points": 0.9109877928665244,
+          "acceptance_length_change_percent": 0.8996261865948929
+        },
+        "code": {
+          "throughput_change_percent": 0.23514552645371722,
+          "draft_acceptance_change_percentage_points": 0.12568294058905582,
+          "acceptance_length_change_percent": 0.14109132735138363
+        },
+        "stem": {
+          "throughput_change_percent": 0.002872687102906113,
+          "draft_acceptance_change_percentage_points": -0.048105467446446504,
+          "acceptance_length_change_percent": -0.05605135877524425
+        },
+        "chat": {
+          "throughput_change_percent": -0.4770233007991731,
+          "draft_acceptance_change_percentage_points": 0.43428170707273117,
+          "acceptance_length_change_percent": 0.5885680666183779
+        }
+      }
+    }
+  ],
+  "adapter_timings": [
+    {
+      "model": "generator-attention-24k-step2000",
+      "domain": "math",
+      "generator_ms_per_request": 3.1187967920303374,
+      "merge_ms_per_request": 3.16194815635681,
+      "restore_ms_per_request": 0.2584851202368737,
+      "total_timed_adapter_ms_per_request": 6.539230068624019,
+      "timed_adapter_percent_of_wall": 0.21149523700831285
+    },
+    {
+      "model": "generator-attention-24k-step2000",
+      "domain": "code",
+      "generator_ms_per_request": 3.119452176094056,
+      "merge_ms_per_request": 3.167539196014404,
+      "restore_ms_per_request": 0.25646207869052895,
+      "total_timed_adapter_ms_per_request": 6.54345345079899,
+      "timed_adapter_percent_of_wall": 0.1871573274066418
+    },
+    {
+      "model": "generator-attention-24k-step2000",
+      "domain": "stem",
+      "generator_ms_per_request": 3.10966272354126,
+      "merge_ms_per_request": 3.1631360006332376,
+      "restore_ms_per_request": 0.2576831999421114,
+      "total_timed_adapter_ms_per_request": 6.530481924116609,
+      "timed_adapter_percent_of_wall": 0.18107418464338385
+    },
+    {
+      "model": "generator-attention-24k-step2000",
+      "domain": "chat",
+      "generator_ms_per_request": 3.120435190200806,
+      "merge_ms_per_request": 3.1684403133392327,
+      "restore_ms_per_request": 0.25665600001811983,
+      "total_timed_adapter_ms_per_request": 6.545531503558159,
+      "timed_adapter_percent_of_wall": 0.17731671155204223
+    },
+    {
+      "model": "generator-attention-24k-step4000",
+      "domain": "math",
+      "generator_ms_per_request": 3.1235481500625557,
+      "merge_ms_per_request": 3.171491847038266,
+      "restore_ms_per_request": 0.2576345592737197,
+      "total_timed_adapter_ms_per_request": 6.552674556374542,
+      "timed_adapter_percent_of_wall": 0.20777792190509858
+    },
+    {
+      "model": "generator-attention-24k-step4000",
+      "domain": "code",
+      "generator_ms_per_request": 3.156459503173826,
+      "merge_ms_per_request": 3.1779635381698603,
+      "restore_ms_per_request": 0.26626112014055253,
+      "total_timed_adapter_ms_per_request": 6.600684161484238,
+      "timed_adapter_percent_of_wall": 0.18493809496792668
+    },
+    {
+      "model": "generator-attention-24k-step4000",
+      "domain": "stem",
+      "generator_ms_per_request": 3.1349350500106787,
+      "merge_ms_per_request": 3.170754556655891,
+      "restore_ms_per_request": 0.2560947215557098,
+      "total_timed_adapter_ms_per_request": 6.561784328222278,
+      "timed_adapter_percent_of_wall": 0.1785782503723613
+    },
+    {
+      "model": "generator-attention-24k-step4000",
+      "domain": "chat",
+      "generator_ms_per_request": 3.1281561565399163,
+      "merge_ms_per_request": 3.1719628763198853,
+      "restore_ms_per_request": 0.26121983915567404,
+      "total_timed_adapter_ms_per_request": 6.561338872015475,
+      "timed_adapter_percent_of_wall": 0.17676304783185198
+    },
+    {
+      "model": "generator-attention-24k-step6000",
+      "domain": "math",
+      "generator_ms_per_request": 3.132805128097529,
+      "merge_ms_per_request": 3.171860480308535,
+      "restore_ms_per_request": 0.2602003198862077,
+      "total_timed_adapter_ms_per_request": 6.564865928292273,
+      "timed_adapter_percent_of_wall": 0.21000997231562676
+    },
+    {
+      "model": "generator-attention-24k-step6000",
+      "domain": "code",
+      "generator_ms_per_request": 3.14863615989685,
+      "merge_ms_per_request": 3.1700377655029275,
+      "restore_ms_per_request": 0.25990783959627156,
+      "total_timed_adapter_ms_per_request": 6.5785817649960485,
+      "timed_adapter_percent_of_wall": 0.18475224708298732
+    },
+    {
+      "model": "generator-attention-24k-step6000",
+      "domain": "stem",
+      "generator_ms_per_request": 3.1385804796218846,
+      "merge_ms_per_request": 3.169013762474062,
+      "restore_ms_per_request": 0.26025472134351746,
+      "total_timed_adapter_ms_per_request": 6.567848963439465,
+      "timed_adapter_percent_of_wall": 0.17874843349916944
+    },
+    {
+      "model": "generator-attention-24k-step6000",
+      "domain": "chat",
+      "generator_ms_per_request": 3.16121087551117,
+      "merge_ms_per_request": 3.179581432342529,
+      "restore_ms_per_request": 0.25654079973697663,
+      "total_timed_adapter_ms_per_request": 6.597333107590677,
+      "timed_adapter_percent_of_wall": 0.1768849091499477
+    }
+  ],
+  "reference_sources": {
+    "structure": {
+      "path": "../2026-10-30-structure-math-chat-c1/suite_summary_detailed.json",
+      "sha256": "f78e4b37b483861c3f7273279786083c4bab9dfdf661e5f56a947603e47efee0"
+    },
+    "deepseek": {
+      "path": "../2026-10-31-deepseek-ttt7-math-chat-c1/summary.json",
+      "sha256": "e71f6dd2075c549035d699809c43cf8d5d70803405d69f8349da37d21b7c5e48"
+    }
+  },
+  "external_comparisons": [
+    {
+      "candidate": "generator-attention-24k-step2000",
+      "reference": "generator-all-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 7.917460162348067,
+          "draft_acceptance_change_percentage_points": -0.9403770181377391,
+          "acceptance_length_change_percent": -0.929960985643552
+        },
+        "chat": {
+          "throughput_change_percent": 8.57161195041729,
+          "draft_acceptance_change_percentage_points": 0.8026932919333818,
+          "acceptance_length_change_percent": 1.11271402688764
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step4000",
+      "reference": "generator-all-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 5.80313619689905,
+          "draft_acceptance_change_percentage_points": 0.14287476946328592,
+          "acceptance_length_change_percent": 0.14129222521495066
+        },
+        "chat": {
+          "throughput_change_percent": 7.971851279756059,
+          "draft_acceptance_change_percentage_points": 1.647820623765911,
+          "acceptance_length_change_percent": 2.284251208132959
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step6000",
+      "reference": "generator-all-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 6.74113055074721,
+          "draft_acceptance_change_percentage_points": 1.0538625623298103,
+          "acceptance_length_change_percent": 1.042189513667502
+        },
+        "chat": {
+          "throughput_change_percent": 7.456800390847396,
+          "draft_acceptance_change_percentage_points": 2.082102330838642,
+          "acceptance_length_change_percent": 2.886263647923748
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step2000",
+      "reference": "generator-attention-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 5.899997242987687,
+          "draft_acceptance_change_percentage_points": 0.1640789211003746,
+          "acceptance_length_change_percent": 0.16405333773386044
+        },
+        "chat": {
+          "throughput_change_percent": 7.8616895198863945,
+          "draft_acceptance_change_percentage_points": 0.8700074272144032,
+          "acceptance_length_change_percent": 1.2071530331780433
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step4000",
+      "reference": "generator-attention-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 3.825199506134047,
+          "draft_acceptance_change_percentage_points": 1.2473307087013996,
+          "acceptance_length_change_percent": 1.247136223520351
+        },
+        "chat": {
+          "throughput_change_percent": 7.265850533221574,
+          "draft_acceptance_change_percentage_points": 1.7151347590469324,
+          "acceptance_length_change_percent": 2.3797844270384116
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step6000",
+      "reference": "generator-attention-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 4.745658524878782,
+          "draft_acceptance_change_percentage_points": 2.158318501567924,
+          "acceptance_length_change_percent": 2.1579819741645467
+        },
+        "chat": {
+          "throughput_change_percent": 6.754167432377689,
+          "draft_acceptance_change_percentage_points": 2.1494164661196633,
+          "acceptance_length_change_percent": 2.982359144848701
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step2000",
+      "reference": "generator-attention-decoder256-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 7.2651768357364865,
+          "draft_acceptance_change_percentage_points": 0.32757942595637024,
+          "acceptance_length_change_percent": 0.32806465314068056
+        },
+        "chat": {
+          "throughput_change_percent": 7.551313135512205,
+          "draft_acceptance_change_percentage_points": 0.2921234049164556,
+          "acceptance_length_change_percent": 0.40210301093448475
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step4000",
+      "reference": "generator-attention-decoder256-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 5.163632435963361,
+          "draft_acceptance_change_percentage_points": 1.4108312135573953,
+          "acceptance_length_change_percent": 1.412921007979917
+        },
+        "chat": {
+          "throughput_change_percent": 6.9571886996872,
+          "draft_acceptance_change_percentage_points": 1.1372507367489848,
+          "acceptance_length_change_percent": 1.5654067347496081
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step6000",
+      "reference": "generator-attention-decoder256-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 6.0959572894679015,
+          "draft_acceptance_change_percentage_points": 2.3218190064239197,
+          "acceptance_length_change_percent": 2.325258201958502
+        },
+        "chat": {
+          "throughput_change_percent": 6.446977987709945,
+          "draft_acceptance_change_percentage_points": 1.571532443821716,
+          "acceptance_length_change_percent": 2.1631882855214224
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step2000",
+      "reference": "static-lora-all-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 6.289876752790002,
+          "draft_acceptance_change_percentage_points": 3.13086529047949,
+          "acceptance_length_change_percent": 3.2260728899560442
+        },
+        "chat": {
+          "throughput_change_percent": 4.381431620381515,
+          "draft_acceptance_change_percentage_points": 0.30999588285191004,
+          "acceptance_length_change_percent": 0.4268091797672291
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step4000",
+      "reference": "static-lora-all-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 4.207440478206026,
+          "draft_acceptance_change_percentage_points": 4.214117078080514,
+          "acceptance_length_change_percent": 4.342265667589396
+        },
+        "chat": {
+          "throughput_change_percent": 3.804817933722693,
+          "draft_acceptance_change_percentage_points": 1.1551232146844392,
+          "acceptance_length_change_percent": 1.5903991603174683
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step6000",
+      "reference": "static-lora-all-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 5.131288242185539,
+          "draft_acceptance_change_percentage_points": 5.125104870947039,
+          "acceptance_length_change_percent": 5.2809560132214495
+        },
+        "chat": {
+          "throughput_change_percent": 3.3096447648266913,
+          "draft_acceptance_change_percentage_points": 1.5894049217571704,
+          "acceptance_length_change_percent": 2.1883278085252256
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step2000",
+      "reference": "static-lora-attention-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 9.343780131110634,
+          "draft_acceptance_change_percentage_points": 5.740138921841165,
+          "acceptance_length_change_percent": 6.078110136532722
+        },
+        "chat": {
+          "throughput_change_percent": 5.8354684307714955,
+          "draft_acceptance_change_percentage_points": 0.7786999551144647,
+          "acceptance_length_change_percent": 1.0790949391575433
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step4000",
+      "reference": "static-lora-attention-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 7.201511637613822,
+          "draft_acceptance_change_percentage_points": 6.82339070944219,
+          "acceptance_length_change_percent": 7.225142248522665
+        },
+        "chat": {
+          "throughput_change_percent": 5.250822496300378,
+          "draft_acceptance_change_percentage_points": 1.6238272869469939,
+          "acceptance_length_change_percent": 2.250242594598384
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step6000",
+      "reference": "static-lora-attention-4k-1500",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 8.151903244654068,
+          "draft_acceptance_change_percentage_points": 7.734378502308714,
+          "acceptance_length_change_percent": 8.189767706803996
+        },
+        "chat": {
+          "throughput_change_percent": 4.748751548710239,
+          "draft_acceptance_change_percentage_points": 2.058108994019725,
+          "acceptance_length_change_percent": 2.8520548705500026
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step2000",
+      "reference": "deepseek-eagle3-qwen3-8b-ttt7",
+      "changes": {
+        "math": {
+          "throughput_change_percent": 0.3594035509457916,
+          "draft_acceptance_change_percentage_points": -7.192363062079354,
+          "acceptance_length_change_percent": -6.698543955062908
+        },
+        "chat": {
+          "throughput_change_percent": 10.49006917936457,
+          "draft_acceptance_change_percentage_points": 2.4748652576382257,
+          "acceptance_length_change_percent": 3.5121332065803923
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step4000",
+      "reference": "deepseek-eagle3-qwen3-8b-ttt7",
+      "changes": {
+        "math": {
+          "throughput_change_percent": -1.606842613175541,
+          "draft_acceptance_change_percentage_points": -6.109111274478329,
+          "acceptance_length_change_percent": -5.689666948852912
+        },
+        "chat": {
+          "throughput_change_percent": 9.879710755076964,
+          "draft_acceptance_change_percentage_points": 3.319992589470755,
+          "acceptance_length_change_percent": 4.71147113286019
+        }
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step6000",
+      "reference": "deepseek-eagle3-qwen3-8b-ttt7",
+      "changes": {
+        "math": {
+          "throughput_change_percent": -0.7345411918416866,
+          "draft_acceptance_change_percentage_points": -5.198123481611805,
+          "acceptance_length_change_percent": -4.8412264960599245
+        },
+        "chat": {
+          "throughput_change_percent": 9.355558931924524,
+          "draft_acceptance_change_percentage_points": 3.7542742965434863,
+          "acceptance_length_change_percent": 5.327769414034522
+        }
+      }
+    }
+  ],
+  "historical_rounded_throughput_comparisons": [
+    {
+      "candidate": "generator-attention-24k-step2000",
+      "reference": "historical V/O generator, 24K / 2000 steps",
+      "reference_precision": "two displayed decimals",
+      "throughput_change_percent": {
+        "math": 6.724508636296234,
+        "chat": 3.8047768741821475
+      }
+    },
+    {
+      "candidate": "generator-attention-24k-step4000",
+      "reference": "historical V/O generator, 24K / 4000 steps",
+      "reference_precision": "two displayed decimals",
+      "throughput_change_percent": {
+        "math": 2.6099273751564622,
+        "chat": 5.223244068159505
+      }
+    }
+  ],
+  "limitations": [
+    "One supplied measurement per checkpoint/category; no repeated-trial uncertainty or exact-output correctness.",
+    "Executed checkpoint/preparation hashes, hardware/code/package provenance and per-request logs not supplied.",
+    "Later-checkpoint acceptance improvements do not establish throughput improvements or diagnose the throughput/acceptance discrepancy.",
+    "CUDA-event adapter timings are not a full wall-time partition or isolated drafter/verifier profiling.",
+    "Comparisons with 4K training also change optimizer budget; matched 24K V/O historical labels do not establish matched precision/execution/hardware.",
+    "This suite uses the older Red Hat EAGLE3 drafter; it is not the DeepSeek-based generator experiment."
+  ]
+}

@@ -2,8 +2,10 @@
 
 Fresh Q/K/V/O generator training on the same pinned saved-trajectory release
 used for the historical 24K V/O generators. Train once, then benchmark the
-2,000-, 4,000- and 6,000-update snapshots independently. This is a prepared
-experiment; no new training or serving measurements have been collected here.
+2,000-, 4,000- and 6,000-update snapshots independently. Subsequently supplied
+four-category serving results are recorded in
+[GEN-011](../../../docs/experiments/results/GEN-011-attention-24k-6k.md).
+Training and GPU benchmarks were not executed locally here.
 
 ## Protocol
 
@@ -85,10 +87,12 @@ training/eval configuration and available extraction command/patch provenance.
 ## Benchmark the three checkpoints
 
 After all three HF snapshots are uploaded, stop the training extractor. The
-suite owns its servers and benchmarks **math and chat at concurrency 1**, matching
-the latest comparison: 50 prompts/category, 256 output tokens, three draft tokens,
+suite owns its servers and benchmarks **math, chat, STEM and code at concurrency 1**
+(the user expanded the original two-category config), retaining 50 prompts/category,
+256 output tokens, three draft tokens,
 three warmups, seed 42, shared/merged adapters with one conditioning prompt.
-There is one row per training snapshot, six measurements total.
+There is one row per training snapshot, twelve measurements total. The filename
+and group retain the original math/chat label for compatibility.
 
 ```bash
 speculators benchmark suite \
@@ -111,3 +115,10 @@ hashes to GEN-010 before extending its table. Training data now matches the
 historical 24K pool, but data matching does not establish equal serving runtime
 or eliminate uncertainty from single measurements. Keep the 4K rows labeled
 separately and retain the historical rows' evidence limits.
+
+
+The user subsequently supplied all twelve aggregate measurements. Workload and
+counter checks pass; step 2,000 has highest measured throughput in all four
+categories, while later checkpoints generally increase draft acceptance. See
+[the evidence and interpretation](../../../docs/experiments/results/GEN-011-attention-24k-6k.md)
+for single-run limits and the unresolved throughput/acceptance discrepancy.

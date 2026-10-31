@@ -10,6 +10,15 @@ Aggregate acceptance, adapter timing and matching workload hashes are now suppli
 Request-level data, checkpoint/runtime provenance and isolated drafter/verifier
 timings remain unavailable.
 
+The 24K attention-generator checkpoint study is recorded in
+[GEN-011](../GEN-011-attention-24k-6k.md), with the
+[12 supplied measurements](2026-10-31-attention-24k-6k-c1/summary.json),
+[four-domain throughput table](2026-10-31-attention-24k-6k-c1/summary.md), and
+[validated checkpoint comparisons](2026-10-31-attention-24k-6k-c1/analysis.json).
+Step 2,000 has highest measured throughput across the four domains; later
+checkpoints improve acceptance relative to 2,000. Correctness and timing
+repeatability remain unchecked.
+
 The external DeepSeek EAGLE3 ttt7 follow-up adds a
 [supplied math/chat C1 summary](2026-10-31-deepseek-ttt7-math-chat-c1/summary.json)
 and [derived comparisons](2026-10-31-deepseek-ttt7-math-chat-c1/analysis.json):
