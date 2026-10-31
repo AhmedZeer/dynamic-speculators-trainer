@@ -1,7 +1,7 @@
 # Original 4K/1,500-update pipeline; fresh attention generator, frozen DeepSpec drafter.
 training_recipe: training_recipe.yaml
 input_root: output/deepseek-ttt7-generator-v1/inputs
-output_root: /content/drive/MyDrive/dyn-spec-deepseek-ttt7-generator-v1
+output_root: output/dyn-spec-deepseek-ttt7-generator-v1
 staging_dir: /tmp/speculators-deepseek-ttt7-generator-v1
 condition: last
 seed: 42
