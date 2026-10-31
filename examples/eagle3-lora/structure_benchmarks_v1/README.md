@@ -6,6 +6,11 @@ decoder-width-256 generator, and two matched static LoRAs: five models, all at
 pipeline: one server/model, two category measurements, cleanup, next model.
 No training, response replay, adaptive scale or per-request adapters are enabled.
 
+For an independent external-drafter comparison, use the
+[DeepSeek EAGLE3 ttt7 math/chat C1 config and commands](deepseek_ttt7.md).
+It benchmarks only that pinned checkpoint and requires its metadata preparation
+step for vLLM 0.31.0.
+
 ## Pre-run model readiness (historical)
 
 These were pre-run checks on 2026-10-30 using the Hub API, not current
