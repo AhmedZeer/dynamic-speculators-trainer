@@ -1,0 +1,97 @@
+{
+  "receipt_date": "2026-10-31",
+  "source": "User-supplied full-precision suite JSON, not fetched from runtime",
+  "source_sha256": "e71f6dd2075c549035d699809c43cf8d5d70803405d69f8349da37d21b7c5e48",
+  "reference": "../2026-10-30-structure-math-chat-c1/suite_summary_detailed.json",
+  "reference_sha256": "f78e4b37b483861c3f7273279786083c4bab9dfdf661e5f56a947603e47efee0",
+  "validation": "Two 50-request cells; three-proposal acceptance identities and throughput identities pass; workload hashes, subsets and output-token totals match all five structure models within category.",
+  "formulas": {
+    "throughput_change_percent": "100 * (candidate_tps / reference_tps - 1)",
+    "draft_acceptance_change_percentage_points": "100 * (candidate_rate - reference_rate)",
+    "acceptance_length_change_percent": "100 * (candidate_length / reference_length - 1)",
+    "latency_change_ms": "candidate median - reference median"
+  },
+  "comparisons": {
+    "chat": {
+      "generator-all-4k-1500": {
+        "throughput_change_percent": -1.7363164338624393,
+        "draft_acceptance_change_percentage_points": -1.672171965704844,
+        "acceptance_length_change_percent": -2.318007662835253,
+        "ttft_median_change_ms": -16.574621200561523,
+        "tpot_median_change_ms": 0.6898697465658188
+      },
+      "generator-attention-4k-1500": {
+        "throughput_change_percent": -2.378837916384502,
+        "draft_acceptance_change_percentage_points": -1.6048578304238226,
+        "acceptance_length_change_percent": -2.2267729414891635,
+        "ttft_median_change_ms": -5.768537521362305,
+        "tpot_median_change_ms": 0.7845964282751083
+      },
+      "generator-attention-decoder256-4k-1500": {
+        "throughput_change_percent": -2.6597467679034037,
+        "draft_acceptance_change_percentage_points": -2.18274185272177,
+        "acceptance_length_change_percent": -3.0045078768101474,
+        "ttft_median_change_ms": -5.707025527954102,
+        "tpot_median_change_ms": 0.9164959192276001
+      },
+      "static-lora-all-4k-1500": {
+        "throughput_change_percent": -5.5286756577793135,
+        "draft_acceptance_change_percentage_points": -2.1648693747863157,
+        "acceptance_length_change_percent": -2.980639980296562,
+        "ttft_median_change_ms": 1.7886161804199219,
+        "tpot_median_change_ms": 1.6647037118673325
+      },
+      "static-lora-attention-4k-1500": {
+        "throughput_change_percent": -4.212686971022728,
+        "draft_acceptance_change_percentage_points": -1.696165302523761,
+        "acceptance_length_change_percent": -2.3504860657902027,
+        "ttft_median_change_ms": 1.2462139129638672,
+        "tpot_median_change_ms": 1.6981428489089012
+      }
+    },
+    "math": {
+      "generator-all-4k-1500": {
+        "throughput_change_percent": 7.530989966042934,
+        "draft_acceptance_change_percentage_points": 6.251986043941615,
+        "acceptance_length_change_percent": 6.182736276528211,
+        "ttft_median_change_ms": -16.417264938354492,
+        "tpot_median_change_ms": -1.0436233133077621
+      },
+      "generator-attention-4k-1500": {
+        "throughput_change_percent": 5.520751913625421,
+        "draft_acceptance_change_percentage_points": 7.356441983179729,
+        "acceptance_length_change_percent": 7.35529495862477,
+        "ttft_median_change_ms": -5.580902099609375,
+        "tpot_median_change_ms": -0.5401475355029106
+      },
+      "generator-attention-decoder256-4k-1500": {
+        "throughput_change_percent": 6.881042573439666,
+        "draft_acceptance_change_percentage_points": 7.519942488035724,
+        "acceptance_length_change_percent": 7.531081406510243,
+        "ttft_median_change_ms": -5.679607391357422,
+        "tpot_median_change_ms": -0.8198758587241173
+      },
+      "static-lora-all-4k-1500": {
+        "throughput_change_percent": 5.90923520069917,
+        "draft_acceptance_change_percentage_points": 10.323228352558845,
+        "acceptance_length_change_percent": 10.637151086086938,
+        "ttft_median_change_ms": 1.8417835235595703,
+        "tpot_median_change_ms": -0.7609976455569267
+      },
+      "static-lora-attention-4k-1500": {
+        "throughput_change_percent": 8.952202048116064,
+        "draft_acceptance_change_percentage_points": 12.932501983920519,
+        "acceptance_length_change_percent": 13.693949304973296,
+        "ttft_median_change_ms": 1.8236637115478516,
+        "tpot_median_change_ms": -1.25931017100811
+      }
+    }
+  },
+  "limitations": [
+    "Correctness not checked; equal token totals do not establish equal output sequences.",
+    "Single supplied measurement per category; runtime/hardware equivalence and repeats unverified.",
+    "Training data/budget and architecture differ from the generator/static-LoRA experiments.",
+    "Adapter metrics are empty; no isolated drafter/verifier latency is provided.",
+    "Executed checkpoint/preparation hashes, request-level files, logs and provenance were not supplied."
+  ]
+}

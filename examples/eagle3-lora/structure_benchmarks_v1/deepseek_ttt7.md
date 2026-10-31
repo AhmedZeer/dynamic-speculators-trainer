@@ -78,6 +78,8 @@ embedding/hidden inputs, consistent with vLLM's Qwen3 EAGLE3 implementation.
 Four local unit checks cover config translation, unexpected metadata rejection,
 source/weight preservation and repeat preparation, and exact workload/settings
 agreement with the existing structure suite. The actual CLI dry run passes.
-These checks do not establish GPU forward parity or model correctness; the first
-real serving launch remains untested here. Keep this a prepared external-model
-benchmark until measurements are collected.
+The user subsequently supplied two successful 50-request GPU-serving measurements
+on 2026-10-31: 82.50 math and 54.10 chat output tok/s. They are archived in
+[GEN-010](../../../docs/experiments/results/GEN-010-structure-serving.md).
+Correctness and GPU forward parity remain unchecked; the supplied summary does
+not independently verify the executed preparation/config/weight hashes.

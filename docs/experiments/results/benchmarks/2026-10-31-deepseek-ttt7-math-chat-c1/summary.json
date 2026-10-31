@@ -1,0 +1,101 @@
+{
+  "correctness_status": "not_checked",
+  "results": {
+    "deepseek-eagle3-qwen3-8b-ttt7": {
+      "nemotron/nemo-chat": {
+        "acceptance": {
+          "acceptance_at_pos_0": 0.5710727969348659,
+          "acceptance_at_pos_1": 0.3365900383141762,
+          "acceptance_at_pos_2": 0.20632183908045976,
+          "acceptance_length": 2.113984674329502,
+          "accepted_prefix_length": 1.1139846743295019,
+          "draft_acceptance_rate": 0.3713282247765006,
+          "num_accepted_tokens": 5815.0,
+          "num_draft_tokens": 15660.0,
+          "num_drafts": 5220.0
+        },
+        "dataset_sha256": "4462e1e17606a424d791e4d34ad18558f8d327aa646597dd3362e336afd0f91f",
+        "performance": [
+          {
+            "itl_median_ms": 18.029179292566635,
+            "latency_median_s": 4.473293304443359,
+            "measured_seconds": 203.93346524238586,
+            "output_tokens_per_second": 54.09607484915669,
+            "output_tps_median": 54.277050642526476,
+            "rps_median": 0.2168906587299609,
+            "strategy": "throughput",
+            "successful_requests": 50,
+            "target_rate": "",
+            "total_output_tokens": 11032.0,
+            "tpot_median_ms": 18.451347015798092,
+            "ttft_median_ms": 46.34571075439453
+          }
+        ],
+        "acceptance_scope": "aggregate across all sweep points in this invocation",
+        "adapter_metrics": {},
+        "correctness_status": "not_checked",
+        "measurement_kind": "benchmark",
+        "output_mismatch_override": false,
+        "subsets": [
+          "chat-00000",
+          "chat-00002",
+          "chat-00003",
+          "chat-00004",
+          "chat-00005"
+        ]
+      },
+      "nemotron/nemo-math": {
+        "acceptance": {
+          "acceptance_at_pos_0": 0.8492083438049761,
+          "acceptance_at_pos_1": 0.7318421713998492,
+          "acceptance_at_pos_2": 0.6401105805478764,
+          "acceptance_length": 3.2211610957527017,
+          "accepted_prefix_length": 2.2211610957527017,
+          "draft_acceptance_rate": 0.7403870319175673,
+          "num_accepted_tokens": 8838.0,
+          "num_draft_tokens": 11937.0,
+          "num_drafts": 3979.0
+        },
+        "dataset_sha256": "d2990b90cdc231a932afe725035f9b403a82f483d390062888beed4358d93b28",
+        "performance": [
+          {
+            "itl_median_ms": 11.509153889674767,
+            "latency_median_s": 2.9829843044281006,
+            "measured_seconds": 155.15082955360413,
+            "output_tokens_per_second": 82.5003645602658,
+            "output_tps_median": 84.29420277896062,
+            "rps_median": 0.3228238466252999,
+            "strategy": "throughput",
+            "successful_requests": 50,
+            "target_rate": "",
+            "total_output_tokens": 12800.0,
+            "tpot_median_ms": 11.646976694464684,
+            "ttft_median_ms": 45.305490493774414
+          }
+        ],
+        "acceptance_scope": "aggregate across all sweep points in this invocation",
+        "adapter_metrics": {},
+        "correctness_status": "not_checked",
+        "measurement_kind": "benchmark",
+        "output_mismatch_override": false,
+        "subsets": [
+          "math-00000",
+          "math-00002",
+          "math-00003",
+          "math-00004",
+          "math-00005"
+        ]
+      }
+    }
+  },
+  "rows": [
+    {
+      "concurrency": 1,
+      "model": "deepseek-eagle3-qwen3-8b-ttt7",
+      "nemotron/nemo-chat": 54.09607484915669,
+      "nemotron/nemo-math": 82.5003645602658,
+      "type": "drafter"
+    }
+  ],
+  "suite_identity": "16c13e472f51ae40d9cbe310b9846998e62fc11cabf3c380d1058f10e288d6e4"
+}

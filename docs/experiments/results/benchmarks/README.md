@@ -10,6 +10,13 @@ Aggregate acceptance, adapter timing and matching workload hashes are now suppli
 Request-level data, checkpoint/runtime provenance and isolated drafter/verifier
 timings remain unavailable.
 
+The external DeepSeek EAGLE3 ttt7 follow-up adds a
+[supplied math/chat C1 summary](2026-10-31-deepseek-ttt7-math-chat-c1/summary.json)
+and [derived comparisons](2026-10-31-deepseek-ttt7-math-chat-c1/analysis.json):
+82.50/54.10 output tok/s and 74.04%/37.13% draft acceptance on math/chat.
+Workload hashes match the five structure models; training budget/architecture
+and hardware/runtime provenance remain comparison limits.
+
 The fixed-coefficient step-4000 sweep is recorded in
 [GEN-008](../GEN-008-coefficient-sweep.md), with its
 [six supplied measurements](2026-10-28-coefficient-4000-c1/summary.json),

@@ -5,6 +5,9 @@ for all five models. One supplied result per model/category, no repeated-trial
 uncertainty. Correctness was not checked. Request-level results and executed
 checkpoint/hardware/code provenance remain unavailable.
 
+A later external DeepSeek EAGLE3 ttt7 measurement extends the table below; its
+training budget is not matched to the five structure models.
+
 The requested comparison uses step-1500 checkpoints and shared/merged adapters
 at concurrency 1. See [suite, readiness and command](../../../examples/eagle3-lora/structure_benchmarks_v1/README.md).
 During preparation, attention static LoRA step 1500 was verified at revision
@@ -41,7 +44,8 @@ experiments measured so far:
   slightly on chat (55.57 versus 55.41). Neither is always faster.
 - **All-module generation is feasible, but its extra coverage has not yielded
   a throughput advantage here.** It completed serving and attained the highest
-  math draft acceptance (67.79%). Attention-only generation is the current
+  math draft acceptance among the five structure models (67.79%).
+  Attention-only generation is the current
   promising cost–acceptance tradeoff; efficient broader generation remains an
   open direction, rather than a demonstrated infeasibility.
 
@@ -91,7 +95,7 @@ workload identity must be checked before claiming historical relative speedups.
 | Model | Nemo math output tok/s | Nemo chat output tok/s |
 | --- | ---: | ---: |
 | EAGLE3 base — historical | 64.34 | 54.97 |
-| Trained v/o LoRA — historical | 72.50 | 56.35 |
+| Trained v/o LoRA 4K / 1,500 steps — historical | 72.50 | 56.35 |
 | Generator, 24K / 2,000 steps — historical | 77.58 | 57.58 |
 | Generator, 24K / 4,000 steps — historical | 79.11 | 56.49 |
 | Attention static LoRA, 4K / 1,500 steps | 75.72 | 56.48 |
@@ -99,9 +103,61 @@ workload identity must be checked before claiming historical relative speedups.
 | Attention generator, 4K / 1,500 steps | 78.18 | 55.41 |
 | All-module generator, 4K / 1,500 steps | 76.72 | 55.05 |
 | Attention generator, decoder 256, 4K / 1,500 steps | 77.19 | 55.57 |
+| DeepSeek EAGLE3 ttt7 — external pretrained drafter | 82.50 | 54.10 |
 
 Aggregate output throughput includes prefill and serving overhead. It differs
 from GuideLLM's median per-request output token rate.
+
+## External DeepSeek EAGLE3 ttt7 follow-up — 2026-10-31
+
+The later [supplied full summary](benchmarks/2026-10-31-deepseek-ttt7-math-chat-c1/summary.json)
+and [derived comparisons](benchmarks/2026-10-31-deepseek-ttt7-math-chat-c1/analysis.json)
+add one external drafter, `deepseek-ai/eagle3_qwen3_8b_ttt7`, at concurrency 1.
+The [standalone config/runbook](../../../examples/eagle3-lora/structure_benchmarks_v1/deepseek_ttt7.md)
+pins revision `f6485ba8d21e11942958617dbe7e71b467f38f38` and prepares its
+metadata for vLLM 0.31.0 without changing tensor bytes. The supplied runtime
+summary does not include executed preparation/checkpoint hashes, so the pin and
+translation describe configured intent rather than independently verified
+execution provenance. The earlier dry-run-only status is superseded by these
+supplied GPU-serving measurements; correctness/forward parity remain unchecked.
+
+Suite identity: `16c13e472f51ae40d9cbe310b9846998e62fc11cabf3c380d1058f10e288d6e4`.
+Both categories report 50 successful requests, no mismatch override, the same
+subsets, workload hashes and output-token totals as all five structure models.
+Acceptance and throughput identities pass validation. Adapter metrics are empty;
+they provide no isolated drafter/verifier timings.
+
+| Metric | Math | Chat |
+| --- | ---: | ---: |
+| Aggregate output tok/s | 82.50 | 54.10 |
+| Draft acceptance rate | 74.04% | 37.13% |
+| Acceptance length (includes one verifier/bonus token) | 3.221 | 2.114 |
+| Acceptance at position 0 / 1 / 2 | 84.92% / 73.18% / 64.01% | 57.11% / 33.66% / 20.63% |
+| Median TTFT ms | 45.31 | 46.35 |
+| Median TPOT ms | 11.647 | 18.451 |
+
+- **Math:** highest reported throughput in the extended table and higher draft
+  acceptance than all five structure models. Versus the attention generator,
+  throughput is 5.52% higher and draft
+  acceptance is 7.36 percentage points higher. Versus the all-module generator,
+  acceptance is 6.25 points higher and throughput is 7.53% higher. The gain is
+  visible through the third draft position (64.01% versus 54.19% for all-module
+  generation); the checkpoint's name does not change this suite's three-token
+  speculation setting.
+- **Chat:** throughput is 2.38% below attention generation and 5.53% below
+  all-module static LoRA. Draft acceptance is 1.60 and 2.16 points lower,
+  respectively. This external checkpoint is not a universal improvement across
+  the two categories.
+- **Interpretation:** retain it as a strong external math baseline. Its five
+  auxiliary target features, Qwen3 drafter architecture and external training
+  data/budget differ from the models adapted in our experiments. This is not a
+  matched-budget comparison or evidence that any single design choice caused
+  the math gain. Equal workload hashes improve comparability but do not prove
+  equal runtime/hardware or correctness. Repeated trials and executed provenance
+  are still needed.
+
+The acceptance and timing tables below retain the original five-model matched
+structure comparison; the external checkpoint is measured separately above.
 
 ## Acceptance and matched comparisons
 
@@ -218,9 +274,10 @@ repeating trials is needed to locate the remaining gap.
 Keep the attention generator and its compact variant as candidates, with
 all-module static LoRA as a strong throughput control. Attention generation has
 a math acceptance advantage over matched static LoRA; all-module generation
-has the strongest math acceptance here. Neither establishes a general throughput
-win. Best math throughput is attention generation at 78.18 tok/s, only 0.37%
-above all-module static LoRA at 77.90; best chat throughput is all-module static
+has the strongest math acceptance within that original five-model set. Neither
+establishes a general throughput win. Within the original five-model set, best
+math throughput is attention generation at 78.18 tok/s, only 0.37% above
+all-module static LoRA at 77.90; best chat throughput is all-module static
 LoRA at 57.26. Small rankings need repeated trials.
 
 These results do not establish that the hypernetwork architecture is inadequate.
