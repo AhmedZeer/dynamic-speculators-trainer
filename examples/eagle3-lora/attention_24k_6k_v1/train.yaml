@@ -1,0 +1,103 @@
+# Fresh attention generator on the original pinned 24K saved-trajectory release.
+# Use train-full-data --epochs 10 --max-updates 6000 (see README.md).
+training_recipe: ../generator_training_recipe.yaml
+input_root: output/attention-24k-6k-v1/inputs
+output_root: /content/drive/MyDrive/dyn-spec-attention-24k-6k-v1
+staging_dir: /tmp/speculators-attention-24k-6k-v1
+condition: last
+seed: 42
+device: cuda
+dtype: bfloat16
+generator_dtype: bfloat16
+generator_batching: true
+n_workers: 1
+heatmap_n_workers: 1
+activation_prefetch_workers: 2
+preprocessing_workers: 4
+factor_cache_mib: 256
+context:
+  min_examples: 1
+  max_examples: 8
+  evaluation_sizes:
+  - 4
+optimization:
+  loss_fn: lk_hybrid
+  lr: 0.0001
+  weight_decay: 0.01
+  max_grad_norm: 0.85
+  warmup_updates: 100
+  pretraining_updates: 6000
+  pretraining_validation_interval: 250
+  episodes_per_update: 4
+  checkpoint_interval: 2000
+  log_interval: 10
+  token_budget: 8192
+adaptation_updates: 1000
+hub_upload_interval: 2000
+pilot:
+  updates: 100
+wandb:
+  enabled: true
+  mode: online
+  pretraining_project: eagle3-generator-ablations-v3
+  layout: sections
+  projects:
+    conditioning: eagle3-generator-conditioning
+    heatmap: eagle3-generator-heatmap
+    adaptation: eagle3-generator-adaptation
+  name_prefix: attention-24k-6k-v1-
+  group: attention-24k-6k-v1
+activation_source: vllm
+trajectories_path: ./trajectories
+online:
+  ram_cache_gib: 120
+  summary_cache_dir: output/generator-summary-cache
+  compiler_cache_dir: output/generator-compiler-cache
+  lookahead_updates: 2
+  endpoint: http://127.0.0.1:8000/v1
+  shared_dir: /tmp/speculators-online
+  concurrency: 128
+  buffered_examples: 256
+  target_model_path: models/qwen3-8b
+  drafter_model_path: models/qwen3-8b-eagle3
+  reserve_gib: 8
+target_modules:
+- q_proj
+- k_proj
+- v_proj
+- o_proj
+architecture:
+  encoder_hidden: 512
+  example_dim: 128
+  condition_dim: 64
+  descriptor_dim: 32
+  decoder_width: 512
+  residual_blocks: 2
+max_training_updates: 6000
+expected_train_examples: 1000
+expected_validation_examples: 100
+experiment_subsets:
+- math-00000
+- math-00001
+- math-00002
+- math-00003
+- math-00004
+- math-00005
+- code-00000
+- code-00001
+- code-00002
+- code-00003
+- code-00004
+- code-00005
+- stem-00000
+- stem-00001
+- stem-00002
+- stem-00003
+- stem-00004
+- stem-00005
+- chat-00000
+- chat-00001
+- chat-00002
+- chat-00003
+- chat-00004
+- chat-00005

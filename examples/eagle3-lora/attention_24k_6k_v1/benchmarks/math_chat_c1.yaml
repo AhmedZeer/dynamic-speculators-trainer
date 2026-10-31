@@ -1,0 +1,43 @@
+# Run after all three snapshots are uploaded; exact step subfolders are required.
+models:
+- name: generator-attention-24k-step2000
+  type: generator
+  model: azeeer/eagle3-generator-attention-24k-6k-v1
+  revision: main
+  subfolder: step-00002000
+  adapter_policy: shared
+  conditioning_examples: 1
+- name: generator-attention-24k-step4000
+  type: generator
+  model: azeeer/eagle3-generator-attention-24k-6k-v1
+  revision: main
+  subfolder: step-00004000
+  adapter_policy: shared
+  conditioning_examples: 1
+- name: generator-attention-24k-step6000
+  type: generator
+  model: azeeer/eagle3-generator-attention-24k-6k-v1
+  revision: main
+  subfolder: step-00006000
+  adapter_policy: shared
+  conditioning_examples: 1
+benchmarks:
+- dataset: nemotron
+  categories:
+  - math
+  - chat
+settings:
+  batching_policy: fixed_shared_adapter
+  concurrency: 1
+  max_samples: 50
+  max_tokens: 256
+  speculative_tokens: 3
+  warmups: 3
+  seed: 42
+  gpu: 0
+  continue_on_error: false
+wandb:
+  enabled: true
+  project: eagle3-generator-structure-bench-v1
+  group: attention-24k-6k-v1-math-chat-c1
+  mode: online

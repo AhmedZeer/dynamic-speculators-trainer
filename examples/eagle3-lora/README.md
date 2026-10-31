@@ -8,6 +8,10 @@ For four separately trained conditioning-size generators and a matched static
 LoRA, capped at 1,000 updates on the 24K pool, see the
 [new training and ID benchmark commands](../../docs/experiments/eagle3_conditioning_24k_1k.md).
 
+For a fresh attention generator on the original 24K pool through 6,000 updates,
+with checkpoints and math/chat C1 benchmarks at steps 2,000/4,000/6,000, see
+[the attention 24K/6K runbook](attention_24k_6k_v1/README.md).
+
 This note describes the Colab workflow in
 [`eagle3_qwen3_8b_nemotronchat_1k_lora.sh`](eagle3_qwen3_8b_nemotronchat_1k_lora.sh).
 It is intended for repeated training runs and hyperparameter sweeps that reuse
