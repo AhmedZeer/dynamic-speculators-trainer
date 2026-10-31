@@ -19,11 +19,11 @@ baseline rather than the earlier standalone timing; correctness remains unchecke
 
 The 24K attention-generator checkpoint study is recorded in
 [GEN-011](../GEN-011-attention-24k-6k.md), with the
-[12 supplied measurements](2026-10-31-attention-24k-6k-c1/summary.json),
-[four-domain throughput table](2026-10-31-attention-24k-6k-c1/summary.md), and
-[validated checkpoint comparisons](2026-10-31-attention-24k-6k-c1/analysis.json).
-Step 2,000 has highest measured throughput across the four domains; later
-checkpoints improve acceptance relative to 2,000. Correctness and timing
+[complete resumed 21-cell summary](2026-10-31-attention-24k-6k-c1/summary_with_ood.json),
+[seven-category throughput table](2026-10-31-attention-24k-6k-c1/summary_with_ood.md), and
+[validated OOD comparisons](2026-10-31-attention-24k-6k-c1/analysis_with_ood.json).
+The original twelve ID cells remain archived unchanged. Step 2,000 leads ID
+throughput; step 4,000 leads all three OOD categories. Correctness and timing
 repeatability remain unchecked.
 
 The external DeepSeek EAGLE3 ttt7 follow-up adds a

@@ -114,7 +114,8 @@ does not isolate baseline/generator drafter-forward or verifier-forward latency.
   no DeepSeek static-LoRA arm, fixed/shuffled-conditioning control or repeated
   trial in this suite. The earlier Red Hat static-LoRA results are not a matched
   control for this different drafter. Task accuracy and OOD generalization remain
-  unmeasured; the pending Red Hat OOD suite belongs to GEN-011.
+  unmeasured for this DeepSeek pair; the supplied Red Hat OOD results in GEN-011
+  belong to the different Red Hat drafter attention-generator experiment.
 
 Working direction: retain the DeepSeek-based attention generator as a strong
 current candidate and compare against its paired baseline. A matched static-LoRA

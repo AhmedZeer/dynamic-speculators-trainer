@@ -35,5 +35,20 @@ math/chat throughput table.
 
 [Extended historical all-category table](extended_historical_table.md) combines
 the original four-model, seven-category comparison with the three new checkpoints.
-New Red Hat out-of-distribution cells are explicitly missing; all new measured
-cells are Nemotron math/code/STEM/chat.
+The later OOD extension fills the attention rows; the DeepSeek pair still has
+no supplied out-of-distribution measurements.
+
+
+## Completed OOD extension
+
+[summary_with_ood.json](summary_with_ood.json) archives the subsequent supplied
+resumed suite: all twelve earlier ID cells plus nine new OOD cells.
+[summary_with_ood.md](summary_with_ood.md) shows the complete table, and
+[analysis_with_ood.json](analysis_with_ood.json) records checksums, validation,
+workload identities and derived OOD comparisons. The earlier `summary.json` and
+its analysis remain unchanged to preserve the initial receipt and existing references.
+
+All 21 cells pass aggregate checks. The twelve ID cells are identical to the
+previous archive. Step 4,000 leads OOD throughput in all three categories;
+step 2,000 still leads ID throughput. DeepSeek OOD cells remain unmeasured.
+The historical all-category table now fills the attention rows' OOD cells.

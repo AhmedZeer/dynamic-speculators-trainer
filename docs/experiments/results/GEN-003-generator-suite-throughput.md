@@ -48,9 +48,8 @@ Do not infer them from current configuration defaults or earlier benchmarks.
 The new attention rows come from [GEN-011](GEN-011-attention-24k-6k.md),
 three checkpoints × four Nemotron categories at C1. The
 [combined all-seven-category table](benchmarks/2026-10-31-attention-24k-6k-c1/extended_historical_table.md)
-retains the historical Red Hat results and marks new out-of-distribution cells
-as unmeasured. No new HumanEval, math-reasoning or summarization results were
-supplied. Historical timing/precision/runtime equivalence is unverified, so the
+retains the historical Red Hat results and now includes all nine OOD cells
+from the resumed attention-generator suite. DeepSeek OOD cells remain unmeasured. Historical timing/precision/runtime equivalence is unverified, so the
 extended table is descriptive rather than a controlled speedup experiment.
 
 The subsequent paired baseline/generator rows come from [GEN-012](GEN-012-deepseek-generator-4k.md).
@@ -70,8 +69,11 @@ reference rather than presenting it as a same-session measurement.
 | --- | ---: | ---: | ---: |
 | EAGLE3 base | 68.32 | 66.55 | 58.29 |
 | Trained LoRA | 67.24 | 67.19 | 58.30 |
-| Generator · 24K · 2,000 steps | 69.24 | 67.99 | **58.81** |
-| Generator · 24K · 4,000 steps | **69.44** | **68.32** | 58.69 |
+| V/O generator · 24K · 2,000 steps — historical | 69.24 | 67.99 | 58.81 |
+| V/O generator · 24K · 4,000 steps — historical | 69.44 | 68.32 | 58.69 |
+| Attention generator · 24K · 2,000 steps | 71.26 | 69.62 | 59.94 |
+| Attention generator · 24K · 4,000 steps | **72.32** | **70.69** | **60.65** |
+| Attention generator · 24K · 6,000 steps | 71.96 | 70.11 | 60.04 |
 
 ## Interpretation and limits
 
@@ -90,7 +92,9 @@ multiple concurrent requests. Small differences need repeated matched runs.
 
 Retain the original four-model archive and its in-/out-of-distribution grouping.
 The extended Nemotron table now includes the three GEN-011 attention checkpoints;
-the Red Hat table remains historical pending new out-of-distribution measurements.
+the Red Hat table now includes the nine supplied GEN-011 OOD measurements.
+The later 4,000-step attention checkpoint leads these three OOD throughput columns,
+while 2,000 leads the four Nemotron columns within the same attention family.
 Attach native results, workload identities, checkpoint hashes, server/evaluation
 commands, and patches when available; their absence is explicit in the structured
 record. Existing historical records are not merged into these tables.
@@ -102,3 +106,7 @@ record. Existing historical records are not merged into these tables.
 - 2026-10-31: Extended Nemotron with attention-generator 24K checkpoints at
   2,000/4,000/6,000 updates. Added a combined seven-category table with missing
   new Red Hat cells explicit; source archives and historical limits preserved.
+
+- 2026-10-31: Completed the attention-generator OOD columns from the resumed
+  21-cell suite; all twelve previously supplied Nemotron cells remain unchanged.
+  New source: [summary_with_ood.json](benchmarks/2026-10-31-attention-24k-6k-c1/summary_with_ood.json).

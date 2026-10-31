@@ -136,3 +136,9 @@ counter checks pass; step 2,000 has highest measured throughput in all four
 categories, while later checkpoints generally increase draft acceptance. See
 [the evidence and interpretation](../../../docs/experiments/results/GEN-011-attention-24k-6k.md)
 for single-run limits and the unresolved throughput/acceptance discrepancy.
+
+
+The resumed OOD extension is now supplied: all 21 cells are archived in GEN-011.
+The twelve Nemotron results are unchanged, and step 4,000 has highest measured
+throughput on HumanEval, math reasoning and summarization. These single-run
+rankings remain subject to the record's correctness and repeatability limits.

@@ -1,7 +1,8 @@
 # GEN-011 — Attention generator on 24K rows through 6,000 updates
 
 Date: 2026-10-31. Status: user-supplied serving summary received for three
-checkpoints across four categories at C1 (12 measurements). Aggregate counters
+checkpoints across seven categories at C1 (21 measurements after OOD resume).
+The original 12-cell ID summary is retained separately. Aggregate counters
 and workload identities validate. Correctness is unchecked; repeated trials,
 executed checkpoint hashes and hardware/runtime provenance remain unavailable.
 
@@ -86,8 +87,8 @@ Equal totals/hashes do not establish identical output sequences or correctness.
 
 The [historical all-category table in GEN-003](GEN-003-generator-suite-throughput.md)
 is extended with these rows. A [combined seven-category view](benchmarks/2026-10-31-attention-24k-6k-c1/extended_historical_table.md)
-shows all four historical models and all three new checkpoints, leaving the new
-HumanEval/math-reasoning/summarization cells unmeasured.
+shows the historical models, the attention checkpoints and the later DeepSeek
+pair. Attention-generator OOD cells are now filled; DeepSeek OOD remains unmeasured.
 
 ## Working findings and limits
 
@@ -133,12 +134,57 @@ DeepSeek baseline/generator experiment in GEN-012 to study whether generated
 adapters also help that different frozen drafter.
 
 
-## OOD benchmark extension (prepared; measurements pending)
+## OOD benchmark extension — supplied results
 
 The same checkpoint suite now appends `RedHatAI/speculator_benchmarks` with
 HumanEval, math reasoning and summarization. Rerun the existing command/output
 root with `--resume` after pulling the updated code. Safe additive-dataset resume
 keeps the twelve valid completed Nemotron results, frozen workloads and checkpoint
 pins, and runs nine new OOD cells. Existing workload/settings changes remain
-rejected. Previous suite metadata/state is archived on extension. No new OOD
-throughput values are recorded until the results are supplied.
+rejected. Previous suite metadata/state is archived on extension.
+
+The user then supplied the completed [21-cell resumed summary](benchmarks/2026-10-31-attention-24k-6k-c1/summary_with_ood.json),
+[seven-category table](benchmarks/2026-10-31-attention-24k-6k-c1/summary_with_ood.md),
+and [validated OOD comparisons](benchmarks/2026-10-31-attention-24k-6k-c1/analysis_with_ood.json).
+New suite identity: `e226cec297e90a717284f9b9940f2bdddda849f1ff8b4d0808c1f44c85f075ba`.
+The twelve original Nemotron result objects are unchanged in the combined archive;
+all 21 cells pass 50-request/adapter counts, three-token acceptance identities,
+adapter timing means and aggregate throughput identities. The OOD cells share
+per-category workload hashes, subsets and 12,800 output tokens across checkpoints.
+
+| Checkpoint | HumanEval output tok/s | Math reasoning output tok/s | Summarization output tok/s |
+| --- | ---: | ---: | ---: |
+| 2,000 | 71.26 | 69.62 | 59.94 |
+| 4,000 | **72.32** | **70.69** | **60.65** |
+| 6,000 | 71.96 | 70.11 | 60.04 |
+
+| Checkpoint | HumanEval draft acceptance | Math reasoning draft acceptance | Summarization draft acceptance |
+| --- | ---: | ---: | ---: |
+| 2,000 | 55.00% | 52.77% | **41.43%** |
+| 4,000 | **55.21%** | **53.07%** | 41.22% |
+| 6,000 | 54.86% | 52.99% | 41.06% |
+
+Working update:
+
+- Step 4,000 has the highest measured OOD throughput in all three categories,
+  1.19–1.53% above step 2,000. Step 2,000 remains the highest measured Nemotron
+  throughput among these checkpoints. No single checkpoint leads every domain.
+- OOD acceptance changes are small: 4,000 versus 2,000 gives +0.21 points on
+  HumanEval, +0.29 on math reasoning, and −0.22 on summarization. Summarization
+  throughput improves despite lower acceptance. Later training does not improve
+  OOD acceptance uniformly, and the data do not isolate the timing mechanism.
+- Step 6,000 does not exceed step 4,000 in OOD throughput or acceptance here.
+  This is preliminary plateau/mixed evidence, not a demonstrated general
+  overfitting effect or a universal checkpoint ranking; gaps need repeats.
+- Versus historical V/O generation at the reported same 24K/4K budget, the new
+  4K attention checkpoint is +4.14% HumanEval, +3.47% math reasoning and +3.35%
+  summarization throughput. Historical workload hashes, precision and runtime
+  equivalence remain unverified; no current frozen-drafter baseline was included
+  for these OOD cells. Do not infer a controlled OOD adaptation gain from this alone.
+- Timed adapter totals remain 6.53–6.60 ms/request. These are CUDA-event counters,
+  not an isolated drafter/verifier or complete host/GPU wall-time partition.
+
+Keep 2,000 as the ID-throughput candidate, 4,000 as the OOD-throughput candidate,
+and 6,000 for its stronger math/code/chat ID acceptance. Correctness, statistical
+uncertainty and executed checkpoint/hardware provenance remain unchecked. The
+DeepSeek pair in GEN-012 still has no supplied OOD measurements.
