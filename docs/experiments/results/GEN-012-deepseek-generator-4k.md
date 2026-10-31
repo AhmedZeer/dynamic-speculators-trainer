@@ -123,3 +123,16 @@ arm, conditioning controls and repeat measurements would test which part of
 training/generation supplies the advantage. Preserve training membership,
 checkpoint/config/preparation hashes, actual hardware/package/code provenance,
 request-level results and launch/eval command/patch artifacts with future runs.
+
+
+## Paired OOD extension — prepared, results pending
+
+The existing paired config now appends `RedHatAI/speculator_benchmarks` with
+HumanEval, math reasoning and summarization, using the same OOD settings as
+GEN-011. Both the frozen DeepSeek baseline and trained step-1500 generator run
+these categories at C1 with three draft tokens, 50 prompts/category and seed 42.
+No existing Nemotron workload, model definition, W&B group or serving setting
+changes. Pull updated code and rerun the runbook command in the **same paired-suite
+output root** with `--resume`: eight valid completed ID cells are retained and
+six new OOD cells run. Schema/resume checks and the actual CLI dry run pass;
+no new OOD measurements or table values are recorded yet.

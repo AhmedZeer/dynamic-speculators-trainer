@@ -115,16 +115,27 @@ speculators benchmark suite \
 
 The [benchmark config](benchmarks/math_chat_c1.yaml) now measures both the frozen
 DeepSeek EAGLE3 ttt7 baseline and the trained step-1500 attention generator, on
-**math, STEM, code and chat**, preserving the expanded category list. Concurrency
-is 1, with 50 prompts/category, 256 output-token cap, three warmups,
-**three draft tokens**, and seed 42: two models × four categories = eight cells.
+**math, STEM, code and chat**, plus Red Hat OOD **HumanEval, math reasoning
+and summarization**. Concurrency is 1, with 50 prompts/category, 256 output-token
+cap, three warmups, **three draft tokens**, and seed 42:
+two models × seven categories = 14 cells.
 The generator uses a prompt-conditioned shared/merged adapter with one
 conditioning example; the baseline uses the same frozen drafter without it.
 The baseline row reuses the pinned, metadata-prepared checkpoint created by the
 preparation command above. Both models receive the same category workloads.
-The filename retains `math_chat_c1` for compatibility, but covers all four domains.
+The filename retains `math_chat_c1` for compatibility, but covers all seven
+categories. OOD settings match the attention-24K suite.
 W&B project remains `eagle3-generator-structure-bench-v1`, group
 `deepseek-ttt7-generator-vs-base-4k-1500-nemotron-c1`.
+
+For the OOD extension, **pull the current code and reuse the same paired-suite
+output root shown above with `--resume`**. Added-dataset resume keeps existing
+model pins, frozen Nemotron workloads and the eight valid completed ID results;
+only **six new OOD cells** run (two models × three categories). Corrupt/incomplete
+existing cells are retried normally. The added dataset has its own workload
+folder; existing category lists, model entries, W&B group and settings stay
+unchanged. Previous suite request/plan/state is archived in `suite_attempts/`.
+Do not switch output directories or delete existing results for this extension.
 
 The suite resolves and records an immutable Hub revision from `main`, requires
 the exact `step-00001500` folder, and launches the frozen DeepSeek drafter with
@@ -153,7 +164,7 @@ with separate source/runtime identities, target mismatch rejection, and reuse
 of the measured baseline's vLLM metadata translation for generator serving.
 These checks are not a full-size GPU training or generated-adapter throughput
 measurement. The combined suite retains three draft tokens and shared C1
-workloads for the baseline and generator across all four domains.
+workloads for the baseline and generator across all seven categories.
 
 
 The user supplied all eight paired measurements: the generator improves measured
@@ -162,3 +173,9 @@ across the four domains. Use the paired baseline (86.58 math / 56.68 chat tok/s)
 when calculating gains; its earlier standalone timings are separate evidence.
 Executed training/checkpoint/preparation provenance and numerical parity remain
 unverified from the supplied aggregate summary.
+
+
+The OOD extension is configured but not yet measured for this pair. Once it
+completes, `summary.json`/`summary.md` contain all 14 cells and can fill the
+remaining DeepSeek columns in the combined historical table. Keep the current
+paired baseline as the denominator for each new OOD training comparison.

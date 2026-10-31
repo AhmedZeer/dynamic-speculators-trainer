@@ -1,5 +1,5 @@
-# Frozen DeepSeek baseline versus step-1500 generator, all four requested categories.
-# Filename retained for existing commands; workloads include math/STEM/code/chat.
+# Frozen DeepSeek baseline vs step-1500 generator: ID + OOD, C1.
+# Resume preserves eight completed Nemotron cells and adds six OOD cells.
 models:
 - name: deepseek-eagle3-qwen3-8b-ttt7
   type: drafter
@@ -19,6 +19,11 @@ benchmarks:
   - stem
   - code
   - chat
+- dataset: RedHatAI/speculator_benchmarks
+  categories:
+  - HumanEval
+  - math_reasoning
+  - summarization
 settings:
   batching_policy: fixed_shared_adapter
   concurrency: 1
