@@ -1,6 +1,10 @@
-# Trained generator only; require the completed step-1500 HF snapshot.
-# Math/chat C1 settings match the measured DeepSeek drafter baseline.
+# Frozen DeepSeek baseline versus step-1500 generator, all four requested categories.
+# Filename retained for existing commands; workloads include math/STEM/code/chat.
 models:
+- name: deepseek-eagle3-qwen3-8b-ttt7
+  type: drafter
+  model: ./output/deepseek-eagle3-ttt7-vllm/f6485ba8d21e11942958617dbe7e71b467f38f38
+  revision: f6485ba8d21e11942958617dbe7e71b467f38f38
 - name: generator-deepseek-ttt7-attention-4k-1500
   type: generator
   model: azeeer/eagle3-generator-deepseek-ttt7-attention-4k-1500
@@ -12,6 +16,8 @@ benchmarks:
 - dataset: nemotron
   categories:
   - math
+  - stem
+  - code
   - chat
 settings:
   batching_policy: fixed_shared_adapter
@@ -26,5 +32,5 @@ settings:
 wandb:
   enabled: true
   project: eagle3-generator-structure-bench-v1
-  group: deepseek-ttt7-generator-4k-1500-math-chat-c1
+  group: deepseek-ttt7-generator-vs-base-4k-1500-nemotron-c1
   mode: online

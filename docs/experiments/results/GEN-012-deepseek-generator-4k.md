@@ -52,3 +52,11 @@ is prepared, with the [command in the runbook](../../../examples/eagle3-lora/dee
 It measures only the trained generator and matches the baseline's benchmark
 settings, including three draft tokens. Config/schema and actual CLI dry-run
 validation pass; executed checkpoint availability and GPU results remain pending.
+
+
+Benchmark expansion: the user added STEM and code to the original math/chat
+category list. The same config now includes the pinned frozen DeepSeek baseline
+alongside the step-1500 generator: two models × four categories at concurrency 1,
+with identical per-category workloads and three draft tokens. Use the new output
+root in the runbook rather than resuming a math/chat-only suite. Compare acceptance
+and throughput within the new paired measurements; results remain pending.

@@ -99,7 +99,7 @@ Rerun the identical command to resume interrupted training or retry a failed
 checkpoint upload. Preserve the output and provenance directories. Run files
 are under `<output-root>/pretraining/deepseek-ttt7-attention-4k-1500/`.
 
-## Benchmark the trained generator
+## Benchmark the trained generator against its baseline
 
 After HF upload of `step-00001500` succeeds, stop the training extractor and run
 this independent suite from the repository root:
@@ -107,32 +107,39 @@ this independent suite from the repository root:
 ```bash
 speculators benchmark suite \
   --config examples/eagle3-lora/deepseek_ttt7_generator_v1/benchmarks/math_chat_c1.yaml \
-  --output-root /content/drive/MyDrive/dyn-spec-bench-v1/suites/deepseek-ttt7-generator-4k-1500-math-chat-c1 \
+  --output-root /content/drive/MyDrive/dyn-spec-bench-v1/suites/deepseek-ttt7-generator-vs-base-4k-1500-nemotron-c1 \
   --resume
 ```
 
-The [benchmark config](benchmarks/math_chat_c1.yaml) measures only the trained
-step-1500 generator, on math/chat at concurrency 1: 50 prompts/category,
-256 output-token cap, three warmups, **three draft tokens**, seed 42.
-It uses a prompt-conditioned shared/merged adapter with one conditioning example.
-Benchmark/settings sections match the measured DeepSeek drafter baseline exactly;
-that baseline is not rerun. W&B project remains
-`eagle3-generator-structure-bench-v1`, with a separate generator-run group.
+The [benchmark config](benchmarks/math_chat_c1.yaml) now measures both the frozen
+DeepSeek EAGLE3 ttt7 baseline and the trained step-1500 attention generator, on
+**math, STEM, code and chat**, preserving the expanded category list. Concurrency
+is 1, with 50 prompts/category, 256 output-token cap, three warmups,
+**three draft tokens**, and seed 42: two models × four categories = eight cells.
+The generator uses a prompt-conditioned shared/merged adapter with one
+conditioning example; the baseline uses the same frozen drafter without it.
+The baseline row reuses the pinned, metadata-prepared checkpoint created by the
+preparation command above. Both models receive the same category workloads.
+The filename retains `math_chat_c1` for compatibility, but covers all four domains.
+W&B project remains `eagle3-generator-structure-bench-v1`, group
+`deepseek-ttt7-generator-vs-base-4k-1500-nemotron-c1`.
 
 The suite resolves and records an immutable Hub revision from `main`, requires
 the exact `step-00001500` folder, and launches the frozen DeepSeek drafter with
 the baseline's metadata translation. Earlier snapshots are not substituted.
 Use the existing patched vLLM/GuideLLM environment; the suite manages its own
 server and records extraction-independent serving/eval provenance. Keep the
-new output directory separate from the measured baseline. `--resume` preserves
+new output directory separate from earlier math/chat-only suites: their workload
+identity differs now that STEM/code are included. `--resume` preserves
 successful cells and retries failures. Add `--dry-run` to inspect the config
 without model downloads or serving; it does not verify snapshot availability.
 
 `summary.md` reports throughput; `summary.json` includes acceptance, acceptance
 length, generator/merge/restore timings, TTFT/TPOT and workload hashes. Compare
-against the baseline's 82.50 math / 54.10 chat tok/s only after checking runtime
-conditions and workload hashes. Correctness remains unchecked by this timing
-suite; no generated-adapter results are recorded until the suite is run.
+the two freshly measured rows within each category to assess whether generator
+training helped. The historical 82.50 math / 54.10 chat baseline remains separate
+evidence; check runtime conditions and workload hashes before historical
+comparisons. Correctness remains unchecked by this timing suite; no generated-adapter results are recorded until the suite is run.
 
 ## Validation status
 
@@ -142,5 +149,5 @@ weight-byte preservation, original cohort settings, real saved-response loading
 with separate source/runtime identities, target mismatch rejection, and reuse
 of the measured baseline's vLLM metadata translation for generator serving.
 These checks are not a full-size GPU training or generated-adapter throughput
-measurement. Future benchmarks must retain three draft tokens and the same
-math/chat C1 workload for comparison with the supplied DeepSeek baseline.
+measurement. The combined suite retains three draft tokens and shared C1
+workloads for the baseline and generator across all four domains.
