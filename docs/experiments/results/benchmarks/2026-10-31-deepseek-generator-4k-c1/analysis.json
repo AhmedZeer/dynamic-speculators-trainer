@@ -1,0 +1,124 @@
+{
+  "receipt_date": "2026-10-31",
+  "source": "User-supplied paired suite summary; not retrieved from execution environment",
+  "source_sha256": "f5abc8788b0789f60b1140c1b1f983bc3f0387a68d6a9b8dbb52b50a0dbac2dc",
+  "suite_identity": "302891f36a1c9a6b8b34a25f98400aec00ab30c2c1be45a1084bd637a9e048fc",
+  "validation": "All eight cells pass 50-request, three-proposal acceptance and aggregate throughput checks. Generator counts/means pass; per-category hashes, subset membership and output totals match both models and prior four-domain attention workloads.",
+  "formulas": {
+    "throughput_gain_percent": "100 * (generator_tps / paired_baseline_tps - 1)",
+    "draft_acceptance_gain_percentage_points": "100 * (generator_rate - paired_baseline_rate)",
+    "acceptance_length_gain_percent": "100 * (generator_length / paired_baseline_length - 1)",
+    "timed_adapter_total_ms_per_request": "1000 * sum(generator_seconds, merge_seconds, restore_seconds) / completed_requests",
+    "timed_adapter_percent_of_wall": "100 * sum(generator_seconds, merge_seconds, restore_seconds) / measured_seconds"
+  },
+  "comparisons": {
+    "math": {
+      "baseline_tps": 86.57838643848083,
+      "generator_tps": 92.26016070068042,
+      "throughput_gain_percent": 6.562578139795683,
+      "baseline_acceptance_percent": 74.03870319175672,
+      "generator_acceptance_percent": 81.74474959612277,
+      "draft_acceptance_gain_percentage_points": 7.7060464043660515,
+      "baseline_acceptance_length": 3.2211610957527017,
+      "generator_acceptance_length": 3.4523424878836835,
+      "acceptance_length_gain_percent": 7.176958409059653,
+      "draft_cycles_change_percent": -6.659964815280217,
+      "ttft_median_increase_ms": 6.88624382019043,
+      "tpot_median_change_ms": -0.5582878366112709,
+      "generator_ms_per_call": 3.115151357650756,
+      "merge_ms_per_request": 3.1719424009323127,
+      "restore_ms_per_request": 0.26254336178302784,
+      "timed_adapter_total_ms_per_request": 6.549637120366096,
+      "timed_adapter_percent_of_wall": 0.23604319267817103
+    },
+    "code": {
+      "baseline_tps": 75.40380028586333,
+      "generator_tps": 83.72611276452534,
+      "throughput_gain_percent": 11.036993423555973,
+      "baseline_acceptance_percent": 60.69750367107195,
+      "generator_acceptance_percent": 70.64555420219246,
+      "draft_acceptance_gain_percentage_points": 9.9480505311205,
+      "baseline_acceptance_length": 2.8209251101321584,
+      "generator_acceptance_length": 3.1193666260657733,
+      "acceptance_length_gain_percent": 10.579561820399874,
+      "draft_cycles_change_percent": -9.58149779735683,
+      "ttft_median_increase_ms": 7.4024200439453125,
+      "tpot_median_change_ms": -1.3979459181427956,
+      "generator_ms_per_call": 3.1228723192214978,
+      "merge_ms_per_request": 3.1727001571655244,
+      "restore_ms_per_request": 0.2656857621669772,
+      "timed_adapter_total_ms_per_request": 6.561258238553998,
+      "timed_adapter_percent_of_wall": 0.21484108218941841
+    },
+    "stem": {
+      "baseline_tps": 67.2045393991405,
+      "generator_tps": 78.01326969088353,
+      "throughput_gain_percent": 16.083333638443587,
+      "baseline_acceptance_percent": 49.92818905862384,
+      "generator_acceptance_percent": 62.84981519197406,
+      "draft_acceptance_gain_percentage_points": 12.921626133350216,
+      "baseline_acceptance_length": 2.497845671758715,
+      "generator_acceptance_length": 2.8854944557592215,
+      "acceptance_length_gain_percent": 15.519324847942496,
+      "draft_cycles_change_percent": -13.454759106933023,
+      "ttft_median_increase_ms": 6.406307220458984,
+      "tpot_median_change_ms": -2.1491525694727898,
+      "generator_ms_per_call": 3.104808959960943,
+      "merge_ms_per_request": 3.1693619203567547,
+      "restore_ms_per_request": 0.2613248005509373,
+      "timed_adapter_total_ms_per_request": 6.535495680868634,
+      "timed_adapter_percent_of_wall": 0.1999276084680454
+    },
+    "chat": {
+      "baseline_tps": 56.67902319701516,
+      "generator_tps": 65.46224362350192,
+      "throughput_gain_percent": 15.496421658426351,
+      "baseline_acceptance_percent": 37.132822477650066,
+      "generator_acceptance_percent": 47.80276308054086,
+      "draft_acceptance_gain_percentage_points": 10.669940602890799,
+      "baseline_acceptance_length": 2.113984674329502,
+      "generator_acceptance_length": 2.4340828924162254,
+      "acceptance_length_gain_percent": 15.141936551089241,
+      "draft_cycles_change_percent": -13.103448275862073,
+      "ttft_median_increase_ms": 6.557464599609375,
+      "tpot_median_change_ms": -2.672668546438217,
+      "generator_ms_per_call": 3.1312691307067877,
+      "merge_ms_per_request": 3.178557434082032,
+      "restore_ms_per_request": 0.2578348803520202,
+      "timed_adapter_total_ms_per_request": 6.56766144514084,
+      "timed_adapter_percent_of_wall": 0.19485762035827156
+    }
+  },
+  "reference_sources": {
+    "earlier_deepseek": {
+      "path": "../2026-10-31-deepseek-ttt7-math-chat-c1/summary.json",
+      "sha256": "e71f6dd2075c549035d699809c43cf8d5d70803405d69f8349da37d21b7c5e48"
+    },
+    "attention_24k": {
+      "path": "../2026-10-31-attention-24k-6k-c1/summary.json",
+      "sha256": "6117b6efa54ae762dadb44f25f5f67f08d742f1b8649a04aa251d3119e7107b2"
+    }
+  },
+  "baseline_repeat_comparisons": {
+    "math": {
+      "earlier_tps": 82.5003645602658,
+      "paired_suite_tps": 86.57838643848083,
+      "throughput_change_percent": 4.9430349792407124,
+      "aggregate_acceptance_identical": true
+    },
+    "chat": {
+      "earlier_tps": 54.09607484915669,
+      "paired_suite_tps": 56.67902319701516,
+      "throughput_change_percent": 4.7747426316250285,
+      "aggregate_acceptance_identical": true
+    }
+  },
+  "limitations": [
+    "Correctness not checked; equal hashes/counts do not establish token-sequence equality.",
+    "One paired suite, no trial-level uncertainty; hardware/code/package equivalence not independently verified.",
+    "Executed generator/drafter/config/preparation hashes and training membership/provenance were not supplied; configured training budget is 4K/1500.",
+    "No matched static-LoRA DeepSeek arm, fixed/shuffled-conditioning controls or isolated drafter/verifier timing.",
+    "Timed adapter durations use CUDA events and are not a complete wall-time partition.",
+    "This suite has no OOD cells; the pending attention-24K OOD experiment is separate."
+  ]
+}

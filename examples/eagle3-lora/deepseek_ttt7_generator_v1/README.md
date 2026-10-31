@@ -4,7 +4,9 @@ Fresh generator on the frozen `deepseek-ai/eagle3_qwen3_8b_ttt7` drafter,
 pinned revision `f6485ba8d21e11942958617dbe7e71b467f38f38`. The external drafter
 baseline is 82.50 math / 54.10 chat output tok/s at C1; see
 [GEN-010](../../../docs/experiments/results/GEN-010-structure-serving.md).
-This new training experiment is prepared; no GPU training results are recorded.
+The subsequently supplied paired serving results are recorded in
+[GEN-012](../../../docs/experiments/results/GEN-012-deepseek-generator-4k.md);
+training was not executed locally here.
 
 ## Settings
 
@@ -139,7 +141,8 @@ length, generator/merge/restore timings, TTFT/TPOT and workload hashes. Compare
 the two freshly measured rows within each category to assess whether generator
 training helped. The historical 82.50 math / 54.10 chat baseline remains separate
 evidence; check runtime conditions and workload hashes before historical
-comparisons. Correctness remains unchecked by this timing suite; no generated-adapter results are recorded until the suite is run.
+comparisons. Correctness remains unchecked by this timing suite. The supplied
+paired results are now archived in GEN-012.
 
 ## Validation status
 
@@ -151,3 +154,11 @@ of the measured baseline's vLLM metadata translation for generator serving.
 These checks are not a full-size GPU training or generated-adapter throughput
 measurement. The combined suite retains three draft tokens and shared C1
 workloads for the baseline and generator across all four domains.
+
+
+The user supplied all eight paired measurements: the generator improves measured
+throughput by 6.56–16.08% and draft acceptance by 7.71–12.92 percentage points
+across the four domains. Use the paired baseline (86.58 math / 56.68 chat tok/s)
+when calculating gains; its earlier standalone timings are separate evidence.
+Executed training/checkpoint/preparation provenance and numerical parity remain
+unverified from the supplied aggregate summary.

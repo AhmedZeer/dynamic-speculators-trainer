@@ -107,16 +107,26 @@ workload identity must be checked before claiming historical relative speedups.
 | Attention generator, 24K / 2,000 steps | 82.80 | 59.77 |
 | Attention generator, 24K / 4,000 steps | 81.17 | 59.44 |
 | Attention generator, 24K / 6,000 steps | 81.89 | 59.16 |
+| DeepSeek EAGLE3 ttt7 — paired-suite baseline rerun | 86.58 | 56.68 |
+| DeepSeek attention generator, 4K / 1,500 steps | 92.26 | 65.46 |
 
 Aggregate output throughput includes prefill and serving overhead. It differs
 from GuideLLM's median per-request output token rate.
 
 The later 24K attention rows are detailed in [GEN-011](GEN-011-attention-24k-6k.md),
-including code/STEM results. Step 2,000 is now the highest displayed math/chat
-throughput; its 0.36% math difference from DeepSeek is too small to establish
+including code/STEM results. At that receipt, step 2,000 had the highest displayed
+math/chat throughput; its 0.36% math difference from DeepSeek is too small to establish
 superiority without repeats. Step 6,000 improves acceptance but has lower measured
 throughput than step 2,000. Historical rows and separate-run comparisons retain
 their runtime/provenance limits.
+
+The subsequent [paired DeepSeek generator experiment, GEN-012](GEN-012-deepseek-generator-4k.md),
+adds a baseline rerun and trained attention generator. Its generator now has the
+highest displayed math/chat throughput. Compute gains against that paired baseline:
++6.56% math and +15.50% chat, rather than the earlier 82.50/54.10 baseline.
+Both original and rerun values remain visible because the baseline's acceptance
+is identical but its throughput differs. All four category results and paired
+acceptance/latency comparisons are recorded in GEN-012.
 
 ## External DeepSeek EAGLE3 ttt7 follow-up — 2026-10-31
 

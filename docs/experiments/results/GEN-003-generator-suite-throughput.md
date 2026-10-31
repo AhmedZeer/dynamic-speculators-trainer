@@ -39,9 +39,11 @@ Do not infer them from current configuration defaults or earlier benchmarks.
 | Trained V/O LoRA — historical | 72.50 | 64.79 | 64.23 | 56.35 |
 | V/O generator · 24K · 2,000 steps — historical | 77.58 | 68.11 | 66.50 | 57.58 |
 | V/O generator · 24K · 4,000 steps — historical | 79.11 | 69.83 | 67.92 | 56.49 |
-| Attention generator · 24K · 2,000 steps | **82.80** | **73.14** | **70.71** | **59.77** |
+| Attention generator · 24K · 2,000 steps | 82.80 | 73.14 | 70.71 | 59.77 |
 | Attention generator · 24K · 4,000 steps | 81.17 | 71.64 | 69.40 | 59.44 |
 | Attention generator · 24K · 6,000 steps | 81.89 | 71.81 | 69.41 | 59.16 |
+| DeepSeek EAGLE3 ttt7 — paired-suite baseline | 86.58 | 75.40 | 67.20 | 56.68 |
+| DeepSeek attention generator · 4K · 1,500 steps | **92.26** | **83.73** | **78.01** | **65.46** |
 
 The new attention rows come from [GEN-011](GEN-011-attention-24k-6k.md),
 three checkpoints × four Nemotron categories at C1. The
@@ -50,6 +52,12 @@ retains the historical Red Hat results and marks new out-of-distribution cells
 as unmeasured. No new HumanEval, math-reasoning or summarization results were
 supplied. Historical timing/precision/runtime equivalence is unverified, so the
 extended table is descriptive rather than a controlled speedup experiment.
+
+The subsequent paired baseline/generator rows come from [GEN-012](GEN-012-deepseek-generator-4k.md).
+They use a different frozen drafter from the earlier models; compare adaptation
+gains against their same-suite baseline. The historical earlier DeepSeek math/chat
+baseline is preserved separately in GEN-010. No new OOD cells have been supplied
+for the DeepSeek pair.
 
 Follow-up: [GEN-008](GEN-008-coefficient-sweep.md) archives the supplied fixed
 coefficient 0.5/4/8 results for the step-4000 generator, shared/merged execution,
