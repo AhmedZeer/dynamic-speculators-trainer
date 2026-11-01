@@ -5,10 +5,13 @@
 
 import json
 import random
+import re
 import shutil
 import tempfile
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
+from email.utils import parsedate_to_datetime
+from http import HTTPStatus
 from pathlib import Path
 
 import yaml
@@ -27,6 +30,62 @@ from speculators.bank.progress import report, stage_progress
 DOMAINS = ("chat", "math", "code", "stem")
 STATE_NDIM = 3
 HUB_COMMIT_ATTEMPTS = 8
+COMMIT_QUOTA_WAIT = 3600
+RETRY_WAIT_CHUNK = 30
+
+
+def hub_retry_delay(error, attempt):
+    """Honor API resets and the separate hourly repository-commit quota."""
+    status = getattr(error.response, "status_code", None)
+    if status in (409, 412):
+        return random.uniform(0.1, min(8, 0.25 * 2**attempt))
+    if status not in (429, 500, 502, 503, 504):
+        return None
+    delay = min(60, 2**attempt) if status != HTTPStatus.TOO_MANY_REQUESTS else 60
+    headers = error.response.headers
+    retry_after = headers.get("Retry-After")
+    if retry_after:
+        try:
+            delay = max(0, float(retry_after))
+        except ValueError:
+            with suppress(TypeError, ValueError, OverflowError):
+                delay = max(
+                    0, parsedate_to_datetime(retry_after).timestamp() - time.time()
+                )
+    if reset := re.search(r"(?:^|;)\s*t=(\d+)", headers.get("RateLimit", "")):
+        delay = max(delay, float(reset[1]))
+    message = str(error).lower()
+    if (
+        status == HTTPStatus.TOO_MANY_REQUESTS
+        and "commit creation" in message
+        and "per hour" in message
+    ):
+        # The generic API header can say 13s even when the independent commit
+        # quota needs an hour. Do not hammer create_commit using the short reset.
+        delay = max(delay, COMMIT_QUOTA_WAIT)
+    return delay
+
+
+def retry_hub_call(action):
+    for attempt in range(HUB_COMMIT_ATTEMPTS):
+        try:
+            return action()
+        except HfHubHTTPError as error:
+            delay = hub_retry_delay(error, attempt)
+            if delay is None or attempt == HUB_COMMIT_ATTEMPTS - 1:
+                raise
+            status = error.response.status_code
+            report(
+                f"Hub HTTP {status}; retaining local files and retrying in {delay:.1f}s"
+            )
+            remaining = delay
+            while remaining > 0:
+                pause = min(RETRY_WAIT_CHUNK, remaining)
+                time.sleep(pause)
+                remaining -= pause
+                if remaining > 0 and remaining % 60 < RETRY_WAIT_CHUNK:
+                    report(f"Waiting for Hub quota/reset: {remaining:.0f}s remaining")
+    raise AssertionError("unreachable")
 
 
 @contextmanager
@@ -75,43 +134,68 @@ class Publisher:
             else {}
         )
         self.api = api or HfApi()
+        self.remote_snapshots = {}
+        self.stage_provenance = {}
         for repo in (cfg.hub.trajectories_repo, cfg.hub.activations_repo):
-            self.api.create_repo(
-                repo, repo_type="dataset", private=False, exist_ok=True
+            retry_hub_call(
+                lambda repo=repo: self.api.create_repo(
+                    repo, repo_type="dataset", private=False, exist_ok=True
+                )
             )
-            if self.api.repo_info(repo, repo_type="dataset").private:
+            if retry_hub_call(
+                lambda repo=repo: self.api.repo_info(repo, repo_type="dataset")
+            ).private:
                 raise ValueError(f"Expected public dataset repository: {repo}")
 
     def put(self, repo, path, source):
         return self.put_many(repo, [(path, source)])[0]
 
     def put_many(self, repo, files):
-        """Retry competing HEAD updates, rechecking immutable paths on every attempt."""
+        """Retry throttling/conflicts and refresh remote state before each retry."""
         files = list(files)
-        for attempt in range(HUB_COMMIT_ATTEMPTS):
+
+        def attempt():
             try:
                 return self._put_many_once(repo, files)
-            except HfHubHTTPError as error:
-                status = getattr(error.response, "status_code", None)
-                if status not in (409, 412) or attempt == HUB_COMMIT_ATTEMPTS - 1:
-                    raise
-                report("Hub HEAD changed during upload; rechecking paths and retrying")
-                time.sleep(random.uniform(0.1, min(8, 0.25 * 2**attempt)))
-        raise AssertionError("unreachable")
+            except HfHubHTTPError:
+                self.remote_snapshots.pop(repo, None)
+                raise
+
+        return retry_hub_call(attempt)
+
+    def remote_snapshot(self, repo):
+        if repo not in self.remote_snapshots:
+            parent = self.api.repo_info(repo, repo_type="dataset").sha
+            paths = set(
+                self.api.list_repo_files(repo, repo_type="dataset", revision=parent)
+            )
+            self.remote_snapshots[repo] = parent, paths
+        return self.remote_snapshots[repo]
 
     def _put_many_once(self, repo, files):  # noqa: C901 -- immutable batch verification and commit
         """Publish related immutable objects and checksums in one atomic commit."""
         if not files:
             return []
-        parent = self.api.repo_info(repo, repo_type="dataset").sha
-        remote_paths = set(
-            self.api.list_repo_files(repo, repo_type="dataset", revision=parent)
-        )
+        # The durable journal already pins successful uploads to immutable
+        # commits. A same-content resume needs no HEAD lookup or tree listing.
+        known, verified = [], {}
+        for path, filename in files:
+            previous = self.journal.get(f"{repo}:{path}")
+            key = (path, str(filename))
+            if key not in verified:
+                verified[key] = file_digest(Path(filename))
+            checksum = verified[key]
+            if previous and previous["sha256"] != checksum:
+                raise ValueError(f"Immutable published object changed: {path}")
+            known.append(previous)
+        if all(known):
+            return list({r["path"]: r for r in known}.values())
+        parent, remote_paths = self.remote_snapshot(repo)
         references, operations = [], []
         checksums = {}
         for path, filename in files:
             source = Path(filename)
-            checksum = file_digest(source)
+            checksum = verified[path, str(filename)]
             if path in checksums:
                 if checksums[path] != checksum:
                     raise ValueError(f"Conflicting batch object: {path}")
@@ -175,6 +259,10 @@ class Publisher:
                     commit_message=f"Publish {len(operations) // 2} immutable objects",
                     operations=operations,
                 )
+            self.remote_snapshots[repo] = (
+                commit.oid,
+                remote_paths | {operation.path_in_repo for operation in operations},
+            )
             for reference in references:
                 reference["revision"] = commit.oid
         for reference in references:
@@ -204,6 +292,8 @@ def portable(manifest):
 def provenance(publisher, stage):
     from speculators.train.utils import save_train_command
 
+    if stage in publisher.stage_provenance:
+        return publisher.stage_provenance[stage]
     root = publisher.root / "provenance" / "hub" / stage
     # Keep each attempt; never replace earlier invocation provenance.
     attempt = root / f"attempt-{len(list(root.glob('attempt-*'))):05d}"
@@ -214,10 +304,16 @@ def provenance(publisher, stage):
             # Content-addressed paths permit additional server/resume attempts.
             path = f"provenance/{file_digest(file)}/{file.name}"
             files.append((path, file))
-    return publisher.put_many(publisher.cfg.hub.trajectories_repo, files)
+    references = publisher.put_many(publisher.cfg.hub.trajectories_repo, files)
+    publisher.stage_provenance[stage] = references
+    return references
 
 
 def stage_record(publisher, stage, manifest, artifacts):
+    return retry_hub_call(lambda: _stage_record(publisher, stage, manifest, artifacts))
+
+
+def _stage_record(publisher, stage, manifest, artifacts):
     path = f"{profile(publisher.cfg)}/{stage}.json"
     parent = publisher.api.repo_info(
         publisher.cfg.hub.trajectories_repo, repo_type="dataset"
@@ -517,8 +613,20 @@ def publish_data(cfg, publisher, manifest):
                 for i in subset[f"{split}_indices"]
             ]
             Dataset.from_list(rows).to_parquet(local)
-            files.append(publisher.put(cfg.hub.trajectories_repo, path, local))
-    stage_record(publisher, "data", manifest, files)
+            files.append((path, local))
+    artifacts = []
+    batch_size = cfg.hub.upload_max_files
+    for start in range(0, len(files), batch_size):
+        artifacts.extend(
+            publisher.put_many(
+                cfg.hub.trajectories_repo, files[start : start + batch_size]
+            )
+        )
+    stage_record(publisher, "data", manifest, artifacts)
+    retry_hub_call(lambda: publish_data_card(cfg, publisher))
+
+
+def publish_data_card(cfg, publisher):
     # Explicit configs prevent stage manifests from becoming dataset-viewer rows.
     parent = publisher.api.repo_info(cfg.hub.trajectories_repo, repo_type="dataset").sha
     paths = publisher.api.list_repo_files(
@@ -562,7 +670,7 @@ def publish_data(cfg, publisher, manifest):
     except EntryNotFoundError:
         previous = None
     if previous is None or Path(previous).read_text() != card:
-        publisher.api.create_commit(
+        commit = publisher.api.create_commit(
             cfg.hub.trajectories_repo,
             repo_type="dataset",
             parent_commit=parent,
@@ -572,6 +680,10 @@ def publish_data(cfg, publisher, manifest):
                     path_in_repo="README.md", path_or_fileobj=card.encode()
                 )
             ],
+        )
+        publisher.remote_snapshots[cfg.hub.trajectories_repo] = (
+            commit.oid,
+            set(paths) | {"README.md"},
         )
 
 

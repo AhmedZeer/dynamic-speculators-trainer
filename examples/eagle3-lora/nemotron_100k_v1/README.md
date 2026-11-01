@@ -130,6 +130,41 @@ and seals the shared `responses.json` stage. Missing chunks produce an error;
 rerun the appropriate worker, then finalize again. Do not publish the Parquets
 from a worker's incomplete local response file before finalization.
 
+## Resume publication after a Hub rate limit
+
+The `data` stage batches all 50 train/validation Parquets for a category into
+one immutable upload commit with their checksum sidecars (the configurable
+`hub.upload_max_files` can split larger batches). Across the four categories,
+this is **4 Parquet commits instead of 200**. Stage manifests, provenance and
+dataset-card updates add a few small commits. Existing per-file uploads from an
+interrupted older run are checksum-verified and reused in the new batch.
+
+After pulling the fix, resume only publication:
+
+```bash
+git pull
+bash examples/eagle3-lora/nemotron_100k_v1/run.sh data
+```
+
+This does not regenerate responses or require vLLM. Completed math publication
+and partial code publication are retained. Keep `publication.json` and the local
+outputs; the upload journal avoids HEAD/tree queries for verified completed
+objects. Fresh publishers restore/check existing remote checksum sidecars;
+subsequent writes reuse a cached repository snapshot, refreshed on conflicts.
+Provenance is collected once per stage invocation rather than twice.
+
+HTTP 429 and transient 5xx errors now wait and retry. API resets honor
+`Retry-After` and `RateLimit` headers. An explicit hourly repository-commit quota
+uses at least a one-hour cooldown, even when the generic API header advertises
+only a few seconds; it prints progress and preserves local work. This cannot
+remove an already exhausted server quota. Ctrl+C during the wait is safe; rerun
+the command later. Two-node commit conflicts still refresh HEAD and recheck
+immutable paths before retrying.
+
+Response generation retains its existing **1K-response upload cadence** for
+crash recovery. Finalization reuses those published chunks; it does not create
+another upload commit for each already acknowledged chunk.
+
 ## Publication cadence and performance
 
 `hub.response_chunk_size: 1000` publishes a response JSONL chunk to Hugging Face

@@ -54,6 +54,8 @@ class BankPublisher(Publisher):
             else {}
         )
         self.api = api or HfApi()
+        self.remote_snapshots = {}
+        self.stage_provenance = {}
         self.repo = cfg.hub.banks_repo
         if create:
             self.api.create_repo(

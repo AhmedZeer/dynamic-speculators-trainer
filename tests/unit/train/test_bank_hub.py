@@ -746,3 +746,158 @@ def test_publisher_retries_competing_head_and_checks_immutable_objects(
     source.write_text("different payload")
     with pytest.raises(ValueError, match="Immutable Hub object differs"):
         second.put(cfg.hub.trajectories_repo, "object.txt", source)
+
+
+def test_data_parquets_use_one_batch_and_reuse_partial_legacy_uploads(
+    preparation, monkeypatch
+):
+    cfg, remote, requests, _ = preparation
+    workflow.prepare(cfg, "select")
+    workflow.prepare(cfg, "responses")
+    manifest = json.loads((cfg.output_root / "manifest.json").read_text())
+    workflow.prepare_arrow(cfg, manifest)
+    original_commit = remote.create_commit
+    attempts = []
+
+    def fail_parquet_batch(repo, operations, **kwargs):
+        parquet = [
+            op.path_in_repo for op in operations if op.path_in_repo.endswith(".parquet")
+        ]
+        if parquet:
+            attempts.append(parquet)
+            if len(attempts) == 1:
+                # Simulate the old publisher having committed the first file
+                # before failing. Its paired checksum survives on the Hub.
+                first = parquet[0]
+                original_commit(
+                    repo,
+                    [
+                        op
+                        for op in operations
+                        if op.path_in_repo in (first, first + ".sha256.json")
+                    ],
+                    **kwargs,
+                )
+                raise OSError("interrupted after old-style file upload")
+        return original_commit(repo, operations, **kwargs)
+
+    monkeypatch.setattr(remote, "create_commit", fail_parquet_batch)
+    with pytest.raises(OSError, match="old-style"):
+        workflow.prepare(cfg, "data")
+    workflow.prepare(cfg, "data")
+    assert len(attempts) == 2
+    assert len(attempts[0]) == 4
+    assert len(attempts[1]) == 3  # The already-published file is verified/reused.
+    record = json.loads(
+        Path(
+            remote.download(cfg.hub.trajectories_repo, f"{hub.profile(cfg)}/data.json")
+        ).read_text()
+    )
+    assert len(record["artifacts"]) == 4
+    before = remote.commits
+    workflow.prepare(cfg, "data")
+    assert remote.commits == before
+    assert len(requests) == 6
+
+
+def test_journaled_object_needs_no_head_or_tree_requests(
+    preparation, tmp_path, monkeypatch
+):
+    cfg, remote, _, _ = preparation
+    publisher = hub.Publisher(cfg)
+    source = tmp_path / "payload.txt"
+    source.write_text("payload")
+    expected = publisher.put(cfg.hub.trajectories_repo, "payload.txt", source)
+    monkeypatch.setattr(
+        remote, "repo_info", lambda *a, **kw: pytest.fail("unneeded HEAD request")
+    )
+    monkeypatch.setattr(
+        remote, "list_repo_files", lambda *a, **kw: pytest.fail("unneeded tree request")
+    )
+    assert publisher.put(cfg.hub.trajectories_repo, "payload.txt", source) == expected
+
+
+def test_upload_snapshot_is_cached_across_distinct_files(
+    preparation, tmp_path, monkeypatch
+):
+    cfg, remote, _, _ = preparation
+    publisher = hub.Publisher(cfg)
+    original_info, original_list = remote.repo_info, remote.list_repo_files
+    calls = []
+    monkeypatch.setattr(
+        remote,
+        "repo_info",
+        lambda *a, **kw: calls.append("head") or original_info(*a, **kw),
+    )
+    monkeypatch.setattr(
+        remote,
+        "list_repo_files",
+        lambda *a, **kw: calls.append("tree") or original_list(*a, **kw),
+    )
+    for number in range(3):
+        file = tmp_path / f"file-{number}.txt"
+        file.write_text(str(number))
+        publisher.put(cfg.hub.trajectories_repo, file.name, file)
+    assert calls == ["head", "tree"]
+
+
+@pytest.mark.parametrize("hourly", [False, True])
+def test_429_waits_for_correct_limit_and_resumes_upload(
+    preparation, tmp_path, monkeypatch, hourly
+):
+    cfg, remote, _, _ = preparation
+    publisher = hub.Publisher(cfg)
+    source = tmp_path / "payload.txt"
+    source.write_text("durable")
+    original = remote.create_commit
+    calls, waits = [], []
+
+    def throttle_once(repo, operations, **kwargs):
+        calls.append(repo)
+        if len(calls) == 1:
+            response = httpx.Response(
+                429,
+                request=httpx.Request("POST", "https://huggingface.co"),
+                headers={"Retry-After": "13", "RateLimit": '"api";r=560;t=13'},
+            )
+            message = (
+                "exceeded repository commit creation (128 per hour)"
+                if hourly
+                else "API throttled"
+            )
+            raise HfHubHTTPError(message, response=response)
+        return original(repo, operations, **kwargs)
+
+    monkeypatch.setattr(remote, "create_commit", throttle_once)
+    monkeypatch.setattr(hub.time, "sleep", waits.append)
+    reference = publisher.put(cfg.hub.trajectories_repo, "payload.txt", source)
+    assert len(calls) == 2
+    assert sum(waits) == (3600 if hourly else 13)
+    assert max(waits) <= 30
+    assert reference["revision"] == remote.repo_info(cfg.hub.trajectories_repo).sha
+    assert publisher.put(cfg.hub.trajectories_repo, "payload.txt", source) == reference
+    assert len(calls) == 2
+
+
+def test_provenance_is_collected_only_once_per_stage(tmp_path, monkeypatch):
+    from speculators.train import utils  # noqa: PLC0415
+
+    remote = FakeHub(tmp_path / "remote")
+    cfg = BankConfig(output_root=tmp_path / "work", hub={})
+    cfg.output_root.mkdir()
+    monkeypatch.setattr(hub, "hf_hub_download", remote.download)
+    writes = []
+
+    def save_command(path):
+        writes.append(path)
+        folder = Path(path)
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "train_command.txt").write_text("same invocation")
+
+    monkeypatch.setattr(utils, "save_train_command", save_command)
+    publisher = hub.Publisher(cfg, api=remote)
+    first = hub.provenance(publisher, "data")
+    before = remote.commits
+    assert hub.provenance(publisher, "data") == first
+    assert len(writes) == 1
+    assert remote.commits == before
