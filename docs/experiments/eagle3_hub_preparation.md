@@ -4,8 +4,11 @@ This implementation covers selection, target response generation, portable
 trajectory publication, hidden-state extraction/publication, and restoration on
 another machine. It uses public dataset repositories under `azeeer`, with the
 existing preparation commands. The expanded ten-epoch collection schedule,
-LoRA-bank publication, append-selection migration, and joint generator training
+LoRA-bank publication and joint generator training
 are subsequent implementation phases; these commands do not launch them.
+
+For the append-preserving expansion to **100K training + 10K validation**
+examples, see [the Nemotron 100K runbook](../../examples/eagle3-lora/nemotron_100k_v1/README.md).
 
 ## Install on the GPU machine
 

@@ -238,7 +238,81 @@ def stage_record(publisher, stage, manifest, artifacts):
     )
 
 
-def select(cfg, publisher):
+def parent_inputs(cfg):
+    """Validate a pinned parent recipe before reusing its membership or responses."""
+
+    def read(path):
+        file = hf_hub_download(
+            cfg.hub.trajectories_repo,
+            path,
+            repo_type="dataset",
+            revision=cfg.hub.parent_revision,
+        )
+        return json.loads(Path(file).read_text())
+
+    catalog = read(f"selections/{cfg.hub.parent_selection}/catalog.json")
+    record = read(
+        f"releases/{cfg.hub.parent_release}/{cfg.dataset.category}/select.json"
+    )
+    spec = record["manifest"]["cache_spec"]
+    if catalog["revisions"] != record["manifest"]["revisions"]:
+        raise ValueError("Parent selection and release revisions differ")
+    if spec["responses"] != cfg.responses.model_dump():
+        raise ValueError("Parent response recipe differs")
+    for key in ("source", "configuration"):
+        if spec["dataset"][key] != getattr(cfg.dataset, key):
+            raise ValueError("Parent dataset differs")
+    for key in ("target", "drafter"):
+        if spec["models"][key] != getattr(cfg.models, key):
+            raise ValueError("Parent model differs")
+    for key in ("train_examples", "validation_examples", "seed"):
+        if spec["partition"][key] != getattr(cfg.partition, key):
+            raise ValueError(
+                "Expansion must preserve the parent train/validation split"
+            )
+    return catalog, spec
+
+
+def extend_selection(rows, cfg, old):
+    """Append disjoint source examples without moving any old train/validation row."""
+    from speculators.bank.selection import sample_rows
+
+    size = cfg.partition.train_examples + cfg.partition.validation_examples
+    ids = sorted({int(p["subset_id"].rsplit("-", 1)[1]) for p in old})
+    if (
+        ids != list(range(len(ids)))
+        or cfg.partition.subset_ids != list(range(len(cfg.partition.subset_ids)))
+        or len(cfg.partition.subset_ids) <= len(ids)
+        or len(old) != len(ids) * size
+    ):
+        raise ValueError(
+            "Expansion requires contiguous complete subsets and a larger target"
+        )
+    for offset, prompt in enumerate(old):
+        if prompt["subset_id"] != f"{cfg.dataset.category}-{offset // size:05d}":
+            raise ValueError("Parent prompt order does not match its subsets")
+    excluded = {source for p in old for source in p["source_ids"]}
+    new, stats = sample_rows(
+        rows,
+        cfg,
+        skip_unsupported=True,
+        needed=(len(cfg.partition.subset_ids) - len(ids)) * size,
+        excluded_ids=excluded,
+    )
+    for offset, prompt in enumerate(new):
+        subset = len(ids) + offset // size
+        prompt["subset_id"] = f"{cfg.dataset.category}-{subset:05d}"
+        prompt["role"] = (
+            "adaptation" if subset in cfg.hub.adaptation_subset_ids else "bank"
+        )
+    return old + new, {
+        **stats,
+        "reused_prompts": len(old),
+        "appended_prompts": len(new),
+    }
+
+
+def select(cfg, publisher):  # noqa: C901 -- frozen selection with optional parent migration
     """Freeze all configured domains once; per-domain preparation uses that registry."""
     from datasets import load_dataset
 
@@ -258,6 +332,12 @@ def select(cfg, publisher):
         "domains": cfg.hub.domains,
         "reserved": cfg.hub.adaptation_subset_ids,
     }
+    if cfg.hub.parent_selection:
+        settings["parent"] = {
+            "selection": cfg.hub.parent_selection,
+            "release": cfg.hub.parent_release,
+            "revision": cfg.hub.parent_revision,
+        }
     identity = digest({"selection_policy": SELECTION_POLICY, **settings})
     # A sampler change only affects new selections. Older frozen catalogs have
     # the same configuration identity without a policy field; reuse their rows.
@@ -292,12 +372,21 @@ def select(cfg, publisher):
                     cfg.dataset.source, revision=cfg.dataset.revision
                 ).sha,
             }
+            parent_catalog = None
+            if cfg.hub.parent_selection:
+                parent_catalog, _ = parent_inputs(cfg)
+                if revisions != parent_catalog["revisions"]:
+                    raise ValueError(
+                        "Expansion must use the pinned parent model/source revisions"
+                    )
             catalog = {
                 "version": 1,
                 "identity": identity,
                 "revisions": revisions,
                 "domains": {},
             }
+            if parent_catalog is not None:
+                catalog["parent"] = settings["parent"]
             for domain in DOMAINS:
                 if domain not in cfg.hub.domains:
                     continue
@@ -314,10 +403,17 @@ def select(cfg, publisher):
                     revision=revisions["dataset_sha"],
                     streaming=True,
                 )
-                selected, _, stats = partition_rows(
-                    rows, domain_cfg, skip_unsupported=True
-                )
+                if parent_catalog is not None:
+                    selected, stats = extend_selection(
+                        rows, domain_cfg, parent_catalog["domains"][domain]["prompts"]
+                    )
+                else:
+                    selected, _, stats = partition_rows(
+                        rows, domain_cfg, skip_unsupported=True
+                    )
                 for value in selected:
+                    if parent_catalog is not None and "role" in value:
+                        continue
                     subset = int(value["subset_id"].rsplit("-", 1)[1])
                     value["role"] = (
                         "adaptation"
@@ -462,6 +558,35 @@ def publish_data(cfg, publisher, manifest):
         )
 
 
+def inherit_responses(cfg, publisher, expected, saved):
+    """Recover immutable parent response chunks without generating them again."""
+    parent_catalog, _ = parent_inputs(cfg)
+    inherited = {
+        p["id"] for p in parent_catalog["domains"][cfg.dataset.category]["prompts"]
+    }
+    for path in publisher.api.list_repo_files(
+        cfg.hub.trajectories_repo,
+        repo_type="dataset",
+        revision=cfg.hub.parent_revision,
+    ):
+        prefix = f"releases/{cfg.hub.parent_release}/{cfg.dataset.category}/responses/"
+        if not path.startswith(prefix) or not path.endswith(".jsonl"):
+            continue
+        remote = hf_hub_download(
+            cfg.hub.trajectories_repo,
+            path,
+            repo_type="dataset",
+            revision=cfg.hub.parent_revision,
+        )
+        for row in read_jsonl(Path(remote)):
+            primary = row["primary_id"]
+            if primary not in inherited or primary not in expected:
+                raise ValueError("Parent response is outside the inherited selection")
+            if primary in saved and saved[primary] != row:
+                raise ValueError("Parent response differs from saved response")
+            saved[primary] = row
+
+
 def responses(cfg, publisher, manifest):
     from speculators.bank.workflow import regenerate
     from speculators.data_generation.pipeline import repair_responses
@@ -487,6 +612,8 @@ def responses(cfg, publisher, manifest):
                         "Published response chunk differs from local responses"
                     )
                 saved[primary] = row
+    if cfg.hub.parent_release:
+        inherit_responses(cfg, publisher, expected, saved)
     response_file.write_text(
         "".join(json.dumps(saved[p["id"]]) + "\n" for p in prompts if p["id"] in saved)
     )

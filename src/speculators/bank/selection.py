@@ -8,16 +8,23 @@ from speculators.bank.progress import report
 SELECTION_POLICY = "source-rows-v2"
 
 
-def sample_rows(rows, cfg, *, skip_unsupported=False):
+def sample_rows(  # noqa: C901 -- bounded reservoir with optional parent exclusions
+    rows, cfg, *, skip_unsupported=False, needed=None, excluded_ids=()
+):
     from speculators.bank.workflow import prompt_messages  # noqa: PLC0415
 
     size = cfg.partition.train_examples + cfg.partition.validation_examples
-    needed = (max(cfg.partition.subset_ids) + 1) * size
+    if needed is None:
+        needed = (max(cfg.partition.subset_ids) + 1) * size
+    excluded_ids = set(excluded_ids)
     rng = random.Random(cfg.partition.seed)
     sampled, valid, unsupported = [], 0, 0
     for index, row in enumerate(rows):
         if cfg.dataset.sample_limit is not None and index >= cfg.dataset.sample_limit:
             break
+        source_id = str(row.get("uuid") or row.get("id") or f"row-{index}")
+        if source_id in excluded_ids:
+            continue
         try:
             messages = prompt_messages(row)
         except ValueError:
@@ -30,7 +37,6 @@ def sample_rows(rows, cfg, *, skip_unsupported=False):
         # retaining the entire source, hashing every prompt, or an SQL registry.
         position = valid - 1 if valid <= needed else rng.randrange(valid)
         if position < needed:
-            source_id = str(row.get("uuid") or row.get("id") or f"row-{index}")
             value = {
                 "messages": messages,
                 "source_ids": [source_id],

@@ -11,6 +11,7 @@ import torch
 import yaml
 from datasets import load_from_disk
 from huggingface_hub.errors import EntryNotFoundError
+from pydantic import ValidationError
 from safetensors.torch import save_file
 
 from speculators.bank import hub, workflow
@@ -574,3 +575,67 @@ def test_interrupted_hidden_upload_retains_payloads_and_recovers_remote_rows(
         )
         == 6
     )
+
+
+def test_append_selection_preserves_splits_reuses_responses_and_resumes(
+    preparation, tmp_path
+):
+    cfg, remote, requests, _ = preparation
+    original = workflow.prepare(cfg, "select")
+    workflow.prepare(cfg, "responses")
+    old_prompts = read_jsonl(cfg.output_root / "prompts.jsonl")
+    assert len(requests) == 6
+    revision = remote.repo_info(cfg.hub.trajectories_repo).sha
+    expanded = cfg.model_copy(deep=True)
+    expanded.output_root = tmp_path / "expanded"
+    expanded.partition.subset_ids = [0, 1, 2]
+    expanded.hub.selection = "expanded"
+    expanded.hub.release = "expanded"
+    expanded.hub.selection_root = tmp_path / "expanded-selection"
+    expanded.hub.parent_selection = cfg.hub.selection
+    expanded.hub.parent_release = cfg.hub.release
+    expanded.hub.parent_revision = revision
+    manifest = workflow.prepare(expanded, "select")
+    prompts = read_jsonl(expanded.output_root / "prompts.jsonl")
+    assert prompts[:6] == old_prompts
+    assert manifest["subsets"][:2] == original["subsets"]
+    assert len(prompts) == 9
+    inherited = {s for p in old_prompts for s in p["source_ids"]}
+    assert not inherited.intersection(s for p in prompts[6:] for s in p["source_ids"])
+    remote.fail = "/responses/"
+    with pytest.raises(OSError, match="interrupted"):
+        workflow.prepare(expanded, "responses")
+    workflow.prepare(expanded, "responses")
+    assert len(requests) == 9  # Six inherited responses never hit the target again.
+    assert len(read_jsonl(expanded.output_root / "responses.jsonl")) == 9
+    workflow.prepare(expanded, "responses")
+    assert len(requests) == 9
+    changed = expanded.model_copy(deep=True)
+    changed.responses.temperature = 0.5
+    with pytest.raises(ValueError, match="recipe differs"):
+        hub.parent_inputs(changed)
+    changed = expanded.model_copy(deep=True)
+    changed.partition.validation_examples = 2
+    with pytest.raises(ValueError, match="train/validation split"):
+        hub.parent_inputs(changed)
+
+
+def test_parent_expansion_config_requires_pinned_distinct_parent():
+    with pytest.raises(ValidationError, match="required together"):
+        BankConfig(hub={"parent_selection": "s0001"})
+    with pytest.raises(ValidationError, match="complete Hub commit"):
+        BankConfig(
+            hub={
+                "parent_selection": "old",
+                "parent_release": "old",
+                "parent_revision": "main",
+            }
+        )
+    with pytest.raises(ValidationError, match="new selection and release"):
+        BankConfig(
+            hub={
+                "parent_selection": "s0001",
+                "parent_release": "r0001",
+                "parent_revision": "a" * 40,
+            }
+        )

@@ -126,6 +126,9 @@ class HubArtifacts(Settings):
     activations_repo: str = "azeeer/eagle3-qwen3-8b-activations-v1"
     release: str = "r0001"
     selection: str = "s0001"
+    parent_selection: str | None = None
+    parent_release: str | None = None
+    parent_revision: str | None = None
     trajectories_revision: str = "main"
     selection_root: Path = Path("output/eagle3-selection")
     domains: list[Literal["chat", "math", "code", "stem"]] = Field(
@@ -158,7 +161,22 @@ class HubArtifacts(Settings):
             r"[0-9a-f]{40}", self.trajectories_revision
         ):
             raise ValueError("Consumer revision must be a complete Hub commit SHA")
-        for name in (self.release, self.selection, self.bank_release):
+        parent = (self.parent_selection, self.parent_release, self.parent_revision)
+        if any(parent) and not all(parent):
+            raise ValueError(
+                "Parent selection, release, and pinned revision are required together"
+            )
+        if self.parent_revision and not re.fullmatch(
+            r"[0-9a-f]{40}", self.parent_revision
+        ):
+            raise ValueError("Parent revision must be a complete Hub commit SHA")
+        if (
+            self.parent_selection == self.selection
+            or self.parent_release == self.release
+        ):
+            raise ValueError("Expansion requires a new selection and release")
+        names = (self.release, self.selection, self.bank_release, *parent[:2])
+        for name in (name for name in names if name is not None):
             if not name or any(
                 c not in "abcdefghijklmnopqrstuvwxyz0123456789-_" for c in name
             ):
