@@ -100,6 +100,23 @@ def configure_pilot(template, pilot):
         )
 
 
+def resource_change_matches(state, training_template, recipe, launch):
+    """Allow only cache/queue sizing to change in an already-prepared run."""
+    path = launch / "train.yaml"
+    if not path.is_file():
+        return False
+    saved = yaml.safe_load(path.read_text())
+    candidate = {**training_template, "online": dict(training_template["online"])}
+    for key in ("ram_cache_gib", "concurrency", "buffered_examples"):
+        if key not in saved.get("online", {}):
+            return False
+        candidate["online"][key] = saved["online"][key]
+    signature = hashlib.sha256(
+        json.dumps({"training": candidate, "recipe": recipe}, sort_keys=True).encode()
+    ).hexdigest()
+    return signature == state.get("training_signature")
+
+
 def prepare(args):
     """Resolve moving refs once, then reuse the same revision on every resume."""
     template = yaml.safe_load((EXAMPLE / "train.yaml").read_text())
@@ -138,7 +155,11 @@ def prepare(args):
             raise ValueError(
                 "Pilot and full training require separate --output-root directories"
             )
-        signature_matches = state.get("training_signature") == training_signature
+        signature_matches = state.get(
+            "training_signature"
+        ) == training_signature or resource_change_matches(
+            state, training_template, recipe, launch
+        )
         legacy_matches = state["template_sha256"] in (recipe_hash, legacy_hash)
         if (not signature_matches and not legacy_matches) or state[
             "hub_repo"
@@ -415,7 +436,7 @@ def main():
         help="Resolved once; resume reuses saved SHA",
     )
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--gpu-memory-utilization", type=float, default=0.35)
+    parser.add_argument("--gpu-memory-utilization", type=float, default=0.40)
     parser.add_argument("--max-num-seqs", type=int, default=128)
     parser.add_argument("--startup-timeout", type=float, default=1200)
     parser.add_argument("--prepare-only", action="store_true")

@@ -91,6 +91,14 @@ def test_prepare_pins_release_on_resume_and_matches_reference(tmp_path, monkeypa
     assert loaded.target_modules == reference.target_modules
     assert loaded.context == reference.context
     assert loaded.optimization.loss_fn == reference.optimization.loss_fn
+    for key in (
+        "ram_cache_gib",
+        "concurrency",
+        "buffered_examples",
+        "lookahead_updates",
+        "reserve_gib",
+    ):
+        assert getattr(loaded.online, key) == getattr(reference.online, key)
     server, train = launch.commands(request, cfg, path, provenance)
     assert server[server.index("--gpu-memory-utilization") + 1] == "0.4"
     assert (
@@ -289,7 +297,7 @@ def test_cli_pilot_defaults_are_separate(tmp_path, monkeypatch, pilot):
     monkeypatch.setattr(launch.signal, "signal", lambda *a: None)
     assert launch.main() == 0
     request = captured[0]
-    assert request.gpu_memory_utilization == 0.35
+    assert request.gpu_memory_utilization == 0.40
     assert request.max_num_seqs == 128
     assert request.output_root.name.endswith("-pilot") == pilot
     assert request.hub_repo.endswith("-pilot") == pilot
@@ -306,3 +314,25 @@ def test_gpu_headroom_options_are_forwarded(tmp_path):
     assert server[server.index("--max-num-seqs") + 1] == "64"
     assert server[server.index("--gpu-memory-utilization") + 1] == "0.35"
     assert server[server.index("--max-num-batched-tokens") + 1] == "8193"
+
+
+def test_prepared_run_accepts_only_resource_sizing_changes(tmp_path):
+    import hashlib  # noqa: PLC0415
+
+    template = yaml.safe_load((launch.EXAMPLE / "train.yaml").read_text())
+    recipe = yaml.safe_load((launch.EXAMPLE / "training_recipe.yaml").read_text())
+    template.pop("validation_examples_per_category")
+    previous = {**template, "online": dict(template["online"])}
+    previous["online"].update(ram_cache_gib=96, concurrency=512, buffered_examples=1024)
+    state = {
+        "training_signature": hashlib.sha256(
+            json.dumps(
+                {"training": previous, "recipe": recipe}, sort_keys=True
+            ).encode()
+        ).hexdigest()
+    }
+    (tmp_path / "train.yaml").write_text(yaml.safe_dump(previous))
+    assert launch.resource_change_matches(state, template, recipe, tmp_path)
+    assert template["online"]["concurrency"] == 128
+    changed = {**template, "optimization": {**template["optimization"], "lr": 0.5}}
+    assert not launch.resource_change_matches(state, changed, recipe, tmp_path)
