@@ -1,0 +1,171 @@
+{
+  "metric": "draft_acceptance_rate",
+  "definition": "num_accepted_tokens / num_draft_tokens",
+  "display": "100 * ratio, rounded to 2 decimal places",
+  "categories": [
+    "nemotron/nemo-math",
+    "nemotron/nemo-code",
+    "nemotron/nemo-stem",
+    "nemotron/nemo-chat",
+    "specbench/specbench-humaneval",
+    "specbench/specbench-math-reasoning",
+    "specbench/specbench-summarization"
+  ],
+  "rows": [
+    {
+      "model": "EAGLE3 base \u2014 historical",
+      "draft_acceptance_rate": {
+        "nemotron/nemo-math": null,
+        "nemotron/nemo-code": null,
+        "nemotron/nemo-stem": null,
+        "nemotron/nemo-chat": null,
+        "specbench/specbench-humaneval": null,
+        "specbench/specbench-math-reasoning": null,
+        "specbench/specbench-summarization": null
+      },
+      "source": "2026-10-22-comparison-v2/metrics.json",
+      "availability": "Matching historical archive supplies throughput only"
+    },
+    {
+      "model": "Trained V/O LoRA \u2014 historical",
+      "draft_acceptance_rate": {
+        "nemotron/nemo-math": null,
+        "nemotron/nemo-code": null,
+        "nemotron/nemo-stem": null,
+        "nemotron/nemo-chat": null,
+        "specbench/specbench-humaneval": null,
+        "specbench/specbench-math-reasoning": null,
+        "specbench/specbench-summarization": null
+      },
+      "source": "2026-10-22-comparison-v2/metrics.json",
+      "availability": "Matching historical archive supplies throughput only"
+    },
+    {
+      "model": "V/O generator, 24K / 2,000 \u2014 historical",
+      "draft_acceptance_rate": {
+        "nemotron/nemo-math": null,
+        "nemotron/nemo-code": null,
+        "nemotron/nemo-stem": null,
+        "nemotron/nemo-chat": null,
+        "specbench/specbench-humaneval": null,
+        "specbench/specbench-math-reasoning": null,
+        "specbench/specbench-summarization": null
+      },
+      "source": "2026-10-22-comparison-v2/metrics.json",
+      "availability": "Matching historical archive supplies throughput only"
+    },
+    {
+      "model": "V/O generator, 24K / 4,000 \u2014 historical",
+      "draft_acceptance_rate": {
+        "nemotron/nemo-math": null,
+        "nemotron/nemo-code": null,
+        "nemotron/nemo-stem": null,
+        "nemotron/nemo-chat": null,
+        "specbench/specbench-humaneval": null,
+        "specbench/specbench-math-reasoning": null,
+        "specbench/specbench-summarization": null
+      },
+      "source": "2026-10-22-comparison-v2/metrics.json",
+      "availability": "Matching historical archive supplies throughput only"
+    },
+    {
+      "model": "Attention generator, 24K / 2,000",
+      "source_model": "generator-attention-24k-step2000",
+      "draft_acceptance_rate": {
+        "nemotron/nemo-math": 0.6684634012967737,
+        "nemotron/nemo-code": 0.5526479750778817,
+        "nemotron/nemo-stem": 0.5197298020331729,
+        "nemotron/nemo-chat": 0.3960768773528829,
+        "specbench/specbench-humaneval": 0.5499931043993932,
+        "specbench/specbench-math-reasoning": 0.5277161862527716,
+        "specbench/specbench-summarization": 0.41434332807294405
+      },
+      "source": "2026-10-31-attention-24k-6k-c1/summary_with_ood.json"
+    },
+    {
+      "model": "Attention generator, 24K / 4,000",
+      "source_model": "generator-attention-24k-step4000",
+      "draft_acceptance_rate": {
+        "nemotron/nemo-math": 0.679295919172784,
+        "nemotron/nemo-code": 0.5574580636180135,
+        "nemotron/nemo-stem": 0.5249057619816909,
+        "nemotron/nemo-chat": 0.4045281506712082,
+        "specbench/specbench-humaneval": 0.5520746887966805,
+        "specbench/specbench-math-reasoning": 0.5306618093503339,
+        "specbench/specbench-summarization": 0.4121657052962769
+      },
+      "source": "2026-10-31-attention-24k-6k-c1/summary_with_ood.json"
+    },
+    {
+      "model": "Attention generator, 24K / 6,000",
+      "source_model": "generator-attention-24k-step6000",
+      "draft_acceptance_rate": {
+        "nemotron/nemo-math": 0.6884057971014492,
+        "nemotron/nemo-code": 0.5587148930239041,
+        "nemotron/nemo-stem": 0.5244247073072265,
+        "nemotron/nemo-chat": 0.4088709677419355,
+        "specbench/specbench-humaneval": 0.5485537190082644,
+        "specbench/specbench-math-reasoning": 0.5299231702385766,
+        "specbench/specbench-summarization": 0.4106052677481249
+      },
+      "source": "2026-10-31-attention-24k-6k-c1/summary_with_ood.json"
+    },
+    {
+      "model": "DeepSeek EAGLE3 ttt7 \u2014 paired baseline",
+      "source_model": "deepseek-eagle3-qwen3-8b-ttt7",
+      "draft_acceptance_rate": {
+        "nemotron/nemo-math": 0.7403870319175673,
+        "nemotron/nemo-code": 0.6069750367107195,
+        "nemotron/nemo-stem": 0.4992818905862384,
+        "nemotron/nemo-chat": 0.3713282247765006,
+        "specbench/specbench-humaneval": 0.4136018680677175,
+        "specbench/specbench-math-reasoning": 0.5676093991839032,
+        "specbench/specbench-summarization": 0.39981659789087576
+      },
+      "source": "2026-10-31-deepseek-generator-4k-c1/summary_with_ood.json"
+    },
+    {
+      "model": "DeepSeek attention generator, 4K / 1,500",
+      "source_model": "generator-deepseek-ttt7-attention-4k-1500",
+      "draft_acceptance_rate": {
+        "nemotron/nemo-math": 0.8174474959612278,
+        "nemotron/nemo-code": 0.7064555420219245,
+        "nemotron/nemo-stem": 0.6284981519197406,
+        "nemotron/nemo-chat": 0.4780276308054086,
+        "specbench/specbench-humaneval": 0.4496209342137442,
+        "specbench/specbench-math-reasoning": 0.6392049764830829,
+        "specbench/specbench-summarization": 0.46407428179722066
+      },
+      "source": "2026-10-31-deepseek-generator-4k-c1/summary_with_ood.json"
+    },
+    {
+      "model": "Attention generator, 100K / 1,000",
+      "source_model": "generator-attention-100k-step1000",
+      "draft_acceptance_rate": {
+        "nemotron/nemo-math": 0.6514557885841592,
+        "nemotron/nemo-code": 0.5408469945355191,
+        "nemotron/nemo-stem": 0.5167633140038659,
+        "nemotron/nemo-chat": 0.3972883597883598,
+        "specbench/specbench-humaneval": 0.5446569333059155,
+        "specbench/specbench-math-reasoning": 0.5268882175226586,
+        "specbench/specbench-summarization": 0.415247791235153
+      },
+      "source": "2026-11-01-attention-100k-2k-c1/summary.json"
+    },
+    {
+      "model": "Attention generator, 100K / 2,000",
+      "source_model": "generator-attention-100k-step2000",
+      "draft_acceptance_rate": {
+        "nemotron/nemo-math": 0.6742888574571743,
+        "nemotron/nemo-code": 0.5509710415370793,
+        "nemotron/nemo-stem": 0.5199089874857793,
+        "nemotron/nemo-chat": 0.40255846492104735,
+        "specbench/specbench-humaneval": 0.5508837337752002,
+        "specbench/specbench-math-reasoning": 0.5287031428763712,
+        "specbench/specbench-summarization": 0.4175030815284381
+      },
+      "source": "2026-11-01-attention-100k-2k-c1/summary.json"
+    }
+  ],
+  "correctness_status": "not_checked"
+}

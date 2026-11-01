@@ -11,6 +11,7 @@ executed GPU benchmarks.
 - [Validated counters and comparisons](benchmarks/2026-11-01-attention-100k-2k-c1/analysis.json)
 - [Available/missing provenance](benchmarks/2026-11-01-attention-100k-2k-c1/provenance.json)
 - [Extended seven-category historical table](benchmarks/2026-10-31-attention-24k-6k-c1/extended_historical_table.md)
+- [Matching draft acceptance-rate table](benchmarks/2026-10-31-attention-24k-6k-c1/extended_acceptance_table.md)
 
 Suite identity: `2a70c89bad91a8e365577b5b0f1b383eb12532b51ccc19ba78c370bf0e8c6e2a`.
 The [archived benchmark config](benchmarks/2026-11-01-attention-100k-2k-c1/benchmark_config.yaml)

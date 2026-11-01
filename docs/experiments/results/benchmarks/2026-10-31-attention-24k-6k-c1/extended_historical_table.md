@@ -7,6 +7,8 @@ the supplied 100K attention checkpoints.
 New measurements use concurrency 1. Separate runs retain
 hardware/runtime/precision and repeatability limitations.
 
+See the companion [draft acceptance-rate table](extended_acceptance_table.md).
+
 | Model | Nemo math | Nemo code | Nemo STEM | Nemo chat | HumanEval | Math reasoning | Summarization |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | EAGLE3 base — historical | 64.34 | 60.93 | 59.28 | 54.97 | 68.32 | 66.55 | 58.29 |
