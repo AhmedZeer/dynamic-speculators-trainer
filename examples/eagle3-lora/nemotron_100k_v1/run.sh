@@ -16,7 +16,7 @@ case "${1:-}" in
       --served-model-name Qwen/Qwen3-8B \
       --host 127.0.0.1 --port 8000 \
       --dtype bfloat16 --max-model-len 8192 \
-      --gpu-memory-utilization 0.90 \
+      --gpu-memory-utilization 0.95 \
       --max-num-seqs 256 --max-num-batched-tokens 524288
     ;;
   responses)
