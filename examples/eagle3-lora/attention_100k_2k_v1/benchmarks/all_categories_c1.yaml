@@ -1,0 +1,44 @@
+# Published step-1000/2000 bundles, pinned together; 7 categories x 2 checkpoints.
+# Serving/workload settings match the 24K attention and full comparison suites.
+models:
+- name: generator-attention-100k-step1000
+  type: generator
+  model: azeeer/eagle3-generator-attention-100k-2k-v1
+  revision: cf09002ae6fbca1fe0e9139ab8a0eee3b149a124
+  subfolder: step-00001000
+  adapter_policy: shared
+  conditioning_examples: 1
+- name: generator-attention-100k-step2000
+  type: generator
+  model: azeeer/eagle3-generator-attention-100k-2k-v1
+  revision: cf09002ae6fbca1fe0e9139ab8a0eee3b149a124
+  subfolder: step-00002000
+  adapter_policy: shared
+  conditioning_examples: 1
+benchmarks:
+- dataset: nemotron
+  categories:
+  - math
+  - chat
+  - stem
+  - code
+- dataset: RedHatAI/speculator_benchmarks
+  categories:
+  - HumanEval
+  - math_reasoning
+  - summarization
+settings:
+  batching_policy: fixed_shared_adapter
+  concurrency: 1
+  max_samples: 50
+  max_tokens: 256
+  speculative_tokens: 3
+  warmups: 3
+  seed: 42
+  gpu: 0
+  continue_on_error: false
+wandb:
+  enabled: true
+  project: eagle3-generator-structure-bench-v1
+  group: attention-100k-2k-v1-all-categories-c1
+  mode: online

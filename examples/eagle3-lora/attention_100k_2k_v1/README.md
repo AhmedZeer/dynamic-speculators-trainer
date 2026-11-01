@@ -174,3 +174,36 @@ CUDA_VISIBLE_DEVICES=0 bash examples/eagle3-lora/attention_100k_2k_v1/run.sh
 Stop any old server through its original session before restarting. This
 launcher owns one extractor and one trainer; using a different port does not
 isolate GPU memory from other jobs on the same card.
+
+## Benchmark step 1,000 and step 2,000 across all categories
+
+Both published checkpoints in `azeeer/eagle3-generator-attention-100k-2k-v1`
+are pinned at revision `cf09002ae6fbca1fe0e9139ab8a0eee3b149a124`, subfolders
+`step-00001000` and `step-00002000`. Both inference bundles were verified present.
+The suite uses these exact folders; it does not substitute another training step.
+
+Stop the training extractor first. The suite starts and cleans up its own servers:
+
+```bash
+speculators benchmark suite \
+  --config examples/eagle3-lora/attention_100k_2k_v1/benchmarks/all_categories_c1.yaml \
+  --output-root /content/drive/MyDrive/dyn-spec-bench-v1/suites/attention-100k-2k-v1-all-categories-c1 \
+  --resume
+```
+
+There are **14 measurements**: two checkpoints across Nemotron math, chat, STEM,
+and code, plus Red Hat OOD HumanEval, math reasoning, and summarization.
+Settings match the full historical comparison suites: concurrency **1**, 50
+prompts/category, 256 output tokens, three draft tokens, three warmups, seed 42,
+shared/merged adapters, one conditioning example, fixed shared-adapter batching.
+The W&B project is `eagle3-generator-structure-bench-v1`, group
+`attention-100k-2k-v1-all-categories-c1`.
+
+Rerun the same command/output root with `--resume` after interruptions. Add
+`--dry-run` to validate the suite without model downloads or GPU serving.
+`summary.md` provides output tokens/s; `summary.json` also retains acceptance,
+generator/merge/restore timings, workload hashes, provenance references, and
+correctness status for extending the full seven-category table. Compare workload
+hashes and preserve correctness/repeatability limitations when adding results.
+Configuration/dry-run validation was performed locally; GPU benchmark results
+have not been measured here.
