@@ -79,6 +79,7 @@ class CampaignConfig(ExperimentConfig):
     expected_train_examples: int = Field(default=1000, ge=8)
     expected_validation_examples: int = Field(default=100, ge=4)
     validation_examples_per_category: int | None = Field(default=None, ge=1)
+    training_examples_per_category: int | None = Field(default=None, ge=1)
     condition: str = "last"
     context: Context = Field(default_factory=lambda: Context(evaluation_sizes=[4]))
     optimization: Optimization = Field(

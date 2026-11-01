@@ -1,4 +1,4 @@
-"""Deterministic category/subset-balanced views of existing held-out trajectories."""
+"""Deterministic category/subset-balanced views of saved trajectory splits."""
 
 import copy
 import random
@@ -7,18 +7,26 @@ from dataclasses import replace
 from speculators.generator.campaign_config import DOMAINS
 
 
-def validation_view(cfg, inputs):  # noqa: C901 -- bounded stratified sampling across held-out subsets
+def validation_view(cfg, inputs):
     """Keep training intact; equally allocate each category's validation quota."""
-    quota = cfg.validation_examples_per_category
+    return split_view(cfg, inputs, "validation", cfg.validation_examples_per_category)
+
+
+def training_view(cfg, inputs):
+    """Restrict pilot training to a balanced subset of the original training split."""
+    return split_view(cfg, inputs, "train", cfg.training_examples_per_category)
+
+
+def split_view(cfg, inputs, split, quota):  # noqa: C901 -- bounded stratified sampling
     if quota is None:
         return inputs
     subsets = copy.deepcopy(inputs.subsets)
     for domain_index, domain in enumerate(DOMAINS):
         names = sorted(name for name in subsets if name.startswith(domain + "-"))
-        available = sum(len(subsets[name]["validation_indices"]) for name in names)
+        available = sum(len(subsets[name][f"{split}_indices"]) for name in names)
         if available < quota or not names:
             raise ValueError(
-                f"Only {available} validation examples available for {domain}; "
+                f"Only {available} {split} examples available for {domain}; "
                 f"need {quota}"
             )
         rng = random.Random(cfg.seed + domain_index * 1009)
@@ -28,7 +36,7 @@ def validation_view(cfg, inputs):  # noqa: C901 -- bounded stratified sampling a
         remaining = quota
         while remaining:
             for name in order:
-                if allocation[name] < len(subsets[name]["validation_indices"]):
+                if allocation[name] < len(subsets[name][f"{split}_indices"]):
                     allocation[name] += 1
                     remaining -= 1
                     if not remaining:
@@ -36,19 +44,19 @@ def validation_view(cfg, inputs):  # noqa: C901 -- bounded stratified sampling a
         for name in names:
             subset = subsets[name]
             positions = sorted(
-                rng.sample(range(len(subset["validation_indices"])), allocation[name])
+                rng.sample(range(len(subset[f"{split}_indices"])), allocation[name])
             )
-            for key in ("validation_indices", "validation_ids"):
+            for key in (f"{split}_indices", f"{split}_ids"):
                 if key in subset:
                     subset[key] = [subset[key][position] for position in positions]
     identity = {
         **inputs.identity,
-        "validation_selection": {
+        f"{'training' if split == 'train' else 'validation'}_selection": {
             "policy": "balanced-category-subsets-v1",
             "seed": cfg.seed,
             "examples_per_category": quota,
             "indices": {
-                name: subset["validation_indices"] for name, subset in subsets.items()
+                name: subset[f"{split}_indices"] for name, subset in subsets.items()
             },
         },
     }

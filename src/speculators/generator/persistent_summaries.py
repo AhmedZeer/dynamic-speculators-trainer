@@ -24,10 +24,9 @@ class PersistentSummaries:
             "dtype": bank.hidden_states.dtype,
             "condition": "last",
         }
-        if "validation_selection" in inputs.identity:
-            self.identity["validation_selection"] = inputs.identity[
-                "validation_selection"
-            ]
+        for key in ("validation_selection", "training_selection"):
+            if key in inputs.identity:
+                self.identity[key] = inputs.identity[key]
         self.root = cfg.online.summary_cache_dir / digest(self.identity)
         self.root.mkdir(parents=True, exist_ok=True)
         write_json(self.root / "identity.json", self.identity)

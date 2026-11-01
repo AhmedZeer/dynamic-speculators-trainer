@@ -357,3 +357,74 @@ def test_full_data_validation_cap_reaches_runtime_without_changing_training(
     assert all(row["validation_examples"] == 24 for row in result["history"])
     # Summary preparation uses only selected validation rows, plus all training rows.
     assert result["preparation"]["generated_examples"] == 192 + 24
+
+
+def test_pilot_training_view_reaches_runtime_and_saves_tenth_step(
+    online_campaign,  # noqa: F811
+    tmp_path,
+    monkeypatch,
+):
+
+    cfg, _, _ = online_campaign
+    cfg.training_examples_per_category = 12  # Two train rows per tiny subset.
+    cfg.validation_examples_per_category = 6
+    cfg.optimization.pretraining_validation_interval = 10
+    cfg.optimization.checkpoint_interval = 10
+    cfg.optimization.warmup_updates = 1
+    plan = epoch_training.train_full_data(
+        cfg,
+        tmp_path / "pilot",
+        "example/pilot",
+        tmp_path / "provenance",
+        epochs=10,
+        max_updates=10,
+        hub_upload_interval=10,
+        dry_run=True,
+    )
+    job = plan["job"]
+    assert job["updates"] == 10
+    assert job["training_examples"] == 48
+    assert job["validation_examples"] == 24
+    assert set(job["training_counts"].values()) == {2}
+    provenance = tmp_path / "provenance"
+    provenance.mkdir()
+    for name in ("vllm_command.txt", "vllm.patch", "checkpoint_sha256.txt"):
+        (provenance / name).write_text("test provenance")
+    cfg.online.drafter_model_path = tmp_path / "drafter"
+    cfg.online.drafter_model_path.mkdir()
+    (cfg.online.drafter_model_path / "config.json").write_text("{}")
+    uploads = []
+
+    class API:
+        def whoami(self):
+            return {"name": "test"}
+
+        def create_repo(self, **kwargs):
+            pass
+
+        def upload_folder(self, **kwargs):
+            state = torch.load(
+                Path(kwargs["folder_path"]) / "checkpoint.pt", weights_only=True
+            )
+            assert state["progress"] == 10
+            uploads.append(kwargs["path_in_repo"])
+            return SimpleNamespace(
+                oid="pilot-commit", commit_url="https://hf.test/commit"
+            )
+
+    monkeypatch.setattr(epoch_training, "HfApi", API)
+    monkeypatch.setattr(publish, "HfApi", API)
+    result = epoch_training.train_full_data(
+        cfg,
+        tmp_path / "pilot",
+        "example/pilot",
+        provenance,
+        epochs=10,
+        max_updates=10,
+        hub_upload_interval=10,
+    )
+    assert uploads == ["step-00000010"]
+    assert result["completed_updates"] == 10
+    assert Path(result["checkpoint_path"]).exists()
+    assert result["preparation"]["generated_examples"] == 48 + 24
+    assert all(row["validation_examples"] == 24 for row in result["history"])

@@ -26,6 +26,8 @@ DOMAINS = ("math", "code", "stem", "chat")
 TRAIN_ROWS = 100000
 VALIDATION_ROWS = 1000
 UPDATES = 2000
+PILOT_TRAIN_ROWS = 1000
+PILOT_UPDATES = 10
 SUBSETS_PER_DOMAIN = 25
 TRAIN_PER_SUBSET = 1000
 VALIDATION_PER_SUBSET = 100
@@ -69,10 +71,42 @@ def release_records(repo, revision):
     return records
 
 
+def limits(args):
+    """Return training membership, optimizer steps, and upload interval."""
+    return (
+        (PILOT_TRAIN_ROWS, PILOT_UPDATES, PILOT_UPDATES)
+        if getattr(args, "pilot", False)
+        else (TRAIN_ROWS, UPDATES, 500)
+    )
+
+
+def configure_pilot(template, pilot):
+    """Use a small data view and exercise validation/checkpoint/upload at step ten."""
+    if pilot:
+        template["training_examples_per_category"] = PILOT_TRAIN_ROWS // len(DOMAINS)
+        template["max_training_updates"] = PILOT_UPDATES
+        template["hub_upload_interval"] = PILOT_UPDATES
+        template["optimization"].update(
+            pretraining_updates=PILOT_UPDATES,
+            warmup_updates=1,
+            pretraining_validation_interval=PILOT_UPDATES,
+            checkpoint_interval=PILOT_UPDATES,
+        )
+        template["wandb"].update(
+            group="attention-100k-2k-v1-pilot", name_prefix="attention-100k-pilot-"
+        )
+        template["input_root"] = str(
+            Path(template["input_root"]).parent / "pilot/inputs"
+        )
+
+
 def prepare(args):
     """Resolve moving refs once, then reuse the same revision on every resume."""
     template = yaml.safe_load((EXAMPLE / "train.yaml").read_text())
     recipe = yaml.safe_load((EXAMPLE / "training_recipe.yaml").read_text())
+    pilot = getattr(args, "pilot", False)
+    mode = "pilot" if pilot else "full"
+    configure_pilot(template, pilot)
     root = args.output_root.resolve()
     launch = root / "launcher"
     launch.mkdir(parents=True, exist_ok=True)
@@ -100,6 +134,10 @@ def prepare(args):
     api = HfApi()
     if state_path.exists():
         state = json.loads(state_path.read_text())
+        if state.get("mode", "full") != mode:
+            raise ValueError(
+                "Pilot and full training require separate --output-root directories"
+            )
         signature_matches = state.get("training_signature") == training_signature
         legacy_matches = state["template_sha256"] in (recipe_hash, legacy_hash)
         if (not signature_matches and not legacy_matches) or state[
@@ -129,6 +167,7 @@ def prepare(args):
         }
     state.update(
         template_sha256=recipe_hash,
+        mode=mode,
         training_signature=training_signature,
         validation_examples_per_category=validation_quota,
     )
@@ -143,7 +182,7 @@ def prepare(args):
     # Persist the pin before potentially lengthy/retriable file downloads.
     write_json(state_path, state)
     work = Path(template["input_root"]).resolve().parent
-    trajectories = work / "trajectories"
+    trajectories = Path(template["trajectories_path"]).resolve()
     patterns = [f"releases/r0002-100k/{d}/data.json" for d in DOMAINS]
     patterns += [ref["path"] for r in records.values() for ref in r["artifacts"]]
     print(f"Restoring 100K trajectories at {revision}", flush=True)
@@ -187,6 +226,7 @@ def prepare(args):
 
 
 def commands(args, cfg, config, provenance):
+    _, updates, upload_interval = limits(args)
     server = [
         sys.executable,
         str(REPO / "scripts/launch_vllm.py"),
@@ -237,9 +277,9 @@ def commands(args, cfg, config, provenance):
         "--epochs",
         "10",
         "--max-updates",
-        str(UPDATES),
+        str(updates),
         "--hub-upload-interval",
-        "500",
+        str(upload_interval),
         "--hub-repo",
         args.hub_repo,
         "--vllm-provenance-dir",
@@ -303,28 +343,30 @@ def run(args):
         from speculators.generator.campaign_config import CampaignConfig  # noqa: PLC0415
         from speculators.generator.epoch_training import train_full_data  # noqa: PLC0415
 
+        train_rows, updates, upload_interval = limits(args)
         plan = train_full_data(
             CampaignConfig.load(config),
             args.output_root,
             args.hub_repo,
             provenance,
             epochs=10,
-            max_updates=UPDATES,
-            hub_upload_interval=500,
+            max_updates=updates,
+            hub_upload_interval=upload_interval,
             dry_run=True,
         )
         if (
-            plan["job"]["training_examples"] != TRAIN_ROWS
-            or plan["job"]["updates"] != UPDATES
+            plan["job"]["training_examples"] != train_rows
+            or plan["job"]["updates"] != updates
             or plan["job"].get("validation_examples") != VALIDATION_ROWS
         ):
             raise ValueError(
-                "Expected 100K training rows, 1K validation rows, and 2,000 updates"
+                f"Expected {train_rows} training rows, 1K validation rows, "
+                f"and {updates} updates"
             )
         write_json(provenance / "training_plan.json", plan)
         if args.prepare_only:
             print(
-                "Prepared 100K training rows; plan: "
+                f"Prepared {train_rows} training rows; plan: "
                 f"{provenance / 'training_plan.json'}",
                 flush=True,
             )
@@ -342,7 +384,8 @@ def run(args):
                 )
                 wait_ready(server, args.port, args.startup_timeout)
                 print(
-                    "vLLM ready; starting/resuming the 2,000-update training run",
+                    f"vLLM ready; starting/resuming {updates} updates "
+                    f"on {train_rows} training samples",
                     flush=True,
                 )
                 trainer = subprocess.Popen(  # noqa: S603 -- explicit argv, no shell
@@ -364,12 +407,8 @@ def interrupt(_signum, _frame):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--output-root", type=Path, default=Path("output/dyn-spec-attention-100k-2k-v1")
-    )
-    parser.add_argument(
-        "--hub-repo", default="azeeer/eagle3-generator-attention-100k-2k-v1"
-    )
+    parser.add_argument("--output-root", type=Path, default=None)
+    parser.add_argument("--hub-repo", default=None)
     parser.add_argument(
         "--trajectories-revision",
         default="main",
@@ -379,7 +418,18 @@ def main():
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.50)
     parser.add_argument("--startup-timeout", type=float, default=1200)
     parser.add_argument("--prepare-only", action="store_true")
+    parser.add_argument(
+        "--pilot",
+        action="store_true",
+        help="End-to-end pilot: 1,000 training samples, 10 updates; "
+        "isolated output and HF repo",
+    )
     args = parser.parse_args()
+    suffix = "-pilot" if args.pilot else ""
+    if args.output_root is None:
+        args.output_root = Path("output/dyn-spec-attention-100k-2k-v1" + suffix)
+    if args.hub_repo is None:
+        args.hub_repo = "azeeer/eagle3-generator-attention-100k-2k-v1" + suffix
     if (
         not 0 < args.gpu_memory_utilization < 1
         or not 1 <= args.port <= MAX_PORT

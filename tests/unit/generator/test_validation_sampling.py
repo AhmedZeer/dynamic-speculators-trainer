@@ -78,3 +78,32 @@ def test_validation_cap_is_opt_in_and_rejects_insufficient_holdout():
     cfg.validation_examples_per_category = 2501
     with pytest.raises(ValueError, match="Only 2500"):
         validation_view(cfg, original)
+
+
+def test_pilot_has_exactly_1k_training_rows_and_unchanged_1k_holdout():
+    from speculators.generator.validation_sampling import training_view  # noqa: PLC0415
+
+    source = inputs()
+    cfg = SimpleNamespace(
+        training_examples_per_category=250,
+        validation_examples_per_category=250,
+        seed=42,
+    )
+    reduced = validation_view(cfg, training_view(cfg, source))
+    train, validation = set(), set()
+    for domain in DOMAINS:
+        names = [n for n in reduced.subsets if n.startswith(domain + "-")]
+        assert sum(len(reduced.subsets[n]["train_indices"]) for n in names) == 250
+        assert sum(len(reduced.subsets[n]["validation_indices"]) for n in names) == 250
+    for name, subset in reduced.subsets.items():
+        assert len(subset["train_indices"]) == 10
+        assert len(source.subsets[name]["train_indices"]) == 1000
+        assert set(subset["train_indices"]) <= set(
+            source.subsets[name]["train_indices"]
+        )
+        train.update(subset["train_indices"])
+        validation.update(subset["validation_indices"])
+    assert len(train) == 1000
+    assert len(validation) == 1000
+    assert not train.intersection(validation)
+    assert reduced.identity == validation_view(cfg, training_view(cfg, source)).identity

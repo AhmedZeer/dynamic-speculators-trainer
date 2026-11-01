@@ -243,3 +243,51 @@ def test_managed_run_stops_owned_processes(tmp_path, monkeypatch, startup_failur
         assert launch.run(request) == 0
         assert started == [["server"], ["trainer"]]
         assert stopped == [trainer, server]
+
+
+def test_pilot_prepares_small_config_and_isolates_mode(tmp_path, monkeypatch):
+    request = args(tmp_path)
+    request.pilot = True
+    request.output_root = tmp_path / "pilot"
+    request.hub_repo = "azeeer/test-pilot"
+    monkeypatch.setattr(
+        launch,
+        "HfApi",
+        lambda: SimpleNamespace(
+            repo_info=lambda *a, **kw: SimpleNamespace(sha="c" * 40)
+        ),
+    )
+    monkeypatch.setattr(launch, "release_records", lambda *a: records())
+    monkeypatch.setattr(
+        launch, "snapshot_download", lambda repo, **kw: str(tmp_path / "models" / repo)
+    )
+    cfg, path, provenance = launch.prepare(request)
+    loaded = CampaignConfig.load(path)
+    assert loaded.training_examples_per_category == 250
+    assert loaded.validation_examples_per_category == 250
+    assert loaded.optimization.pretraining_updates == 10
+    assert loaded.optimization.pretraining_validation_interval == 10
+    assert loaded.optimization.checkpoint_interval == 10
+    assert loaded.hub_upload_interval == 10
+    assert loaded.wandb.group.endswith("-pilot")
+    assert "pilot" in str(loaded.input_root)
+    _, command = launch.commands(request, cfg, path, provenance)
+    assert command[command.index("--max-updates") + 1] == "10"
+    assert command[command.index("--hub-upload-interval") + 1] == "10"
+    request.pilot = False
+    with pytest.raises(ValueError, match="separate --output-root"):
+        launch.prepare(request)
+
+
+@pytest.mark.parametrize("pilot", [False, True])
+def test_cli_pilot_defaults_are_separate(tmp_path, monkeypatch, pilot):
+    captured = []
+    argv = ["train_attention_100k.py"] + (["--pilot"] if pilot else [])
+    monkeypatch.setattr(launch.sys, "argv", argv)
+    monkeypatch.setattr(launch, "run", lambda request: captured.append(request) or 0)
+    monkeypatch.setattr(launch.os, "chdir", lambda _: None)
+    monkeypatch.setattr(launch.signal, "signal", lambda *a: None)
+    assert launch.main() == 0
+    request = captured[0]
+    assert request.output_root.name.endswith("-pilot") == pilot
+    assert request.hub_repo.endswith("-pilot") == pilot

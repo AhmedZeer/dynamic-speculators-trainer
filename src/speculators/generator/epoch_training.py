@@ -16,7 +16,7 @@ from speculators.bank.artifacts import file_digest, write_json
 from speculators.bank.progress import report
 from speculators.generator.publish import extraction_provenance, push_run
 from speculators.generator.serving.bundle import PROVENANCE
-from speculators.generator.validation_sampling import validation_view
+from speculators.generator.validation_sampling import training_view, validation_view
 
 
 class EpochSchedule:
@@ -141,7 +141,7 @@ def train_full_data(  # noqa: C901 -- shared schedule, capped budget and durable
     if interval < 1:
         raise ValueError("Hub upload interval must be positive")
     validate_repo_id(repo_id)
-    inputs = validation_view(cfg, load_local_inputs(cfg))
+    inputs = validation_view(cfg, training_view(cfg, load_local_inputs(cfg)))
     subsets = sorted(inputs.subsets)
     corpus = SimpleNamespace(indices=lambda name: inputs.subsets[name]["train_indices"])
     schedule = EpochSchedule(
@@ -178,6 +178,11 @@ def train_full_data(  # noqa: C901 -- shared schedule, capped budget and durable
         "vllm_provenance_dir": str(Path(provenance_dir).resolve()),
         "drafter_model_path": str(cfg.online.drafter_model_path.resolve()),
     }
+    if cfg.training_examples_per_category is not None:
+        job["training_counts"] = {
+            name: len(inputs.subsets[name]["train_indices"]) for name in subsets
+        }
+        job["training_examples_per_category"] = cfg.training_examples_per_category
     if cfg.validation_examples_per_category is not None:
         job["validation_subsets"] = [
             name for name in subsets if inputs.subsets[name]["validation_indices"]

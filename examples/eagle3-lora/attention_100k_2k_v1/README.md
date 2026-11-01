@@ -114,3 +114,36 @@ caches on local SSD even when storing checkpoints on Drive.
 Implementation validation uses synthetic release/model-download fixtures,
 configuration comparison against the 24K reference, and subprocess lifecycle
 checks. No 100K GPU training or performance measurement was executed locally.
+
+## End-to-end pilot: 1,000 training samples, 10 updates
+
+```bash
+CUDA_VISIBLE_DEVICES=0 bash examples/eagle3-lora/attention_100k_2k_v1/run.sh --pilot
+```
+
+This uses the same extractor, architecture, teacher-forced objective, cohort
+batching, optimizer, validation, and HF publication path as the full run. It
+selects exactly **1,000 eligible training examples**: 250/category, ten from each
+of that category's 25 subsets, deterministically with seed 42. The 1K validation
+selection stays unchanged and disjoint. Only these 2,000 examples need prompt
+summaries; preparation does not extract summaries for the full 100K pool.
+Trajectory Parquets and model downloads reuse the ordinary cache. A first run
+still needs the complete release metadata/Parquets locally for membership checks.
+
+The pilot performs **10 optimizer updates**, with a one-update warmup, initial
+and final validation, and a local checkpoint/HF upload at step 10. It exercises
+the real upload path; it requires HF and W&B authentication. Ten steps do not
+constitute a full pass through all 1,000 eligible training samples.
+
+Default isolated destinations:
+
+- Output: `output/dyn-spec-attention-100k-2k-v1-pilot`.
+- HF: `azeeer/eagle3-generator-attention-100k-2k-v1-pilot`, snapshot `step-00000010`.
+- W&B group: `attention-100k-2k-v1-pilot` in `eagle3-generator-ablations-v3`.
+- Pilot input metadata and summary-cache identity are separate from the full run.
+
+Rerun `--pilot` to resume the pilot. Omit it for the fresh full 100K/2,000-step
+run. Pilot and full modes reject reuse of each other's output directory; the full
+run does not load pilot generator weights. Explicit `--output-root` / `--hub-repo`
+overrides are supported. Add `--prepare-only` to inspect the 1,000-row/10-step
+pilot plan without starting vLLM or training.

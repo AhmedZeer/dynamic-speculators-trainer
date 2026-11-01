@@ -195,7 +195,10 @@ def run_one(  # noqa: C901 -- shared online/offline run lifecycle
             else CampaignCorpus(local_cfg, bank, cache)
         )
         for name in job["subsets"]:
-            if len(corpus.indices(name)) != cfg.expected_train_examples:
+            expected = job.get("training_counts", {}).get(
+                name, cfg.expected_train_examples
+            )
+            if len(corpus.indices(name)) != expected:
                 raise ValueError(f"Unexpected training membership size: {name}")
         for name in job["validation_subsets"]:
             expected = job.get("validation_counts", {}).get(
