@@ -217,7 +217,7 @@ def commands(args, cfg, config, provenance):
         "--max-num-batched-tokens",
         "8193",
         "--max-num-seqs",
-        "128",
+        "1024",
         "--gpu-memory-utilization",
         str(args.gpu_memory_utilization),
         "--enforce-eager",
@@ -376,7 +376,7 @@ def main():
         help="Resolved once; resume reuses saved SHA",
     )
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--gpu-memory-utilization", type=float, default=0.40)
+    parser.add_argument("--gpu-memory-utilization", type=float, default=0.50)
     parser.add_argument("--startup-timeout", type=float, default=1200)
     parser.add_argument("--prepare-only", action="store_true")
     args = parser.parse_args()

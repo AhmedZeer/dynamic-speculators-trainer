@@ -55,8 +55,8 @@ online:
   lookahead_updates: 2
   endpoint: http://127.0.0.1:8000/v1
   shared_dir: /tmp/speculators-attention-100k-2k-v1
-  concurrency: 128
-  buffered_examples: 256
+  concurrency: 512 #128
+  buffered_examples: 1024 #256
   target_model_path: models/qwen3-8b
   drafter_model_path: models/qwen3-8b-eagle3
   reserve_gib: 8
