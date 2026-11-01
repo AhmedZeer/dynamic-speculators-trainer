@@ -17,7 +17,7 @@ case "${1:-}" in
       --host 127.0.0.1 --port 8000 \
       --dtype bfloat16 --max-model-len 8192 \
       --gpu-memory-utilization 0.95 \
-      --max-num-seqs 256 --max-num-batched-tokens 262144
+      --max-num-seqs 256 --max-num-batched-tokens 16384
     ;;
   responses)
     for domain in math code stem chat; do
