@@ -35,6 +35,8 @@ def cloud_config(config, scratch_root):
 def prepare(
     config: ConfigOption,
     stage: Literal["select", "responses", "data", "hidden", "all"] = "all",
+    num_machines: Annotated[int, typer.Option(min=1)] = 1,
+    machine_index: Annotated[int, typer.Option(min=0)] = 0,
     resume_from_hf: Annotated[
         bool,
         typer.Option(
@@ -48,8 +50,23 @@ def prepare(
     )
     with stage_progress("Loading bank configuration"):
         cfg = BankConfig.load(config)
+    if machine_index >= num_machines:
+        raise typer.BadParameter("machine-index must be less than num-machines")
+    if (num_machines != 1 or machine_index != 0) and stage != "responses":
+        raise typer.BadParameter("Machine partitioning is supported only for responses")
+    cfg.execution.response_num_machines = num_machines
+    cfg.execution.response_machine_index = machine_index
     result = workflow.prepare(cfg, stage, resume_from_hf=resume_from_hf)
     typer.echo(json.dumps({"root": result["root"], "subsets": len(result["subsets"])}))
+
+
+@app.command(name="finalize-responses")
+def finalize_responses(config: ConfigOption):
+    """Verify all published chunks and seal the response stage after workers finish."""
+    cfg = BankConfig.load(config)
+    if cfg.hub is None or cfg.hub.mode != "producer":
+        raise typer.BadParameter("Finalization requires a Hub producer config")
+    workflow.prepare(cfg, "finalize-responses")
 
 
 @app.command()

@@ -3,10 +3,12 @@
 set -euo pipefail
 config_dir=examples/eagle3-lora/nemotron_100k_v1
 run_root=out/data/eagle3/nemotron-100k
-case "${1:-}" in
+mode=${1:-}
+if [[ $# -gt 0 ]]; then shift; fi
+case "$mode" in
   select|data)
     for domain in math code stem chat; do
-      speculators lora-bank prepare --config "$config_dir/$domain.yaml" --stage "$1"
+      speculators lora-bank prepare --config "$config_dir/$domain.yaml" --stage "$mode"
     done
     ;;
   serve)
@@ -28,11 +30,16 @@ case "${1:-}" in
         cp -a "$run_root/math/provenance/server-responses/." \
           "$run_root/$domain/provenance/server-responses/"
       fi
-      speculators lora-bank prepare --config "$config_dir/$domain.yaml" --stage responses
+      speculators lora-bank prepare --config "$config_dir/$domain.yaml" --stage responses "$@"
+    done
+    ;;
+  finalize)
+    for domain in math code stem chat; do
+      speculators lora-bank finalize-responses --config "$config_dir/$domain.yaml"
     done
     ;;
   *)
-    echo "Usage: bash $config_dir/run.sh {select|serve|responses|data}" >&2
+    echo "Usage: bash $config_dir/run.sh {select|serve|responses|finalize|data} [--num-machines N --machine-index I]" >&2
     exit 2
     ;;
 esac

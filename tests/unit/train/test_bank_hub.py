@@ -5,12 +5,13 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import datasets
+import httpx
 import huggingface_hub
 import pytest
 import torch
 import yaml
 from datasets import load_from_disk
-from huggingface_hub.errors import EntryNotFoundError
+from huggingface_hub.errors import EntryNotFoundError, HfHubHTTPError
 from pydantic import ValidationError
 from safetensors.torch import save_file
 
@@ -639,3 +640,109 @@ def test_parent_expansion_config_requires_pinned_distinct_parent():
                 "parent_revision": "a" * 40,
             }
         )
+
+
+def test_two_nodes_resume_single_node_work_and_finalize(preparation, tmp_path):
+    cfg, remote, requests, _ = preparation
+    cfg.hub.domains = ["math"]
+    workflow.prepare(cfg, "select")
+    # Stop the old single-node process after its first chunk is published and
+    # the following chunk was generated locally but its upload failed.
+    original_commit = remote.create_commit
+    response_uploads = 0
+
+    def interrupt_second(repo, operations, **kwargs):
+        nonlocal response_uploads
+        if any("/responses/responses-" in op.path_in_repo for op in operations):
+            response_uploads += 1
+            if response_uploads == 2:
+                raise OSError("old process interrupted")
+        return original_commit(repo, operations, **kwargs)
+
+    remote.create_commit = interrupt_second
+    with pytest.raises(OSError, match="old process interrupted"):
+        workflow.prepare(cfg, "responses")
+    remote.create_commit = original_commit
+    assert len(requests) == 4
+    initial = list(requests)
+    # Simulate stochastic responses on the old unfinished chunk. The new owner
+    # may produce different tokens; node 0 must not compare its stale local copy.
+    local = cfg.output_root / "responses.jsonl"
+    rows = read_jsonl(local)
+    for row in rows[2:]:
+        row["input_ids"] = [9, 8, 7]
+    local.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    cfg.execution.response_num_machines = 2
+    cfg.execution.response_machine_index = 0
+    # Fresh node 1 restores the selection directly from HF.
+    other = cfg.model_copy(deep=True)
+    other.execution.response_machine_index = 1
+    other.output_root = tmp_path / "other-machine"
+    workflow.prepare(other, "responses")
+    assert requests[4:] == initial[2:4]  # Only unpublished chunk is regenerated.
+    with pytest.raises(ValueError, match="Cannot finalize"):
+        workflow.prepare(other, "finalize-responses")
+    workflow.prepare(cfg, "responses")
+    assert (cfg.output_root / "responses-before-partition.jsonl").exists()
+    # The old local copy of node 1's chunk cannot conflict with its published copy.
+    assert len(requests) == 8  # 4 old calls + 2 node1 calls + 2 remaining node0 calls.
+    workflow.prepare(other, "responses")
+    workflow.prepare(cfg, "responses")
+    assert len(requests) == 8
+    paths = remote.list_repo_files(cfg.hub.trajectories_repo)
+    prefix = hub.profile(cfg)
+    assert f"{prefix}/responses.json" not in paths
+    assert f"{prefix}/responses-machine-00000-of-00002.json" in paths
+    assert f"{prefix}/responses-machine-00001-of-00002.json" in paths
+    workflow.prepare(cfg, "finalize-responses")
+    assert len(requests) == 8
+    assert len(read_jsonl(cfg.output_root / "responses.jsonl")) == 6
+    workflow.prepare(cfg, "data")
+    assert len(load_from_disk(cfg.output_root / "data")) == 6
+    wrong = cfg.model_copy(deep=True)
+    wrong.execution.response_num_machines = 1
+    with pytest.raises(ValueError, match="different num-machines"):
+        workflow.prepare(wrong, "responses")
+
+
+def test_publisher_retries_competing_head_and_checks_immutable_objects(
+    preparation, tmp_path, monkeypatch
+):
+    cfg, remote, _, _ = preparation
+    publisher = hub.Publisher(cfg)
+    source = tmp_path / "object.txt"
+    source.write_text("same payload")
+    original = remote.create_commit
+    calls = []
+
+    def conflict_once(repo, operations, **kwargs):
+        calls.append(kwargs["parent_commit"])
+        if len(calls) == 1:
+            # A competing writer advances HEAD just before our commit.
+            original(
+                repo,
+                [
+                    huggingface_hub.CommitOperationAdd(
+                        path_in_repo="other-node.txt", path_or_fileobj=b"other"
+                    )
+                ],
+                parent_commit=kwargs["parent_commit"],
+            )
+            response = httpx.Response(
+                412, request=httpx.Request("POST", "https://huggingface.co")
+            )
+            raise HfHubHTTPError("parent commit changed", response=response)
+        return original(repo, operations, **kwargs)
+
+    monkeypatch.setattr(remote, "create_commit", conflict_once)
+    monkeypatch.setattr(hub.time, "sleep", lambda _: None)
+    reference = publisher.put(cfg.hub.trajectories_repo, "object.txt", source)
+    assert len(calls) == 2
+    assert calls[0] != calls[1]
+    assert reference["revision"] == remote.repo_info(cfg.hub.trajectories_repo).sha
+    fresh = cfg.model_copy(deep=True)
+    fresh.output_root = tmp_path / "fresh-publisher"
+    second = hub.Publisher(fresh)
+    source.write_text("different payload")
+    with pytest.raises(ValueError, match="Immutable Hub object differs"):
+        second.put(cfg.hub.trajectories_repo, "object.txt", source)

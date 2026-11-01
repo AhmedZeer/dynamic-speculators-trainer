@@ -95,6 +95,8 @@ class Execution(Settings):
     training_subsets: list[str] | None = None
     generation_endpoint: str = "http://localhost:8000/v1/chat/completions"
     extraction_endpoint: str = "http://localhost:8000/v1"
+    response_num_machines: int = Field(default=1, ge=1)
+    response_machine_index: int = Field(default=0, ge=0)
     concurrency: int = Field(default=32, ge=1)
     hidden_state_concurrency: int = Field(default=16, ge=1)
     hidden_state_write_concurrency: int = Field(default=2, ge=1)

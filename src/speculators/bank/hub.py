@@ -4,15 +4,17 @@
 # ruff: noqa: PLC0415
 
 import json
+import random
 import shutil
 import tempfile
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
 import yaml
 from filelock import FileLock
 from huggingface_hub import CommitOperationAdd, HfApi, hf_hub_download
-from huggingface_hub.errors import EntryNotFoundError
+from huggingface_hub.errors import EntryNotFoundError, HfHubHTTPError
 from huggingface_hub.utils import (
     are_progress_bars_disabled,
     disable_progress_bars,
@@ -24,6 +26,7 @@ from speculators.bank.progress import report, stage_progress
 
 DOMAINS = ("chat", "math", "code", "stem")
 STATE_NDIM = 3
+HUB_COMMIT_ATTEMPTS = 8
 
 
 @contextmanager
@@ -82,7 +85,21 @@ class Publisher:
     def put(self, repo, path, source):
         return self.put_many(repo, [(path, source)])[0]
 
-    def put_many(self, repo, files):  # noqa: C901 -- immutable batch verification and commit
+    def put_many(self, repo, files):
+        """Retry competing HEAD updates, rechecking immutable paths on every attempt."""
+        files = list(files)
+        for attempt in range(HUB_COMMIT_ATTEMPTS):
+            try:
+                return self._put_many_once(repo, files)
+            except HfHubHTTPError as error:
+                status = getattr(error.response, "status_code", None)
+                if status not in (409, 412) or attempt == HUB_COMMIT_ATTEMPTS - 1:
+                    raise
+                report("Hub HEAD changed during upload; rechecking paths and retrying")
+                time.sleep(random.uniform(0.1, min(8, 0.25 * 2**attempt)))
+        raise AssertionError("unreachable")
+
+    def _put_many_once(self, repo, files):  # noqa: C901 -- immutable batch verification and commit
         """Publish related immutable objects and checksums in one atomic commit."""
         if not files:
             return []
@@ -587,19 +604,90 @@ def inherit_responses(cfg, publisher, expected, saved):
             saved[primary] = row
 
 
-def responses(cfg, publisher, manifest):
+def response_chunk_owner(cfg, chunk_index, num_chunks):
+    # Every domain in a selection has the same partition size. Flatten domains
+    # first so ownership is stable across machines, restarts, and category order.
+    domain_index = cfg.hub.domains.index(cfg.dataset.category)
+    return (
+        domain_index * num_chunks + chunk_index
+    ) % cfg.execution.response_num_machines
+
+
+def responses(cfg, publisher, manifest, *, finalize_only=False):  # noqa: C901 -- restore, partition, publish, or finalize
     from speculators.bank.workflow import regenerate
     from speculators.data_generation.pipeline import repair_responses
 
     prompts = read_jsonl(publisher.root / "prompts.jsonl")
     expected = {p["id"] for p in prompts}
+    chunk_size = cfg.hub.response_chunk_size
+    num_chunks = (len(prompts) + chunk_size - 1) // chunk_size
+    machines = cfg.execution.response_num_machines
+    machine = cfg.execution.response_machine_index
+    if not 0 <= machine < machines:
+        raise ValueError(
+            "response_machine_index must be less than response_num_machines"
+        )
+    distributed = machines > 1 and not finalize_only
+    if not finalize_only:
+        try:
+            plan_file = hf_hub_download(
+                cfg.hub.trajectories_repo,
+                f"{profile(cfg)}/response-partition.json",
+                repo_type="dataset",
+            )
+        except EntryNotFoundError:
+            plan_file = None
+        if (
+            plan_file
+            and json.loads(Path(plan_file).read_text())["num_machines"] != machines
+        ):
+            raise ValueError(
+                "Published response partition uses a different num-machines; "
+                "keep the machine count fixed"
+            )
+    if distributed:
+        publisher.metadata(
+            cfg.hub.trajectories_repo,
+            f"{profile(cfg)}/response-partition.json",
+            {
+                "version": 1,
+                "num_machines": machines,
+                "chunk_size": chunk_size,
+                "domains": cfg.hub.domains,
+                "num_chunks": num_chunks,
+                "cache_fingerprint": manifest["cache_fingerprint"],
+                "prompts_sha256": manifest["prompts_sha256"],
+            },
+        )
+    owned = {
+        p["id"]
+        for index, p in enumerate(prompts)
+        if not distributed
+        or response_chunk_owner(cfg, index // chunk_size, num_chunks) == machine
+    }
     response_file = publisher.root / "responses.jsonl"
-    saved = {r["primary_id"]: r for r in repair_responses(response_file, expected)}
+    # Keep a copy of pre-partition local work, including a partially completed
+    # chunk that will move to another worker when adopting this scheme.
+    if distributed and response_file.exists():
+        backup = response_file.with_name("responses-before-partition.jsonl")
+        if not backup.exists():
+            shutil.copyfile(response_file, backup)
+    saved = (
+        {}
+        if finalize_only
+        else {
+            r["primary_id"]: r
+            for r in repair_responses(response_file, expected)
+            if r["primary_id"] in owned
+        }
+    )
     parent = publisher.api.repo_info(cfg.hub.trajectories_repo, repo_type="dataset").sha
+    published_chunks = set()
     for path in publisher.api.list_repo_files(
         cfg.hub.trajectories_repo, repo_type="dataset", revision=parent
     ):
         if path.startswith(f"{profile(cfg)}/responses/") and path.endswith(".jsonl"):
+            published_chunks.add(path)
             remote = hf_hub_download(
                 cfg.hub.trajectories_repo, path, repo_type="dataset", revision=parent
             )
@@ -612,18 +700,43 @@ def responses(cfg, publisher, manifest):
                         "Published response chunk differs from local responses"
                     )
                 saved[primary] = row
-    if cfg.hub.parent_release:
+    if cfg.hub.parent_release and not finalize_only:
         inherit_responses(cfg, publisher, expected, saved)
+    if finalize_only:
+        required = {
+            f"{profile(cfg)}/responses/responses-{start:08d}.jsonl"
+            for start in range(0, len(prompts), chunk_size)
+        }
+        if missing_chunks := required - published_chunks:
+            raise ValueError(
+                f"Cannot finalize: {len(missing_chunks)} response chunks "
+                "are not published"
+            )
+        if expected - saved.keys():
+            raise ValueError(
+                "Cannot finalize: published responses have missing examples"
+            )
     response_file.write_text(
         "".join(json.dumps(saved[p["id"]]) + "\n" for p in prompts if p["id"] in saved)
     )
     files = []
-    for start in range(0, len(prompts), cfg.hub.response_chunk_size):
-        batch = prompts[start : start + cfg.hub.response_chunk_size]
+    report(
+        f"Response partition: machine={machine}/{machines}; "
+        f"assigned={len(owned)}; finalize={finalize_only}"
+    )
+    for start in range(0, len(prompts), chunk_size):
+        if (
+            distributed
+            and response_chunk_owner(cfg, start // chunk_size, num_chunks) != machine
+        ):
+            continue
+        batch = prompts[start : start + chunk_size]
         temporary = publisher.root / ".publication" / "request-prompts.jsonl"
         temporary.parent.mkdir(parents=True, exist_ok=True)
         temporary.write_text("".join(json.dumps(p) + "\n" for p in batch))
         if any(p["id"] not in saved for p in batch):
+            if finalize_only:
+                raise ValueError("Cannot finalize: response chunk incomplete")
             regenerate(cfg, manifest, prompts_path=temporary)
         available = {
             r["primary_id"]: r for r in read_jsonl(publisher.root / "responses.jsonl")
@@ -642,7 +755,12 @@ def responses(cfg, publisher, manifest):
                 chunk,
             )
         )
-    stage_record(publisher, "responses", manifest, files)
+    record_stage = (
+        f"responses-machine-{machine:05d}-of-{machines:05d}"
+        if distributed
+        else "responses"
+    )
+    stage_record(publisher, record_stage, manifest, files)
 
 
 def hidden(cfg, publisher, manifest, *, publish_only=False, subsets=None):  # noqa: C901 -- extraction and durable publication
@@ -1077,9 +1195,12 @@ def _prepare(cfg, stage, *, resume_from_hf=False, publish_only=False):  # noqa: 
             if stage not in ("select", "all"):
                 restore(
                     cfg,
-                    {"responses": "select", "data": "responses", "hidden": "data"}[
-                        stage
-                    ],
+                    {
+                        "responses": "select",
+                        "data": "responses",
+                        "hidden": "data",
+                        "finalize-responses": "select",
+                    }[stage],
                 )
             else:
                 select(cfg, publisher)
@@ -1102,8 +1223,13 @@ def _prepare(cfg, stage, *, resume_from_hf=False, publish_only=False):  # noqa: 
                         )
                     ],
                 )
-            elif current == "responses":
-                responses(cfg, publisher, manifest)
+            elif current in ("responses", "finalize-responses"):
+                responses(
+                    cfg,
+                    publisher,
+                    manifest,
+                    finalize_only=current == "finalize-responses",
+                )
             elif current == "data":
                 prepare_arrow(cfg, manifest)
                 publish_data(cfg, publisher, manifest)
