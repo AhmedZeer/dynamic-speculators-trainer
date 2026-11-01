@@ -207,3 +207,11 @@ correctness status for extending the full seven-category table. Compare workload
 hashes and preserve correctness/repeatability limitations when adding results.
 Configuration/dry-run validation was performed locally; GPU benchmark results
 have not been measured here.
+
+## Supplied serving results
+
+The two-checkpoint, seven-category measurements are archived in
+[GEN-013](../../../docs/experiments/results/GEN-013-attention-100k-2k.md), including
+the full historical table and acceptance comparisons. Step 2K improves on 1K in
+all categories; comparisons with the earlier 24K suite remain observational,
+with correctness and runtime/repeat equivalence unchecked.

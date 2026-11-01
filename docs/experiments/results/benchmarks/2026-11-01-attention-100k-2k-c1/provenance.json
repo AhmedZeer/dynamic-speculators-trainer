@@ -1,0 +1,24 @@
+{
+  "evidence_origin": "User-supplied JSON; structured transcription with repeated constant fields expanded",
+  "received_date": "2026-11-01",
+  "suite_identity": "2a70c89bad91a8e365577b5b0f1b383eb12532b51ccc19ba78c370bf0e8c6e2a",
+  "configured_model_repo": "azeeer/eagle3-generator-attention-100k-2k-v1",
+  "configured_revision": "cf09002ae6fbca1fe0e9139ab8a0eee3b149a124",
+  "configured_checkpoints": [
+    "step-00001000",
+    "step-00002000"
+  ],
+  "configured_suite_introduced_in_git": "6e85f5c",
+  "executed_checkpoint_hashes": null,
+  "executed_hardware_runtime": null,
+  "missing_artifacts": [
+    "resolved model pins from execution",
+    "eval_command.txt",
+    "vllm_command.txt",
+    "vllm.patch",
+    "target/drafter checkpoint SHA files",
+    "training command/patch and examples-seen counters",
+    "repeat measurements"
+  ],
+  "note": "The benchmark config is available; it is not proof of executed configuration or hardware equivalence. No GPU benchmarks were executed for this archival update."
+}

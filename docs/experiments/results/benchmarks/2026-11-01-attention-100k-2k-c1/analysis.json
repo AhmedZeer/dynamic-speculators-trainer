@@ -1,0 +1,121 @@
+{
+  "source": "User-supplied 14-cell summary, structurally transcribed; repeated constant fields expanded",
+  "source_sha256": "61826546f657736fae942deedc140e5e09e4d48d58f7036d9acc6ff76f8e64da",
+  "suite_identity": "2a70c89bad91a8e365577b5b0f1b383eb12532b51ccc19ba78c370bf0e8c6e2a",
+  "validation": "All 14 cells pass count, acceptance, throughput and generator-time identities. Seven supplied workload hashes, subset lists and output totals match the GEN-011 24K reference.",
+  "comparisons": {
+    "nemotron/nemo-chat": {
+      "step2000_vs_step1000_throughput_percent": 2.7048237525733043,
+      "step2000_vs_24k_step2000_throughput_percent": -2.6819338013020166,
+      "step2000_vs_step1000_acceptance_pp": 0.5270105132687553,
+      "step2000_vs_24k_step2000_acceptance_pp": 0.6481587568164471
+    },
+    "nemotron/nemo-code": {
+      "step2000_vs_step1000_throughput_percent": 2.8623853131729105,
+      "step2000_vs_24k_step2000_throughput_percent": -4.57702801807236,
+      "step2000_vs_step1000_acceptance_pp": 1.0124047001560221,
+      "step2000_vs_24k_step2000_acceptance_pp": -0.1676933540802339
+    },
+    "nemotron/nemo-math": {
+      "step2000_vs_step1000_throughput_percent": 3.9794983690337737,
+      "step2000_vs_24k_step2000_throughput_percent": -3.9417896811920317,
+      "step2000_vs_step1000_acceptance_pp": 2.283306887301506,
+      "step2000_vs_24k_step2000_acceptance_pp": 0.5825456160400533
+    },
+    "nemotron/nemo-stem": {
+      "step2000_vs_step1000_throughput_percent": 2.4270927503547313,
+      "step2000_vs_24k_step2000_throughput_percent": -4.190407143032548,
+      "step2000_vs_step1000_acceptance_pp": 0.31456734819134136,
+      "step2000_vs_24k_step2000_acceptance_pp": 0.017918545260642293
+    },
+    "specbench/specbench-humaneval": {
+      "step2000_vs_step1000_throughput_percent": 2.840932306584243,
+      "step2000_vs_24k_step2000_throughput_percent": -1.6217977590470611,
+      "step2000_vs_step1000_acceptance_pp": 0.6226800469284699,
+      "step2000_vs_24k_step2000_acceptance_pp": 0.08906293758069728
+    },
+    "specbench/specbench-math-reasoning": {
+      "step2000_vs_step1000_throughput_percent": 3.18537967924033,
+      "step2000_vs_24k_step2000_throughput_percent": -1.3509508938561954,
+      "step2000_vs_step1000_acceptance_pp": 0.18149253537126375,
+      "step2000_vs_24k_step2000_acceptance_pp": 0.09869566235995997
+    },
+    "specbench/specbench-summarization": {
+      "step2000_vs_step1000_throughput_percent": 1.936335684016277,
+      "step2000_vs_24k_step2000_throughput_percent": -1.1727293827152097,
+      "step2000_vs_step1000_acceptance_pp": 0.22552902932851393,
+      "step2000_vs_24k_step2000_acceptance_pp": 0.3159753455494074
+    }
+  },
+  "adapter_timing": {
+    "1000/nemotron/nemo-chat": {
+      "generator_plus_merge_ms_per_request": 6.381015048027036,
+      "generator_plus_merge_percent_wall": 0.16379368309353207
+    },
+    "2000/nemotron/nemo-chat": {
+      "generator_plus_merge_ms_per_request": 6.368768005371095,
+      "generator_plus_merge_percent_wall": 0.16790114223190017
+    },
+    "1000/nemotron/nemo-code": {
+      "generator_plus_merge_ms_per_request": 6.368051204681396,
+      "generator_plus_merge_percent_wall": 0.1689673185534066
+    },
+    "2000/nemotron/nemo-code": {
+      "generator_plus_merge_ms_per_request": 6.395719676017759,
+      "generator_plus_merge_percent_wall": 0.17455897242728943
+    },
+    "1000/nemotron/nemo-math": {
+      "generator_plus_merge_ms_per_request": 6.340894718170166,
+      "generator_plus_merge_percent_wall": 0.18945727624541053
+    },
+    "2000/nemotron/nemo-math": {
+      "generator_plus_merge_ms_per_request": 6.331289610862728,
+      "generator_plus_merge_percent_wall": 0.19669831730965434
+    },
+    "1000/nemotron/nemo-stem": {
+      "generator_plus_merge_ms_per_request": 6.349823994636532,
+      "generator_plus_merge_percent_wall": 0.16468996710535663
+    },
+    "2000/nemotron/nemo-stem": {
+      "generator_plus_merge_ms_per_request": 6.328954877853395,
+      "generator_plus_merge_percent_wall": 0.16813274389077454
+    },
+    "1000/specbench/specbench-humaneval": {
+      "generator_plus_merge_ms_per_request": 6.348533754348764,
+      "generator_plus_merge_percent_wall": 0.16905412015787802
+    },
+    "2000/specbench/specbench-humaneval": {
+      "generator_plus_merge_ms_per_request": 6.353387522697451,
+      "generator_plus_merge_percent_wall": 0.17398975542913006
+    },
+    "1000/specbench/specbench-math-reasoning": {
+      "generator_plus_merge_ms_per_request": 6.344519662857067,
+      "generator_plus_merge_percent_wall": 0.16495959462442764
+    },
+    "2000/specbench/specbench-math-reasoning": {
+      "generator_plus_merge_ms_per_request": 6.320455694198606,
+      "generator_plus_merge_percent_wall": 0.16956858294372423
+    },
+    "1000/specbench/specbench-summarization": {
+      "generator_plus_merge_ms_per_request": 6.3918489599228,
+      "generator_plus_merge_percent_wall": 0.14509601071783096
+    },
+    "2000/specbench/specbench-summarization": {
+      "generator_plus_merge_ms_per_request": 6.4022527980804265,
+      "generator_plus_merge_percent_wall": 0.14814629838840243
+    }
+  },
+  "limitations": [
+    "Correctness not checked",
+    "No repeated trials or uncertainty estimates",
+    "Executed server/eval/train provenance and model checksums not supplied; configured pins are not an executed provenance record",
+    "24K and 100K are different eligible data pools; 2000 updates do not establish matched completed epochs or identical hardware/runtime"
+  ],
+  "reference_summary": "docs/experiments/results/benchmarks/2026-10-31-attention-24k-6k-c1/summary_with_ood.json",
+  "formulas": {
+    "throughput_percent": "100 * (new_output_tokens_per_second / reference_output_tokens_per_second - 1)",
+    "acceptance_pp": "100 * (new_draft_acceptance_rate - reference_draft_acceptance_rate)",
+    "adapter_ms_per_request": "1000 * (generator_seconds + merge_seconds) / generator_invocations",
+    "adapter_percent_wall": "100 * (generator_seconds + merge_seconds) / measured_seconds"
+  }
+}
