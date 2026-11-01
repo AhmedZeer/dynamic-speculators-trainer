@@ -1,0 +1,5 @@
+# Timestamp: 2026-11-01T11:44:09.822055+00:00
+# Python: /c3/dongmin/zerokv/dynamic-speculators-trainer/.venv/bin/python
+# Git SHA: unknown
+# vllm: 0.32.0
+/c3/dongmin/zerokv/dynamic-speculators-trainer/.venv/bin/python -m vllm.entrypoints.cli.main serve /home/dongmin/.cache/huggingface/hub/models--Qwen--Qwen3-8B/snapshots/b968826d9c46dd6066d109eabc6255188de91218 --speculative_config '{"method": "extract_hidden_states", "num_speculative_tokens": 1, "draft_model_config": {"hf_config": {"eagle_aux_hidden_state_layer_ids": [2, 18, 33, 36]}}}' --kv_transfer_config '{"kv_connector": "ExampleHiddenStatesConnector", "kv_role": "kv_producer", "kv_connector_extra_config": {"shared_storage_path": "/tmp/speculators-attention-100k-859c3362018e"}}' --enable-scale-out --api-server-count 4 --renderer-num-workers 2 --served-model-name Qwen/Qwen3-8B --host 127.0.0.1 --port 8000 --dtype bfloat16 --max-model-len 8193 --max-num-batched-tokens 8193 --max-num-seqs 128 --gpu-memory-utilization 0.4 --enforce-eager --no-enable-prefix-caching --no-enable-chunked-prefill

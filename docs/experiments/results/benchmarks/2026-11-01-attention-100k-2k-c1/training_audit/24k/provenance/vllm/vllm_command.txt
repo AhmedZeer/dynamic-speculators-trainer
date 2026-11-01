@@ -1,0 +1,5 @@
+# Timestamp: 2026-10-31T09:25:49.414723+00:00
+# Python: /usr/bin/python3
+# Git SHA: unknown
+# vllm: 0.31.0
+/usr/bin/python3 -m vllm.entrypoints.cli.main serve ./models/qwen3-8b --speculative_config '{"method": "extract_hidden_states", "num_speculative_tokens": 1, "draft_model_config": {"hf_config": {"eagle_aux_hidden_state_layer_ids": [2, 18, 33, 36]}}}' --kv_transfer_config '{"kv_connector": "ExampleHiddenStatesConnector", "kv_role": "kv_producer", "kv_connector_extra_config": {"shared_storage_path": "/tmp/speculators-online"}}' --enable-scale-out --api-server-count 2 --renderer-num-workers 2 --served-model-name Qwen/Qwen3-8B --host 127.0.0.1 --port 8000 --dtype bfloat16 --max-model-len 8193 --max-num-batched-tokens 8193 --max-num-seqs 16 --gpu-memory-utilization 0.5 --enforce-eager --no-enable-prefix-caching --no-enable-chunked-prefill

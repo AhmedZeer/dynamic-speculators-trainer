@@ -1,0 +1,9 @@
+# Timestamp: 2026-10-31T09:27:50.672219+00:00
+# Git SHA: decc6da4fb72e72f578230897bc148fc7ec3f4e7
+# World size: 1
+# speculators: 0.8.0.dev0
+# vllm: 0.31.0
+# transformers: 5.16.1
+# torch: 2.13.0
+# compressed-tensors: 0.17.0
+/usr/local/bin/speculators generator train-full-data --config examples/eagle3-lora/attention_24k_6k_v1/train.yaml --output-root output/dyn-spec-attention-24k-6k-v1 --epochs 10 --max-updates 6000 --hub-upload-interval 2000 --hub-repo azeeer/eagle3-generator-attention-24k-6k-v1 --vllm-provenance-dir output/attention-24k-6k-v1/provenance/vllm

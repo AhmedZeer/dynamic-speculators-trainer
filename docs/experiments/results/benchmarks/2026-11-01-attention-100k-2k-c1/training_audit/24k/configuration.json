@@ -1,0 +1,138 @@
+{
+  "activation_cache_gib": 0.0,
+  "activation_cache_reserve_gib": 8.0,
+  "activation_local_dir": null,
+  "activation_prefetch_workers": 2,
+  "additional_bank_configs": [
+    "output/attention-24k-6k-v1/inputs/bank_code.json",
+    "output/attention-24k-6k-v1/inputs/bank_stem.json",
+    "output/attention-24k-6k-v1/inputs/bank_chat.json"
+  ],
+  "architecture": {
+    "condition_dim": 64,
+    "decoder_width": 512,
+    "descriptor_dim": 32,
+    "encoder_hidden": 512,
+    "example_dim": 128,
+    "residual_blocks": 2
+  },
+  "bank_config": "output/attention-24k-6k-v1/inputs/bank_math.json",
+  "bank_subset": "math-00000",
+  "condition": "last",
+  "conditioning_subset": "math-00001",
+  "context": {
+    "evaluation_sizes": [
+      4
+    ],
+    "max_examples": 8,
+    "min_examples": 1
+  },
+  "device": "cuda",
+  "dtype": "bfloat16",
+  "experiment_subsets": [
+    "chat-00000",
+    "chat-00001",
+    "chat-00002",
+    "chat-00003",
+    "chat-00004",
+    "chat-00005",
+    "code-00000",
+    "code-00001",
+    "code-00002",
+    "code-00003",
+    "code-00004",
+    "code-00005",
+    "math-00000",
+    "math-00001",
+    "math-00002",
+    "math-00003",
+    "math-00004",
+    "math-00005",
+    "stem-00000",
+    "stem-00001",
+    "stem-00002",
+    "stem-00003",
+    "stem-00004",
+    "stem-00005"
+  ],
+  "factor_cache_mib": 256,
+  "generator_batching": true,
+  "generator_dtype": "bfloat16",
+  "heatmap": {
+    "seed_groups": [
+      [
+        42
+      ],
+      [
+        43
+      ],
+      [
+        44
+      ],
+      [
+        42,
+        44
+      ],
+      [
+        43,
+        42
+      ],
+      [
+        42,
+        43,
+        44
+      ]
+    ],
+    "strides": [
+      10,
+      20,
+      30
+    ]
+  },
+  "heatmap_n_workers": 1,
+  "n_workers": 1,
+  "optimization": {
+    "adaptation_epochs": 1,
+    "checkpoint_interval": 2000,
+    "conditioning_epochs": 5,
+    "episodes_per_update": 4,
+    "log_interval": 10,
+    "loss_fn": "lk_hybrid",
+    "lr": 0.0001,
+    "max_grad_norm": 0.85,
+    "pretraining_updates": 6000,
+    "pretraining_validation_interval": 250,
+    "token_budget": 8192,
+    "warmup_updates": 100,
+    "weight_decay": 0.01
+  },
+  "output_root": "output/dyn-spec-attention-24k-6k-v1",
+  "preprocessing_workers": 4,
+  "pretrained_checkpoint": null,
+  "pretraining_subsets": null,
+  "seed": 42,
+  "staging_dir": "/tmp/speculators-attention-24k-6k-v1",
+  "target_modules": [
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj"
+  ],
+  "transfer_seed": 42,
+  "wandb": {
+    "enabled": true,
+    "entity": null,
+    "group": "experiment-1",
+    "layout": "sections",
+    "log_interval": 1,
+    "mode": "online",
+    "name_prefix": "attention-24k-6k-v1-",
+    "pretraining_project": "eagle3-generator-ablations-v3",
+    "projects": {
+      "adaptation": "eagle3-generator-adaptation",
+      "conditioning": "eagle3-generator-conditioning",
+      "heatmap": "eagle3-generator-heatmap"
+    },
+    "upload_artifacts": false
+  }
+}

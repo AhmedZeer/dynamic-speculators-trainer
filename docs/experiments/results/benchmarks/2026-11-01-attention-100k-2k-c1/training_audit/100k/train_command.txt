@@ -1,0 +1,9 @@
+# Timestamp: 2026-11-01T11:45:34.799331+00:00
+# Git SHA: 6c8036c9d25acc464bf64d0ef17583323377dd00
+# World size: 1
+# speculators: 0.8.0.dev0
+# vllm: 0.32.0
+# transformers: 5.16.1
+# torch: 2.13.0
+# compressed-tensors: 0.17.0
+/c3/dongmin/zerokv/dynamic-speculators-trainer/src/speculators/__main__.py generator train-full-data --config /c3/dongmin/zerokv/dynamic-speculators-trainer/out/full1/launcher/train.yaml --output-root /c3/dongmin/zerokv/dynamic-speculators-trainer/out/full1 --epochs 10 --max-updates 2000 --hub-upload-interval 500 --hub-repo azeeer/eagle3-generator-attention-100k-2k-v1 --vllm-provenance-dir /c3/dongmin/zerokv/dynamic-speculators-trainer/out/full1/launcher/vllm-attempt-00000

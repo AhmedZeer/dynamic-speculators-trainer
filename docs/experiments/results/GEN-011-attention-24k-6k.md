@@ -190,3 +190,16 @@ uncertainty and executed checkpoint/hardware provenance remain unchecked. The
 DeepSeek pair
 in GEN-012 subsequently supplied its OOD measurements; those now fill the
 remaining cells of the combined table.
+
+## Follow-up: published training provenance inspected
+
+The step-2000 training and extraction artifacts were later retrieved from model
+revision `40d7f6cc9c72a8872377c49418e8b42f071b8f15`. The recorded extractor uses
+vLLM 0.31.0, 16 active sequences, a 0.50 GPU budget and two API server processes;
+the runbook's 128/0.40 launch example is not the executed command. Timing logs
+record 35,918 sample presentations and 39,001,722 response tokens at step 2,000.
+The deterministic saved membership/schedule reconstructs 24,000 distinct rows
+and 11,918 repeated presentations. Training and benchmark provenance are
+separate: this follow-up does not establish the executed serving environment.
+See the [source artifacts and audit](benchmarks/2026-11-01-attention-100k-2k-c1/training_audit/README.md)
+and [GEN-013 comparison](GEN-013-attention-100k-2k.md#follow-up-actual-training-exposure-and-extraction-provenance).

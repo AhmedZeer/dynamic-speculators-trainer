@@ -142,3 +142,12 @@ The resumed OOD extension is now supplied: all 21 cells are archived in GEN-011.
 The twelve Nemotron results are unchanged, and step 4,000 has highest measured
 throughput on HumanEval, math reasoning and summarization. These single-run
 rankings remain subject to the record's correctness and repeatability limits.
+
+## Follow-up execution-provenance clarification
+
+The published step-2000 extraction command was subsequently audited. It records
+**vLLM 0.31.0, 16 active sequences, 0.50 GPU memory utilization and two API server
+processes**, rather than the documented launch example's 128 sequences/0.40.
+Client concurrency 128 is a separate control. Use the archived execution command
+when describing the measured run; the runbook example alone does not prove
+runtime matching. See the [24K/100K training audit](../../../docs/experiments/results/benchmarks/2026-11-01-attention-100k-2k-c1/training_audit/README.md).

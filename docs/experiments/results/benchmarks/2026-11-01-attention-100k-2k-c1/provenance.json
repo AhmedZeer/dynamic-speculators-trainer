@@ -20,5 +20,7 @@
     "training command/patch and examples-seen counters",
     "repeat measurements"
   ],
-  "note": "The benchmark config is available; it is not proof of executed configuration or hardware equivalence. No GPU benchmarks were executed for this archival update."
+  "note": "The benchmark config is available; it is not proof of executed configuration or hardware equivalence. No GPU benchmarks were executed for this archival update.",
+  "followup_training_provenance_audit": "training_audit/audit.json",
+  "followup_note": "Training/extraction artifacts were subsequently retrieved from the published model repos; benchmark execution artifacts remain unavailable."
 }

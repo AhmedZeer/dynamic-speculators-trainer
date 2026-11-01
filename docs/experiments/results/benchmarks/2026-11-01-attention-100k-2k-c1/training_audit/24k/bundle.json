@@ -1,0 +1,171 @@
+{
+  "alpha": 64,
+  "architecture": {
+    "condition_dim": 64,
+    "decoder_width": 512,
+    "descriptor_dim": 32,
+    "encoder_hidden": 512,
+    "example_dim": 128,
+    "residual_blocks": 2
+  },
+  "condition": "last",
+  "draft_config": {
+    "architectures": [
+      "Eagle3Speculator"
+    ],
+    "auto_map": {
+      "": "eagle3.Eagle3SpeculatorConfig"
+    },
+    "draft_vocab_size": 32000,
+    "has_no_defaults_at_init": false,
+    "norm_before_residual": true,
+    "speculators_config": {
+      "algorithm": "eagle3",
+      "default_proposal_method": "greedy",
+      "proposal_methods": [
+        {
+          "accept_tolerance": 0.0,
+          "proposal_type": "greedy",
+          "speculative_tokens": 3,
+          "verifier_accept_k": 1
+        }
+      ],
+      "verifier": {
+        "architectures": [
+          "Qwen3ForCausalLM"
+        ],
+        "name_or_path": "Qwen/Qwen3-8B"
+      }
+    },
+    "speculators_model_type": "eagle3",
+    "speculators_version": "0.2.0.dev11",
+    "target_hidden_size": null,
+    "torch_dtype": "bfloat16",
+    "transformer_layer_config": {
+      "attention_bias": false,
+      "attention_dropout": 0.0,
+      "head_dim": 128,
+      "hidden_act": "silu",
+      "hidden_size": 4096,
+      "initializer_range": 0.02,
+      "intermediate_size": 12288,
+      "max_position_embeddings": 40960,
+      "mlp_bias": false,
+      "model_type": "llama",
+      "num_attention_heads": 32,
+      "num_hidden_layers": 1,
+      "num_key_value_heads": 8,
+      "pretraining_tp": 1,
+      "rms_norm_eps": 1e-06,
+      "rope_scaling": null,
+      "rope_theta": 1000000,
+      "torch_dtype": "bfloat16",
+      "use_cache": true,
+      "vocab_size": 151936
+    },
+    "transformers_version": "4.53.2"
+  },
+  "feedback_dim": 0,
+  "input_dim": 12288,
+  "kind": "generator",
+  "layer_ids": [
+    2,
+    18,
+    33
+  ],
+  "max_examples": 8,
+  "models": {
+    "drafter": {
+      "id": "RedHatAI/Qwen3-8B-speculator.eagle3",
+      "revision": "08610ffa01dd9f16731fe8f627b85905b6aa51c4"
+    },
+    "target": {
+      "id": "Qwen/Qwen3-8B",
+      "revision": "b968826d9c46dd6066d109eabc6255188de91218"
+    }
+  },
+  "rank": 32,
+  "shapes": {
+    "k_proj": [
+      8192,
+      1024
+    ],
+    "o_proj": [
+      4096,
+      4096
+    ],
+    "q_proj": [
+      8192,
+      4096
+    ],
+    "v_proj": [
+      8192,
+      1024
+    ]
+  },
+  "source_checkpoint_sha256": "0f1273ea78b43666f99ace5f9800ab09b85cd461acca45e39f38bcd3ea016d4b",
+  "source_identity": "1cc2fbebc56304893adb3e77e6b4d34551395f3c8f64a3a44a80e63cbdc40fbe",
+  "source_job": {
+    "arm": "direct",
+    "condition": "last",
+    "drafter_model_path": "/content/dynamic-speculators-trainer/models/qwen3-8b-eagle3",
+    "epoch_ends": [
+      1338,
+      2676,
+      4014,
+      5349,
+      6691,
+      8015,
+      9355,
+      10681,
+      12023,
+      13369
+    ],
+    "epoch_schedule_version": 1,
+    "epochs": 10,
+    "hub_repo": "azeeer/eagle3-generator-attention-24k-6k-v1",
+    "hub_upload_interval": 2000,
+    "kind": "pretraining",
+    "label": "all-data-generator-6000steps",
+    "max_updates": 6000,
+    "objective": "direct",
+    "stage": "pretraining",
+    "subsets": [
+      "chat-00000",
+      "chat-00001",
+      "chat-00002",
+      "chat-00003",
+      "chat-00004",
+      "chat-00005",
+      "code-00000",
+      "code-00001",
+      "code-00002",
+      "code-00003",
+      "code-00004",
+      "code-00005",
+      "math-00000",
+      "math-00001",
+      "math-00002",
+      "math-00003",
+      "math-00004",
+      "math-00005",
+      "stem-00000",
+      "stem-00001",
+      "stem-00002",
+      "stem-00003",
+      "stem-00004",
+      "stem-00005"
+    ],
+    "training_examples": 24000,
+    "updates": 6000,
+    "validation_subsets": [
+      "math-00000",
+      "code-00000",
+      "stem-00000",
+      "chat-00000"
+    ],
+    "vllm_provenance_dir": "/content/dynamic-speculators-trainer/output/attention-24k-6k-v1/provenance/vllm"
+  },
+  "version": 1,
+  "weights_sha256": "8f436d973c1607cd38dfde99ff11648ece3bfdf6134dbc2b0060c4e207762c36"
+}

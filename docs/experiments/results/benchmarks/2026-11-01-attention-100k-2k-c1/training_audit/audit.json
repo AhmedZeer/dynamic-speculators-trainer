@@ -1,0 +1,285 @@
+{
+  "audit_date": "2026-11-01",
+  "source": "Published step-2000 model artifacts, downloaded at immutable Hub revisions",
+  "runs": {
+    "24k": {
+      "repo": "azeeer/eagle3-generator-attention-24k-6k-v1",
+      "revision": "40d7f6cc9c72a8872377c49418e8b42f071b8f15",
+      "checkpoint_subfolder": "step-00002000",
+      "optimizer_updates": 2000,
+      "eligible_training_rows": 24000,
+      "sample_presentations": 35918,
+      "reconstructed_unique_training_rows": 24000,
+      "repeated_presentations": 11918,
+      "first_epoch_updates": 1338,
+      "completed_epochs": 1,
+      "logged_response_tokens": 39001722,
+      "validation_rows": 400,
+      "learning_rates": [
+        1.0000000000000002e-06,
+        0.0001
+      ],
+      "model_revisions": {
+        "dataset_sha": "789a044d6f305996098ef340b4264cfc022ed12a",
+        "drafter_sha": "08610ffa01dd9f16731fe8f627b85905b6aa51c4",
+        "target_sha": "b968826d9c46dd6066d109eabc6255188de91218"
+      },
+      "architecture": {
+        "condition_dim": 64,
+        "decoder_width": 512,
+        "descriptor_dim": 32,
+        "encoder_hidden": 512,
+        "example_dim": 128,
+        "residual_blocks": 2
+      },
+      "dtype": "bfloat16",
+      "generator_dtype": "bfloat16",
+      "generator_batching": true,
+      "loss_fn": "lk_hybrid",
+      "extractor": {
+        "vllm_version": "0.31.0",
+        "max_num_seqs": 16,
+        "gpu_memory_utilization": 0.5,
+        "api_servers": 2
+      },
+      "training_times": {
+        "train/update_seconds": 5250.91085558799,
+        "train/data_wait_seconds": 2653.8821682358566,
+        "train/gpu_compute_seconds": 2201.1122524193524,
+        "train/generator_forward_seconds": 52.47547449529171,
+        "train/generator_backward_seconds": 10.597002527713776,
+        "train/drafter_forward_seconds": 1113.2705867767334,
+        "train/drafter_backward_seconds": 964.5474822387695
+      },
+      "sources": {
+        "configuration.json": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-24k-6k-v1/resolve/40d7f6cc9c72a8872377c49418e8b42f071b8f15/step-00002000/configuration.json",
+          "sha256": "057babeac8d3a31982d7e1e6fc99a162e70e87335a905c955463a614c493208d",
+          "bytes": 2935,
+          "archived_locally": true
+        },
+        "speculators.patch": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-24k-6k-v1/resolve/40d7f6cc9c72a8872377c49418e8b42f071b8f15/step-00002000/speculators.patch",
+          "sha256": "7568bae17a8079d752a34b3b9ccead4b4a2cabb7dea00cdf1942153128e2d123",
+          "bytes": 88,
+          "archived_locally": true
+        },
+        "timing.json": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-24k-6k-v1/resolve/40d7f6cc9c72a8872377c49418e8b42f071b8f15/step-00002000/timing.json",
+          "sha256": "9d3259d3e598a9246d611c2678631a85074041accef87563114ef4648c2debab",
+          "bytes": 5625761,
+          "archived_locally": false
+        },
+        "resolved_experiment.json": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-24k-6k-v1/resolve/40d7f6cc9c72a8872377c49418e8b42f071b8f15/step-00002000/resolved_experiment.json",
+          "sha256": "d2dfda467ef1b4fa6edb60dc64b49901efc99b1a74b3091ab74a2d60cd53b0b5",
+          "bytes": 2510951,
+          "archived_locally": false
+        },
+        "bundle.json": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-24k-6k-v1/resolve/40d7f6cc9c72a8872377c49418e8b42f071b8f15/step-00002000/bundle.json",
+          "sha256": "af20a7040951d9330e19e6d00451f425f115d3763403ecfad8e388057e1e9b91",
+          "bytes": 4016,
+          "archived_locally": true
+        },
+        "result.json": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-24k-6k-v1/resolve/40d7f6cc9c72a8872377c49418e8b42f071b8f15/step-00002000/result.json",
+          "sha256": "23922b56c7ccc904996cfb8ae299e1fd33ea31a7c9bff6455757e5cf5607c10d",
+          "bytes": 1559,
+          "archived_locally": true
+        },
+        "train_command.txt": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-24k-6k-v1/resolve/40d7f6cc9c72a8872377c49418e8b42f071b8f15/step-00002000/train_command.txt",
+          "sha256": "ee71542747b8a986d73b8c4e5c58b32865592037102bd39006572b81158fd0cf",
+          "bytes": 565,
+          "archived_locally": true
+        },
+        "provenance/vllm/checkpoint_sha256.txt": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-24k-6k-v1/resolve/40d7f6cc9c72a8872377c49418e8b42f071b8f15/step-00002000/provenance/vllm/checkpoint_sha256.txt",
+          "sha256": "8f51132290852a4ab4070da7e075f9a6e14f2e14553663e25211fdd99c170222",
+          "bytes": 495,
+          "archived_locally": true
+        },
+        "provenance/vllm/vllm.patch": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-24k-6k-v1/resolve/40d7f6cc9c72a8872377c49418e8b42f071b8f15/step-00002000/provenance/vllm/vllm.patch",
+          "sha256": "54b2e093fd0e7784f5eca683c55e01d64b82ee577c174030b15733c115929450",
+          "bytes": 49,
+          "archived_locally": true
+        },
+        "provenance/vllm/vllm_command.txt": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-24k-6k-v1/resolve/40d7f6cc9c72a8872377c49418e8b42f071b8f15/step-00002000/provenance/vllm/vllm_command.txt",
+          "sha256": "8bdcd3480d5d1fb864eed88f68fef01557eea95f194630866ad7d031a8650a69",
+          "bytes": 850,
+          "archived_locally": true
+        }
+      }
+    },
+    "100k": {
+      "repo": "azeeer/eagle3-generator-attention-100k-2k-v1",
+      "revision": "cf09002ae6fbca1fe0e9139ab8a0eee3b149a124",
+      "checkpoint_subfolder": "step-00002000",
+      "optimizer_updates": 2000,
+      "eligible_training_rows": 100000,
+      "sample_presentations": 35790,
+      "reconstructed_unique_training_rows": 35790,
+      "repeated_presentations": 0,
+      "first_epoch_updates": 5552,
+      "completed_epochs": 0,
+      "logged_response_tokens": 38501176,
+      "validation_rows": 1000,
+      "learning_rates": [
+        1.0000000000000002e-06,
+        0.0001
+      ],
+      "model_revisions": {
+        "dataset_sha": "789a044d6f305996098ef340b4264cfc022ed12a",
+        "drafter_sha": "08610ffa01dd9f16731fe8f627b85905b6aa51c4",
+        "target_sha": "b968826d9c46dd6066d109eabc6255188de91218"
+      },
+      "architecture": {
+        "condition_dim": 64,
+        "decoder_width": 512,
+        "descriptor_dim": 32,
+        "encoder_hidden": 512,
+        "example_dim": 128,
+        "residual_blocks": 2
+      },
+      "dtype": "bfloat16",
+      "generator_dtype": "bfloat16",
+      "generator_batching": true,
+      "loss_fn": "lk_hybrid",
+      "extractor": {
+        "vllm_version": "0.32.0",
+        "max_num_seqs": 128,
+        "gpu_memory_utilization": 0.4,
+        "api_servers": 4
+      },
+      "training_times": {
+        "train/update_seconds": 5899.435245297151,
+        "train/data_wait_seconds": 1572.3885709308088,
+        "train/gpu_compute_seconds": 3872.392591942787,
+        "train/generator_forward_seconds": 208.90728727912904,
+        "train/generator_backward_seconds": 43.01818151569366,
+        "train/drafter_forward_seconds": 2172.1778664302824,
+        "train/drafter_backward_seconds": 1381.6542553215027
+      },
+      "sources": {
+        "configuration.json": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-100k-2k-v1/resolve/cf09002ae6fbca1fe0e9139ab8a0eee3b149a124/step-00002000/configuration.json",
+          "sha256": "195325a4240efede885799d5629cb1f8604fa5117b1f2ec3be0090326f2cab0f",
+          "bytes": 4517,
+          "archived_locally": true
+        },
+        "speculators.patch": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-100k-2k-v1/resolve/cf09002ae6fbca1fe0e9139ab8a0eee3b149a124/step-00002000/speculators.patch",
+          "sha256": "d38b8c022038cc3bde34f404e67760cc1f24f2960de2515d0cb682daabfc56e1",
+          "bytes": 98,
+          "archived_locally": true
+        },
+        "timing.json": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-100k-2k-v1/resolve/cf09002ae6fbca1fe0e9139ab8a0eee3b149a124/step-00002000/timing.json",
+          "sha256": "f463b388af1dbffb02dd85844e9b72e895f3c40f5c70dc64b7597fd62e5341c1",
+          "bytes": 5633153,
+          "archived_locally": false
+        },
+        "resolved_experiment.json": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-100k-2k-v1/resolve/cf09002ae6fbca1fe0e9139ab8a0eee3b149a124/step-00002000/resolved_experiment.json",
+          "sha256": "4f745a0a4b12fa72f7136a18c4acd320c8f485d3d50432d29b307bf31f6bfec2",
+          "bytes": 9656410,
+          "archived_locally": false
+        },
+        "bundle.json": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-100k-2k-v1/resolve/cf09002ae6fbca1fe0e9139ab8a0eee3b149a124/step-00002000/bundle.json",
+          "sha256": "cc5e503009d3fb141f5ae0a47806dca6cde0c1aeeb3a66bbb5f9428a6e745aa7",
+          "bytes": 10052,
+          "archived_locally": true
+        },
+        "result.json": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-100k-2k-v1/resolve/cf09002ae6fbca1fe0e9139ab8a0eee3b149a124/step-00002000/result.json",
+          "sha256": "5e682b80fb25a4fb30940efd35e8b0df77e98d17c82243a75302c0891afe9dc2",
+          "bytes": 7595,
+          "archived_locally": true
+        },
+        "train_command.txt": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-100k-2k-v1/resolve/cf09002ae6fbca1fe0e9139ab8a0eee3b149a124/step-00002000/train_command.txt",
+          "sha256": "d85754f379fec800c446af689db695eb5924b064091ba161681a026a2e93e319",
+          "bytes": 701,
+          "archived_locally": true
+        },
+        "provenance/vllm/checkpoint_sha256.txt": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-100k-2k-v1/resolve/cf09002ae6fbca1fe0e9139ab8a0eee3b149a124/step-00002000/provenance/vllm/checkpoint_sha256.txt",
+          "sha256": "8f51132290852a4ab4070da7e075f9a6e14f2e14553663e25211fdd99c170222",
+          "bytes": 495,
+          "archived_locally": true
+        },
+        "provenance/vllm/vllm.patch": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-100k-2k-v1/resolve/cf09002ae6fbca1fe0e9139ab8a0eee3b149a124/step-00002000/provenance/vllm/vllm.patch",
+          "sha256": "82cb29732a477453c75130b6dfba9c2e287fea9d5bd829dadffb230a49fdf020",
+          "bytes": 49,
+          "archived_locally": true
+        },
+        "provenance/vllm/vllm_command.txt": {
+          "url": "https://huggingface.co/azeeer/eagle3-generator-attention-100k-2k-v1/resolve/cf09002ae6fbca1fe0e9139ab8a0eee3b149a124/step-00002000/provenance/vllm/vllm_command.txt",
+          "sha256": "b561495814d2693cb4cd9e7f5c333c60dd2d90c5e00b6958a04a320777bfbc3e",
+          "bytes": 1059,
+          "archived_locally": true
+        }
+      }
+    }
+  },
+  "limits": [
+    "No benchmark execution provenance supplied; extraction/runtime differences are not proof of benchmark runtime differences",
+    "Unique exposure reconstructed from saved seed and membership with the recorded v1 epoch schedule, checked against logged presentation totals",
+    "GPU model/driver and repeated serving measurements are unavailable"
+  ],
+  "checks": {
+    "old_training_ids_preserved_in_new_pool": true,
+    "old_validation_ids_not_in_new_training": true,
+    "target_weight_shard_checksums_identical": true,
+    "learning_rate_at_all_logged_updates_identical": true
+  },
+  "serving_aggregate_ms_per_draft_round_proxy": {
+    "nemotron/nemo-chat": {
+      "24k": 36.570588456349064,
+      "100k": 37.908908488296305,
+      "percent_change": 3.659552904227037,
+      "note": "Aggregate wall-time proxy includes prefill/client/serving/adapter overhead; not an isolated drafter or verifier GPU timing"
+    },
+    "nemotron/nemo-code": {
+      "24k": 36.305623138681256,
+      "100k": 37.9839378003384,
+      "percent_change": 4.622740271517367,
+      "note": "Aggregate wall-time proxy includes prefill/client/serving/adapter overhead; not an isolated drafter or verifier GPU timing"
+    },
+    "nemotron/nemo-math": {
+      "24k": 36.23042158033408,
+      "100k": 37.93943642108635,
+      "percent_change": 4.717071362150316,
+      "note": "Aggregate wall-time proxy includes prefill/client/serving/adapter overhead; not an isolated drafter or verifier GPU timing"
+    },
+    "nemotron/nemo-stem": {
+      "24k": 36.18100816518499,
+      "100k": 37.78619499145275,
+      "percent_change": 4.436545324937469,
+      "note": "Aggregate wall-time proxy includes prefill/client/serving/adapter overhead; not an isolated drafter or verifier GPU timing"
+    },
+    "specbench/specbench-humaneval": {
+      "24k": 37.15727942809617,
+      "100k": 37.816768158736465,
+      "percent_change": 1.7748574190327604,
+      "note": "Aggregate wall-time proxy includes prefill/client/serving/adapter overhead; not an isolated drafter or verifier GPU timing"
+    },
+    "specbench/specbench-math-reasoning": {
+      "24k": 37.059254714544444,
+      "100k": 37.627440425041776,
+      "percent_change": 1.533181697456909,
+      "note": "Aggregate wall-time proxy includes prefill/client/serving/adapter overhead; not an isolated drafter or verifier GPU timing"
+    },
+    "specbench/specbench-summarization": {
+      "24k": 37.44427689163179,
+      "100k": 38.04872862615517,
+      "percent_change": 1.6142700158764844,
+      "note": "Aggregate wall-time proxy includes prefill/client/serving/adapter overhead; not an isolated drafter or verifier GPU timing"
+    }
+  }
+}
