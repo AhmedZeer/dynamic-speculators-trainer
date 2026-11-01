@@ -322,3 +322,38 @@ def test_epoch_upload_identity_migrates_to_step_uploads(tmp_path):
     assert list((tmp_path / "provenance").glob("resume-*/configuration.json"))
     current["configuration"]["optimization"]["lr"] *= 2
     assert resume_identity(tmp_path, current) == current
+
+
+def test_full_data_validation_cap_reaches_runtime_without_changing_training(
+    online_campaign,  # noqa: F811
+    tmp_path,
+):
+    from speculators.generator.campaign import run_one  # noqa: PLC0415
+    from speculators.generator.local_campaign import load_local_inputs  # noqa: PLC0415
+    from speculators.generator.validation_sampling import validation_view  # noqa: PLC0415
+
+    cfg, _, _ = online_campaign
+    cfg.validation_examples_per_category = 6  # One row per existing subset.
+    original = load_local_inputs(cfg)
+    selected = validation_view(cfg, original)
+    plan = epoch_training.train_full_data(
+        cfg,
+        tmp_path / "capped",
+        "example/capped",
+        tmp_path / "provenance",
+        epochs=1,
+        max_updates=1,
+        dry_run=True,
+    )
+    job = plan["job"]
+    assert job["validation_examples"] == 24
+    assert len(job["validation_subsets"]) == 24
+    assert set(job["validation_counts"].values()) == {1}
+    assert job["training_examples"] == 192
+    job.pop("hub_repo")  # Exercise real tiny-model training without remote publication.
+    cfg.output_root = tmp_path / "capped"
+    result = run_one(cfg, job, local_inputs=selected)
+    assert result["completed_updates"] == 1
+    assert all(row["validation_examples"] == 24 for row in result["history"])
+    # Summary preparation uses only selected validation rows, plus all training rows.
+    assert result["preparation"]["generated_examples"] == 192 + 24

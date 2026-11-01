@@ -24,6 +24,7 @@ REPO = Path(__file__).resolve().parents[1]
 EXAMPLE = REPO / "examples/eagle3-lora/attention_100k_2k_v1"
 DOMAINS = ("math", "code", "stem", "chat")
 TRAIN_ROWS = 100000
+VALIDATION_ROWS = 1000
 UPDATES = 2000
 SUBSETS_PER_DOMAIN = 25
 TRAIN_PER_SUBSET = 1000
@@ -80,14 +81,38 @@ def prepare(args):
         (EXAMPLE / "train.yaml").read_bytes()
         + (EXAMPLE / "training_recipe.yaml").read_bytes()
     ).hexdigest()
+    training_template = dict(template)
+    validation_quota = training_template.pop("validation_examples_per_category", None)
+    training_signature = hashlib.sha256(
+        json.dumps(
+            {"training": training_template, "recipe": recipe}, sort_keys=True
+        ).encode()
+    ).hexdigest()
+    # Accept the old launcher's pre-validation-cap template for a prepared run.
+    legacy_bytes = (
+        (EXAMPLE / "train.yaml")
+        .read_bytes()
+        .split(b"\n# Runtime validation only;", 1)[0]
+    )
+    legacy_hash = hashlib.sha256(
+        legacy_bytes + (EXAMPLE / "training_recipe.yaml").read_bytes()
+    ).hexdigest()
     api = HfApi()
     if state_path.exists():
         state = json.loads(state_path.read_text())
-        if (
-            state["template_sha256"] != recipe_hash
-            or state["hub_repo"] != args.hub_repo
-        ):
+        signature_matches = state.get("training_signature") == training_signature
+        legacy_matches = state["template_sha256"] in (recipe_hash, legacy_hash)
+        if (not signature_matches and not legacy_matches) or state[
+            "hub_repo"
+        ] != args.hub_repo:
             raise ValueError("Run configuration changed; use a new --output-root")
+        if state.get("validation_examples_per_category") != validation_quota and any(
+            root.glob("pretraining/**/checkpoint.pt")
+        ):
+            raise ValueError(
+                "Validation membership changed after training started; "
+                "use a new --output-root"
+            )
         if args.trajectories_revision not in ("main", state["trajectories_revision"]):
             raise ValueError("Resume must retain the pinned trajectory revision")
         revision = state["trajectories_revision"]
@@ -102,6 +127,11 @@ def prepare(args):
             "template_sha256": recipe_hash,
             "hub_repo": args.hub_repo,
         }
+    state.update(
+        template_sha256=recipe_hash,
+        training_signature=training_signature,
+        validation_examples_per_category=validation_quota,
+    )
     records = release_records(recipe["hub"]["trajectories_repo"], revision)
     pins = next(iter(records.values()))["manifest"]["revisions"]
     for record in records.values():
@@ -286,9 +316,10 @@ def run(args):
         if (
             plan["job"]["training_examples"] != TRAIN_ROWS
             or plan["job"]["updates"] != UPDATES
+            or plan["job"].get("validation_examples") != VALIDATION_ROWS
         ):
             raise ValueError(
-                "Expected exactly 100K training rows and 2,000 planned updates"
+                "Expected 100K training rows, 1K validation rows, and 2,000 updates"
             )
         write_json(provenance / "training_plan.json", plan)
         if args.prepare_only:

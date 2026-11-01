@@ -76,6 +76,7 @@ def test_prepare_pins_release_on_resume_and_matches_reference(tmp_path, monkeypa
     )
     cfg, path, provenance = launch.prepare(request)
     loaded = CampaignConfig.load(path)
+    assert loaded.validation_examples_per_category == 250
     assert loaded.max_training_updates == 2000
     assert len(loaded.experiment_subsets) == 100
     assert loaded.optimization.pretraining_validation_interval == 250
@@ -101,6 +102,26 @@ def test_prepare_pins_release_on_resume_and_matches_reference(tmp_path, monkeypa
     launch.prepare(request)
     assert len(info_calls) == 1  # Moving main is never resolved again on resume.
     assert snapshots[0][1]["revision"] == snapshots[3][1]["revision"] == "c" * 40
+    # A run prepared by the pre-cap launcher can adopt the smaller validation
+    # set while retaining the resolved dataset SHA and cached downloads.
+    state_path = request.output_root / "launcher/run.json"
+    state = json.loads(state_path.read_text())
+    state.pop("training_signature")
+    state.pop("validation_examples_per_category")
+    import hashlib  # noqa: PLC0415
+
+    legacy = (
+        (launch.EXAMPLE / "train.yaml")
+        .read_bytes()
+        .split(b"\n# Runtime validation only;", 1)[0]
+    )
+    state["template_sha256"] = hashlib.sha256(
+        legacy + (launch.EXAMPLE / "training_recipe.yaml").read_bytes()
+    ).hexdigest()
+    state_path.write_text(json.dumps(state))
+    launch.prepare(request)
+    assert json.loads(state_path.read_text())["validation_examples_per_category"] == 250
+    assert len(info_calls) == 1
     request.trajectories_revision = "e" * 40
     with pytest.raises(ValueError, match="retain the pinned"):
         launch.prepare(request)
@@ -134,7 +155,13 @@ def test_prepare_only_does_not_launch_gpu_processes(tmp_path, monkeypatch):
     monkeypatch.setattr(
         training,
         "train_full_data",
-        lambda *a, **kw: {"job": {"training_examples": 100000, "updates": 2000}},
+        lambda *a, **kw: {
+            "job": {
+                "training_examples": 100000,
+                "updates": 2000,
+                "validation_examples": 1000,
+            }
+        },
     )
     # Prepare-only verifies data without ever launching a subprocess.
     monkeypatch.setattr(
@@ -171,7 +198,13 @@ def test_managed_run_stops_owned_processes(tmp_path, monkeypatch, startup_failur
     monkeypatch.setattr(
         training,
         "train_full_data",
-        lambda *a, **kw: {"job": {"training_examples": 100000, "updates": 2000}},
+        lambda *a, **kw: {
+            "job": {
+                "training_examples": 100000,
+                "updates": 2000,
+                "validation_examples": 1000,
+            }
+        },
     )
 
     class Probe:

@@ -46,7 +46,10 @@ The launcher:
 Rerun the **same command and output root** to resume local checkpoints and retry
 failed model uploads. The first resolved dataset commit is reused even if Hub
 `main` changes. Replacing architecture/data/templates or the destination model
-repo requires a new output root. There is no automatic search for checkpoints
+repo requires a new output root. An already-prepared run can adopt the 1K
+validation cap while retaining its pinned data and cached downloads. If training
+checkpoints already exist under the old validation protocol, use a new output
+root rather than mixing validation histories. There is no automatic search for checkpoints
 from a different machine or output folder.
 
 The checked-in `training_recipe.yaml` contains an all-zero revision sentinel.
@@ -56,8 +59,11 @@ straight to `train-full-data`.
 ## Settings and locations
 
 - Eligible training pool: **100K**, from all `00000`–`00024` training splits in
-  math, code, STEM and chat. Separate validation: 10K rows; the matched context-4
-  evaluation uses subset `00000` in each domain (**400 validation rows**).
+  math, code, STEM and chat. Runtime validation: **1K rows, 250 per category**,
+  selected deterministically from the existing held-out data. Each of the 25
+  subsets contributes 10 held-out examples per category. The other 9K validation
+  rows remain in the HF dataset but are not evaluated, cached as validation
+  activations, or included in prompt-summary preparation for this run.
 - Original epoch schedule (`--epochs 10`), capped at **2,000 optimizer updates**.
   This is a step budget, not a claim that every one of the 100K training rows is
   visited: it may stop before one complete pass over the expanded pool.

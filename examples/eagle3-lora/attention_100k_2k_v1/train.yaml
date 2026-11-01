@@ -176,3 +176,6 @@ experiment_subsets:
 - chat-00022
 - chat-00023
 - chat-00024
+
+# Runtime validation only; published membership counts stay 100 per subset.
+validation_examples_per_category: 250
