@@ -19,6 +19,11 @@ EXTRACTION_FILES = (
     "checkpoint_sha256.txt",
     "drafter_checkpoint_sha256.txt",
     "eval_command.txt",
+    "launcher_commands.json",
+    "training_plan.json",
+    "train.yaml",
+    "training_recipe.yaml",
+    "run.json",
 )
 
 

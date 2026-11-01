@@ -28,7 +28,16 @@ def completed_run(online_campaign, tmp_path, request):  # noqa: F811
     write_json(drafter / "config.json", {})
     provenance = cfg.output_root / "provenance" / "vllm"
     provenance.mkdir(parents=True)
-    for name in ("vllm_command.txt", "vllm.patch", "checkpoint_sha256.txt"):
+    for name in (
+        "vllm_command.txt",
+        "vllm.patch",
+        "checkpoint_sha256.txt",
+        "launcher_commands.json",
+        "training_plan.json",
+        "train.yaml",
+        "training_recipe.yaml",
+        "run.json",
+    ):
         (provenance / name).write_text(f"original {name}\n")
     (provenance / "unrelated.bin").write_bytes(b"do not upload")
     return cfg, run, drafter, provenance, requests
@@ -60,7 +69,16 @@ def test_push_exports_loadable_weights_and_provenance(completed_run, monkeypatch
             assert (folder / "speculators.patch").is_file()
             assert (folder / "timing.json").is_file()
             assert not (folder / "provenance/vllm/unrelated.bin").exists()
-            for name in ("vllm_command.txt", "vllm.patch", "checkpoint_sha256.txt"):
+            for name in (
+                "vllm_command.txt",
+                "vllm.patch",
+                "checkpoint_sha256.txt",
+                "launcher_commands.json",
+                "training_plan.json",
+                "train.yaml",
+                "training_recipe.yaml",
+                "run.json",
+            ):
                 assert (folder / "provenance/vllm" / name).read_bytes() == (
                     provenance / name
                 ).read_bytes()
