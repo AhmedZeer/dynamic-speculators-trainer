@@ -85,8 +85,9 @@ straight to `train-full-data`.
   `<output-root>/launcher/`. Available launcher configs/plan and server
   command/checksum/patch provenance are included in model snapshots.
 - Extraction uses BF16, layers 2/18/33/36, sequence limit 8,193, token budget
-  8,193, concurrency 128, eager execution, no prefix caching/chunked prefill,
-  and **0.40 GPU memory utilization**. The remaining GPU memory is for training.
+  8,193, **max-num-seqs 128**, eager execution, no prefix caching/chunked prefill,
+  and **0.35 GPU memory utilization**. Client request concurrency and its bounded
+  buffer are configured separately under `online` in the training YAML. The remaining GPU memory is for training.
   This is different from the dedicated response server's 0.95 budget.
 - Host activation cache: **96 GiB**, with an 8 GiB host reserve, a 256-example
   buffer and two updates of lookahead. First-use prompt-summary preparation
@@ -105,7 +106,7 @@ Resolve/download/validate without starting vLLM or GPU training:
 bash examples/eagle3-lora/attention_100k_2k_v1/run.sh --prepare-only
 ```
 
-Other launcher options: `--port 8000`, `--gpu-memory-utilization 0.40`,
+Other launcher options: `--port 8000`, `--gpu-memory-utilization 0.35`, `--max-num-seqs 128`,
 `--startup-timeout 1200`, `--hub-repo ...`, and `--trajectories-revision ...`.
 An explicit trajectory ref is resolved once on a fresh run; resume must retain
 its saved commit. `--help` lists all options. Keep the input/summary/compiler
@@ -147,3 +148,25 @@ run. Pilot and full modes reject reuse of each other's output directory; the ful
 run does not load pilot generator weights. Explicit `--output-root` / `--hub-repo`
 overrides are supported. Add `--prepare-only` to inspect the 1,000-row/10-step
 pilot plan without starting vLLM or training.
+
+## GPU headroom during validation and training
+
+The extractor defaults to a **35% GPU executor budget** (about 33.2 GiB on a
+94.97-GiB card), down from 50%, and 128 active sequences rather than 1,024.
+These runtime launch options do not alter training data, the 8,192-token
+microbatch budget, or cached summaries. The same output root can be reused.
+
+After stopping the old launcher and any other GPU job that is no longer needed:
+
+```bash
+bash examples/eagle3-lora/attention_100k_2k_v1/run.sh \
+  --gpu-memory-utilization 0.35 --max-num-seqs 128
+```
+
+The reported failure included **two other GPU processes** consuming 39.11 GiB
+and 48.88 GiB while the trainer used 6.46 GiB. Lowering the new extractor's budget
+does not release memory owned by another process. Inspect the machine with
+`nvidia-smi` and stop the old job through its original launcher/session; this
+launcher only cleans up the process groups it started. An alternate `--port`
+does not isolate GPU memory. GPU memory utilization is a per-vLLM-instance
+budget, not a shared global limit or a guarantee of peak memory use.

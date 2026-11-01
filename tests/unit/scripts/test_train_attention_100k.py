@@ -289,5 +289,20 @@ def test_cli_pilot_defaults_are_separate(tmp_path, monkeypatch, pilot):
     monkeypatch.setattr(launch.signal, "signal", lambda *a: None)
     assert launch.main() == 0
     request = captured[0]
+    assert request.gpu_memory_utilization == 0.35
+    assert request.max_num_seqs == 128
     assert request.output_root.name.endswith("-pilot") == pilot
     assert request.hub_repo.endswith("-pilot") == pilot
+
+
+def test_gpu_headroom_options_are_forwarded(tmp_path):
+    request = args(tmp_path)
+    request.max_num_seqs = 64
+    request.gpu_memory_utilization = 0.35
+    cfg = {"online": {"target_model_path": "/model", "shared_dir": "/shared"}}
+    server, _ = launch.commands(
+        request, cfg, tmp_path / "train.yaml", tmp_path / "provenance"
+    )
+    assert server[server.index("--max-num-seqs") + 1] == "64"
+    assert server[server.index("--gpu-memory-utilization") + 1] == "0.35"
+    assert server[server.index("--max-num-batched-tokens") + 1] == "8193"

@@ -257,7 +257,7 @@ def commands(args, cfg, config, provenance):
         "--max-num-batched-tokens",
         "8193",
         "--max-num-seqs",
-        "1024",
+        str(getattr(args, "max_num_seqs", 128)),
         "--gpu-memory-utilization",
         str(args.gpu_memory_utilization),
         "--enforce-eager",
@@ -415,7 +415,8 @@ def main():
         help="Resolved once; resume reuses saved SHA",
     )
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--gpu-memory-utilization", type=float, default=0.50)
+    parser.add_argument("--gpu-memory-utilization", type=float, default=0.35)
+    parser.add_argument("--max-num-seqs", type=int, default=128)
     parser.add_argument("--startup-timeout", type=float, default=1200)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument(
@@ -434,10 +435,11 @@ def main():
         not 0 < args.gpu_memory_utilization < 1
         or not 1 <= args.port <= MAX_PORT
         or args.startup_timeout <= 0
+        or args.max_num_seqs < 1
     ):
         parser.error(
             "GPU memory utilization must be between 0 and 1; "
-            "port must be 1..65535; startup-timeout must be positive"
+            "port must be 1..65535; startup-timeout and max-num-seqs must be positive"
         )
     os.chdir(REPO)
     signal.signal(signal.SIGTERM, interrupt)
