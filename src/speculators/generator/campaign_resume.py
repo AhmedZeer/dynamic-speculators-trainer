@@ -34,6 +34,10 @@ def resume_identity(output, current):
     adjusted["configuration"]["optimization"]["pretraining_updates"] = current[
         "configuration"
     ]["optimization"]["pretraining_updates"]
+    if "checkpoint_interval" in current["configuration"]["optimization"]:
+        adjusted["configuration"]["optimization"]["checkpoint_interval"] = current[
+            "configuration"
+        ]["optimization"]["checkpoint_interval"]
     adjusted["job"]["updates"] = current["job"]["updates"]
     execution_changed = False
     for key in ("generator_dtype", "generator_batching"):
@@ -57,7 +61,7 @@ def resume_identity(output, current):
             "checkpoint_identity": digest(saved),
             "effective_identity": current,
             "note": (
-                "Budget/output path/upload cadence or generator execution changed; "
+                "Budget/output path/checkpoint cadence or generator execution changed; "
                 "saved checkpoint identity retained."
             ),
             "generator_execution_changed": execution_changed,

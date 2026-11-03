@@ -324,6 +324,31 @@ def test_epoch_upload_identity_migrates_to_step_uploads(tmp_path):
     assert resume_identity(tmp_path, current) == current
 
 
+def test_checkpoint_cadence_can_change_without_resetting_optimizer_identity(tmp_path):
+    from copy import deepcopy  # noqa: PLC0415
+
+    from speculators.generator.campaign_resume import resume_identity  # noqa: PLC0415
+
+    saved = {
+        "configuration": {
+            "output_root": str(tmp_path),
+            "optimization": {
+                "pretraining_updates": 10000, "checkpoint_interval": 500, "lr": 0.0001,
+            },
+        },
+        "job": {"updates": 10000, "hub_upload_interval": 500},
+    }
+    (tmp_path / "resolved_experiment.json").write_text(json.dumps(saved))
+    current = deepcopy(saved)
+    current["configuration"]["optimization"]["checkpoint_interval"] = 2000
+    current["job"]["hub_upload_interval"] = 2000
+    assert resume_identity(tmp_path, current) == saved
+    receipts = list((tmp_path / "provenance").glob("resume-*/configuration.json"))
+    assert json.loads(receipts[0].read_text())["effective_identity"] == current
+    current["configuration"]["optimization"]["lr"] *= 2
+    assert resume_identity(tmp_path, current) == current
+
+
 def test_full_data_validation_cap_reaches_runtime_without_changing_training(
     online_campaign,  # noqa: F811
     tmp_path,

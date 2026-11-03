@@ -195,6 +195,7 @@ def test_readiness_detects_early_server_exit():
 
 @pytest.mark.parametrize("startup_failure", [False, True])
 def test_managed_run_stops_owned_processes(tmp_path, monkeypatch, startup_failure):
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
     request = args(tmp_path)
     provenance = tmp_path / "provenance"
     provenance.mkdir()
@@ -232,6 +233,8 @@ def test_managed_run_stops_owned_processes(tmp_path, monkeypatch, startup_failur
 
     def popen(command, **kw):
         assert kw["start_new_session"] is True
+        expected_gpu = "2" if command == ["server"] else "3"
+        assert kw["env"]["CUDA_VISIBLE_DEVICES"] == expected_gpu
         started.append(command)
         return server if command == ["server"] else trainer
 
@@ -333,8 +336,11 @@ def test_10k_variant_configuration_and_schedule(tmp_path, monkeypatch):
     assert loaded.max_training_updates == 10000
     assert loaded.optimization.pretraining_updates == 10000
     assert loaded.wandb.group == "attention-100k-10k-v1"
+    assert loaded.optimization.checkpoint_interval == 2000
+    assert loaded.hub_upload_interval == 2000
     _, command = launch.commands(request, cfg, path, provenance)
     assert command[command.index("--max-updates") + 1] == "10000"
+    assert command[command.index("--hub-upload-interval") + 1] == "2000"
     corpus = SimpleNamespace(indices=lambda _: range(1000))
     schedule = training.EpochSchedule(loaded, corpus, loaded.experiment_subsets, 10)
     assert len(schedule.updates) >= 10000
@@ -363,3 +369,75 @@ def test_prepared_run_accepts_only_resource_sizing_changes(tmp_path):
     assert template["online"]["concurrency"] == 128
     changed = {**template, "optimization": {**template["optimization"], "lr": 0.5}}
     assert not launch.resource_change_matches(state, changed, recipe, tmp_path)
+
+
+@pytest.mark.parametrize("visible,expected", [
+    ("2,3", ("2", "3")),
+    ("3", ("3", "3")),
+    ("GPU-first,GPU-second", ("GPU-first", "GPU-second")),
+    ("2,3,5", ("2", "3")),
+])
+def test_gpu_assignment_isolates_subprocesses(monkeypatch, visible, expected):
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", visible)
+    monkeypatch.setenv("CLUSTER_JOB_MARKER", "preserved")
+    server, trainer = launch.process_environments()
+    assert (server["CUDA_VISIBLE_DEVICES"], trainer["CUDA_VISIBLE_DEVICES"]) == expected
+    assert server["CLUSTER_JOB_MARKER"] == trainer["CLUSTER_JOB_MARKER"] == "preserved"
+    assert launch.os.environ["CUDA_VISIBLE_DEVICES"] == visible
+
+
+def test_gpu_assignment_without_explicit_visibility(monkeypatch):
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    server, trainer = launch.process_environments()
+    assert "CUDA_VISIBLE_DEVICES" not in server
+    assert "CUDA_VISIBLE_DEVICES" not in trainer
+
+
+@pytest.mark.parametrize("visible", ["", "-1", "2,2", "2,,3"])
+def test_invalid_gpu_assignment_fails_before_launch(monkeypatch, visible):
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", visible)
+    with pytest.raises(ValueError, match="distinct GPU"):
+        launch.process_environments()
+
+
+def test_parallelism_overrides_and_checkpoint_cadence_can_resume(tmp_path, monkeypatch):
+    request = args(tmp_path)
+    request.variant = "10k"
+    monkeypatch.setattr(launch, "HfApi", lambda: SimpleNamespace(
+        repo_info=lambda *a, **kw: SimpleNamespace(sha="c" * 40)
+    ))
+    monkeypatch.setattr(launch, "release_records", lambda *a: records())
+    monkeypatch.setattr(
+        launch, "snapshot_download", lambda repo, **kw: str(tmp_path / repo)
+    )
+    cfg, path, provenance = launch.prepare(request)
+    # Simulate the previously published 10K configuration's 500-step cadence.
+    import hashlib  # noqa: PLC0415
+
+    previous = yaml.safe_load((launch.EXAMPLE / "train_10k.yaml").read_text())
+    previous.pop("validation_examples_per_category")
+    previous["optimization"]["checkpoint_interval"] = 500
+    previous["hub_upload_interval"] = 500
+    saved = yaml.safe_load(path.read_text())
+    saved["optimization"]["checkpoint_interval"] = 500
+    saved["hub_upload_interval"] = 500
+    path.write_text(yaml.safe_dump(saved))
+    state_path = request.output_root / "launcher/run.json"
+    state = json.loads(state_path.read_text())
+    recipe = yaml.safe_load((launch.EXAMPLE / "training_recipe.yaml").read_text())
+    state["template_sha256"] = "old-template"
+    state["training_signature"] = hashlib.sha256(json.dumps(
+        {"training": previous, "recipe": recipe}, sort_keys=True
+    ).encode()).hexdigest()
+    state_path.write_text(json.dumps(state))
+    request.extraction_concurrency = 64
+    request.buffered_examples = 128
+    request.lookahead_updates = 8
+    request.max_num_batched_tokens = 16386
+    cfg, path, provenance = launch.prepare(request)
+    assert cfg["online"]["concurrency"] == 64
+    assert cfg["online"]["buffered_examples"] == 128
+    assert cfg["online"]["lookahead_updates"] == 8
+    assert cfg["optimization"]["checkpoint_interval"] == 2000
+    server, _ = launch.commands(request, cfg, path, provenance)
+    assert server[server.index("--max-num-batched-tokens") + 1] == "16386"

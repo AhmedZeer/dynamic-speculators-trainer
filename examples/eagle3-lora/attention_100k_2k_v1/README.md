@@ -19,10 +19,48 @@ CUDA_VISIBLE_DEVICES=0 bash examples/eagle3-lora/attention_100k_2k_v1/run.sh \
 Omit `--output-root` to use `output/dyn-spec-attention-100k-10k-v1`.
 The default destination is `azeeer/eagle3-generator-attention-100k-10k-v1`;
 use `--hub-repo` to change it. This starts from a fresh generator, saves and
-uploads every 500 updates, and retains the same validation and data caches as
+uploads every 2,000 updates, and retains the same validation and data caches as
 the 2K run. It does not resume the 2K checkpoint. Rerun with the same output
 root to resume this 10K run. Add `--prepare-only` to check the exact schedule
 without starting vLLM; `--pilot` retains its isolated 10-step behavior.
+
+### Two GPUs on one node
+
+```bash
+CUDA_VISIBLE_DEVICES=2,3 bash examples/eagle3-lora/attention_100k_2k_v1/run.sh \
+  --variant 10k --output-root /path/to/attention-100k-10k-v1
+```
+
+The first listed GPU runs vLLM; the second runs the trainer. Each subprocess
+sees only its assigned GPU as `cuda:0`. GPU UUIDs work too. With one listed GPU,
+both processes share it. With no visibility list the original inherited-device
+behavior is retained. Additional listed GPUs are not used by this launcher.
+Assignments are printed and recorded in `launcher_commands.json` alongside
+the existing extraction provenance. The processes exchange activation files
+through the same node's `/tmp` directory; local NVMe is not required.
+
+For more overlap on two dedicated 96 GB GPUs, an initial tuning experiment is:
+
+```bash
+CUDA_VISIBLE_DEVICES=2,3 bash examples/eagle3-lora/attention_100k_2k_v1/run.sh \
+  --variant 10k --output-root /path/to/attention-100k-10k-v1 \
+  --gpu-memory-utilization 0.70 --max-num-batched-tokens 16386 \
+  --lookahead-updates 8
+```
+
+This lets the extractor batch more tokens and prepare more upcoming updates.
+The default client concurrency remains 128 and the buffer remains 256; override
+them with `--extraction-concurrency` and `--buffered-examples` if measurements
+show extraction is still limiting throughput. More concurrency/buffering can
+increase host RAM and temporary-file use; the RAM cache remains capped at
+120 GiB. These settings do not change the training cohort, loss or token budget.
+This tuning suggestion has not been measured on the cluster.
+
+The same output root can adopt a different GPU assignment, extraction queue
+settings, and the new 2K checkpoint/upload cadence on resume. Stop the existing
+launcher cleanly first; resume uses the latest saved local checkpoint. The
+10-step pilot still checkpoints/uploads at step 10; the 2K variant retains its
+500-step cadence. Initial recovery checkpoints and final saves still apply.
 
 Finish the two generation workers and publish the complete trajectory dataset
 first, once on either generation machine:

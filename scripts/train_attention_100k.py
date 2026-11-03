@@ -73,11 +73,26 @@ def release_records(repo, revision):
 
 def limits(args):
     """Return training membership, optimizer steps, and upload interval."""
+    extended = getattr(args, "variant", "2k") == "10k"
     return (
         (PILOT_TRAIN_ROWS, PILOT_UPDATES, PILOT_UPDATES)
         if getattr(args, "pilot", False)
-        else (TRAIN_ROWS, 10000 if getattr(args, "variant", "2k") == "10k" else UPDATES, 500)
+        else (TRAIN_ROWS, 10000 if extended else UPDATES, 2000 if extended else 500)
     )
+
+
+def process_environments():
+    """Split an explicit CUDA visibility list without probing/initializing CUDA."""
+    server, trainer = os.environ.copy(), os.environ.copy()
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if visible is None:
+        return server, trainer
+    devices = [device.strip() for device in visible.split(",")]
+    if not all(devices) or "-1" in devices or len(set(devices)) != len(devices):
+        raise ValueError("CUDA_VISIBLE_DEVICES must list distinct GPU indices or UUIDs")
+    server["CUDA_VISIBLE_DEVICES"] = devices[0]
+    trainer["CUDA_VISIBLE_DEVICES"] = devices[1] if len(devices) > 1 else devices[0]
+    return server, trainer
 
 
 def configure_pilot(template, pilot):
@@ -101,16 +116,26 @@ def configure_pilot(template, pilot):
 
 
 def resource_change_matches(state, training_template, recipe, launch):
-    """Allow only cache/queue sizing to change in an already-prepared run."""
+    """Allow cache/queue sizing and checkpoint cadence changes on resume."""
     path = launch / "train.yaml"
     if not path.is_file():
         return False
     saved = yaml.safe_load(path.read_text())
-    candidate = {**training_template, "online": dict(training_template["online"])}
-    for key in ("ram_cache_gib", "concurrency", "buffered_examples"):
+    candidate = {
+        **training_template,
+        "online": dict(training_template["online"]),
+        "optimization": dict(training_template["optimization"]),
+    }
+    for key in (
+        "ram_cache_gib", "concurrency", "buffered_examples", "lookahead_updates"
+    ):
         if key not in saved.get("online", {}):
             return False
         candidate["online"][key] = saved["online"][key]
+    candidate["optimization"]["checkpoint_interval"] = saved["optimization"][
+        "checkpoint_interval"
+    ]
+    candidate["hub_upload_interval"] = saved["hub_upload_interval"]
     signature = hashlib.sha256(
         json.dumps({"training": candidate, "recipe": recipe}, sort_keys=True).encode()
     ).hexdigest()
@@ -126,6 +151,14 @@ def prepare(args):
     pilot = getattr(args, "pilot", False)
     mode = ("pilot" if pilot else "full") + ("-10k" if variant == "10k" else "")
     configure_pilot(template, pilot)
+    for option, key in (
+        ("extraction_concurrency", "concurrency"),
+        ("buffered_examples", "buffered_examples"),
+        ("lookahead_updates", "lookahead_updates"),
+    ):
+        value = getattr(args, option, None)
+        if value is not None:
+            template["online"][key] = value
     if variant == "10k" and pilot:
         template["wandb"].update(
             group="attention-100k-10k-v1-pilot", name_prefix="attention-100k-10k-pilot-"
@@ -282,7 +315,7 @@ def commands(args, cfg, config, provenance):
         "--max-model-len",
         "8193",
         "--max-num-batched-tokens",
-        "8193",
+        str(getattr(args, "max_num_batched_tokens", 8193)),
         "--max-num-seqs",
         str(getattr(args, "max_num_seqs", 128)),
         "--gpu-memory-utilization",
@@ -349,6 +382,7 @@ def stop_owned(process):
 
 
 def run(args):
+    server_env, trainer_env = process_environments()
     args.output_root = args.output_root.resolve()
     args.output_root.mkdir(parents=True, exist_ok=True)
     with FileLock(str(args.output_root / ".launcher.lock"), timeout=0):
@@ -363,7 +397,14 @@ def run(args):
         server_command, train_command = commands(args, cfg, config, provenance)
         write_json(
             provenance / "launcher_commands.json",
-            {"server": server_command, "train": train_command},
+            {
+                "server": server_command,
+                "train": train_command,
+                "cuda_visible_devices": {
+                    "server": server_env.get("CUDA_VISIBLE_DEVICES"),
+                    "train": trainer_env.get("CUDA_VISIBLE_DEVICES"),
+                },
+            },
         )
         # Existing dry-run checks every local row, exact membership, and schedule
         # without contacting vLLM or allocating training tensors on the GPU.
@@ -399,6 +440,12 @@ def run(args):
             )
             return 0
         server = trainer = None
+        print(
+            "GPU assignment: "
+            f"vLLM={server_env.get('CUDA_VISIBLE_DEVICES', 'inherited')}; "
+            f"trainer={trainer_env.get('CUDA_VISIBLE_DEVICES', 'inherited')}",
+            flush=True,
+        )
         print(f"Starting vLLM; log: {provenance / 'vllm.log'}", flush=True)
         try:
             with (provenance / "vllm.log").open("a") as log:
@@ -408,6 +455,7 @@ def run(args):
                     stdout=log,
                     stderr=subprocess.STDOUT,
                     start_new_session=True,
+                    env=server_env,
                 )
                 wait_ready(server, args.port, args.startup_timeout)
                 print(
@@ -416,7 +464,7 @@ def run(args):
                     flush=True,
                 )
                 trainer = subprocess.Popen(  # noqa: S603 -- explicit argv, no shell
-                    train_command, cwd=REPO, start_new_session=True
+                    train_command, cwd=REPO, start_new_session=True, env=trainer_env
                 )
                 while trainer.poll() is None:
                     if server.poll() is not None:
@@ -445,6 +493,10 @@ def main():
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.40)
     parser.add_argument("--max-num-seqs", type=int, default=128)
+    parser.add_argument("--max-num-batched-tokens", type=int, default=8193)
+    parser.add_argument("--extraction-concurrency", type=int, default=None)
+    parser.add_argument("--buffered-examples", type=int, default=None)
+    parser.add_argument("--lookahead-updates", type=int, default=None)
     parser.add_argument("--startup-timeout", type=float, default=1200)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument(
@@ -464,10 +516,16 @@ def main():
         or not 1 <= args.port <= MAX_PORT
         or args.startup_timeout <= 0
         or args.max_num_seqs < 1
+        or args.max_num_batched_tokens < 8193
+        or (args.extraction_concurrency is not None and args.extraction_concurrency < 1)
+        or (args.buffered_examples is not None and args.buffered_examples < 8)
+        or (args.lookahead_updates is not None and args.lookahead_updates < 0)
     ):
         parser.error(
             "GPU memory utilization must be between 0 and 1; "
-            "port must be 1..65535; startup-timeout and max-num-seqs must be positive"
+            "port must be 1..65535; startup-timeout, max-num-seqs and concurrency must "
+            "be positive; max-num-batched-tokens must be >=8193, buffered-examples "
+            ">=8, and lookahead-updates >=0"
         )
     os.chdir(REPO)
     signal.signal(signal.SIGTERM, interrupt)
