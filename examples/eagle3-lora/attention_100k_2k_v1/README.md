@@ -8,6 +8,22 @@ RedHat EAGLE3 drafter is retained; the 24K generator checkpoint is not loaded.
 
 ## Single-command launch
 
+For a separate fresh 10,000-step run using the same 100K training pool and
+training recipe, select the 10K configuration:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 bash examples/eagle3-lora/attention_100k_2k_v1/run.sh \
+  --variant 10k --output-root /path/to/attention-100k-10k-v1
+```
+
+Omit `--output-root` to use `output/dyn-spec-attention-100k-10k-v1`.
+The default destination is `azeeer/eagle3-generator-attention-100k-10k-v1`;
+use `--hub-repo` to change it. This starts from a fresh generator, saves and
+uploads every 500 updates, and retains the same validation and data caches as
+the 2K run. It does not resume the 2K checkpoint. Rerun with the same output
+root to resume this 10K run. Add `--prepare-only` to check the exact schedule
+without starting vLLM; `--pilot` retains its isolated 10-step behavior.
+
 Finish the two generation workers and publish the complete trajectory dataset
 first, once on either generation machine:
 

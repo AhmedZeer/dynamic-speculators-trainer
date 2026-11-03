@@ -316,6 +316,33 @@ def test_gpu_headroom_options_are_forwarded(tmp_path):
     assert server[server.index("--max-num-batched-tokens") + 1] == "8193"
 
 
+def test_10k_variant_configuration_and_schedule(tmp_path, monkeypatch):
+    request = args(tmp_path)
+    request.variant = "10k"
+    monkeypatch.setattr(
+        launch, "HfApi", lambda: SimpleNamespace(
+            repo_info=lambda *a, **kw: SimpleNamespace(sha="c" * 40)
+        )
+    )
+    monkeypatch.setattr(launch, "release_records", lambda *a: records())
+    monkeypatch.setattr(
+        launch, "snapshot_download", lambda repo, **kw: str(tmp_path / "models" / repo)
+    )
+    cfg, path, provenance = launch.prepare(request)
+    loaded = CampaignConfig.load(path)
+    assert loaded.max_training_updates == 10000
+    assert loaded.optimization.pretraining_updates == 10000
+    assert loaded.wandb.group == "attention-100k-10k-v1"
+    _, command = launch.commands(request, cfg, path, provenance)
+    assert command[command.index("--max-updates") + 1] == "10000"
+    corpus = SimpleNamespace(indices=lambda _: range(1000))
+    schedule = training.EpochSchedule(loaded, corpus, loaded.experiment_subsets, 10)
+    assert len(schedule.updates) >= 10000
+    request.variant = "2k"
+    with pytest.raises(ValueError, match="separate --output-root"):
+        launch.prepare(request)
+
+
 def test_prepared_run_accepts_only_resource_sizing_changes(tmp_path):
     import hashlib  # noqa: PLC0415
 

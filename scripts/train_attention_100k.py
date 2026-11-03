@@ -1,4 +1,4 @@
-"""Pin/download the 100K release, own its extractor, and run 2,000-step training."""
+"""Pin/download the 100K release, own its extractor, and train a generator."""
 
 import argparse
 import hashlib
@@ -76,7 +76,7 @@ def limits(args):
     return (
         (PILOT_TRAIN_ROWS, PILOT_UPDATES, PILOT_UPDATES)
         if getattr(args, "pilot", False)
-        else (TRAIN_ROWS, UPDATES, 500)
+        else (TRAIN_ROWS, 10000 if getattr(args, "variant", "2k") == "10k" else UPDATES, 500)
     )
 
 
@@ -119,17 +119,23 @@ def resource_change_matches(state, training_template, recipe, launch):
 
 def prepare(args):
     """Resolve moving refs once, then reuse the same revision on every resume."""
-    template = yaml.safe_load((EXAMPLE / "train.yaml").read_text())
+    variant = getattr(args, "variant", "2k")
+    train_path = EXAMPLE / ("train_10k.yaml" if variant == "10k" else "train.yaml")
+    template = yaml.safe_load(train_path.read_text())
     recipe = yaml.safe_load((EXAMPLE / "training_recipe.yaml").read_text())
     pilot = getattr(args, "pilot", False)
-    mode = "pilot" if pilot else "full"
+    mode = ("pilot" if pilot else "full") + ("-10k" if variant == "10k" else "")
     configure_pilot(template, pilot)
+    if variant == "10k" and pilot:
+        template["wandb"].update(
+            group="attention-100k-10k-v1-pilot", name_prefix="attention-100k-10k-pilot-"
+        )
     root = args.output_root.resolve()
     launch = root / "launcher"
     launch.mkdir(parents=True, exist_ok=True)
     state_path = launch / "run.json"
     recipe_hash = hashlib.sha256(
-        (EXAMPLE / "train.yaml").read_bytes()
+        train_path.read_bytes()
         + (EXAMPLE / "training_recipe.yaml").read_bytes()
     ).hexdigest()
     training_template = dict(template)
@@ -141,7 +147,7 @@ def prepare(args):
     ).hexdigest()
     # Accept the old launcher's pre-validation-cap template for a prepared run.
     legacy_bytes = (
-        (EXAMPLE / "train.yaml")
+        train_path
         .read_bytes()
         .split(b"\n# Runtime validation only;", 1)[0]
     )
@@ -428,6 +434,7 @@ def interrupt(_signum, _frame):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--variant", choices=("2k", "10k"), default="2k")
     parser.add_argument("--output-root", type=Path, default=None)
     parser.add_argument("--hub-repo", default=None)
     parser.add_argument(
@@ -449,9 +456,9 @@ def main():
     args = parser.parse_args()
     suffix = "-pilot" if args.pilot else ""
     if args.output_root is None:
-        args.output_root = Path("output/dyn-spec-attention-100k-2k-v1" + suffix)
+        args.output_root = Path(f"output/dyn-spec-attention-100k-{args.variant}-v1" + suffix)
     if args.hub_repo is None:
-        args.hub_repo = "azeeer/eagle3-generator-attention-100k-2k-v1" + suffix
+        args.hub_repo = f"azeeer/eagle3-generator-attention-100k-{args.variant}-v1" + suffix
     if (
         not 0 < args.gpu_memory_utilization < 1
         or not 1 <= args.port <= MAX_PORT
