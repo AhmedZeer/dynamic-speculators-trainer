@@ -77,7 +77,7 @@ def limits(args):
     return (
         (PILOT_TRAIN_ROWS, PILOT_UPDATES, PILOT_UPDATES)
         if getattr(args, "pilot", False)
-        else (TRAIN_ROWS, 10000 if extended else UPDATES, 2000 if extended else 500)
+        else (TRAIN_ROWS, 10000 if extended else UPDATES, 1000 if extended else 500)
     )
 
 
@@ -147,7 +147,8 @@ def prepare(args):
     variant = getattr(args, "variant", "2k")
     train_path = EXAMPLE / ("train_10k.yaml" if variant == "10k" else "train.yaml")
     template = yaml.safe_load(train_path.read_text())
-    recipe = yaml.safe_load((EXAMPLE / "training_recipe.yaml").read_text())
+    recipe_source = train_path.parent / template["training_recipe"]
+    recipe = yaml.safe_load(recipe_source.read_text())
     pilot = getattr(args, "pilot", False)
     mode = ("pilot" if pilot else "full") + ("-10k" if variant == "10k" else "")
     configure_pilot(template, pilot)
@@ -161,7 +162,8 @@ def prepare(args):
             template["online"][key] = value
     if variant == "10k" and pilot:
         template["wandb"].update(
-            group="attention-100k-10k-v1-pilot", name_prefix="attention-100k-10k-pilot-"
+            group="attention-100k-10k-v1-ttt7-pilot",
+            name_prefix="attention-100k-10k-ttt7-pilot-",
         )
     root = args.output_root.resolve()
     launch = root / "launcher"
@@ -169,7 +171,7 @@ def prepare(args):
     state_path = launch / "run.json"
     recipe_hash = hashlib.sha256(
         train_path.read_bytes()
-        + (EXAMPLE / "training_recipe.yaml").read_bytes()
+        + recipe_source.read_bytes()
     ).hexdigest()
     training_template = dict(template)
     validation_quota = training_template.pop("validation_examples_per_category", None)
@@ -185,7 +187,7 @@ def prepare(args):
         .split(b"\n# Runtime validation only;", 1)[0]
     )
     legacy_hash = hashlib.sha256(
-        legacy_bytes + (EXAMPLE / "training_recipe.yaml").read_bytes()
+        legacy_bytes + recipe_source.read_bytes()
     ).hexdigest()
     api = HfApi()
     if state_path.exists():
@@ -506,7 +508,9 @@ def main():
         "isolated output and HF repo",
     )
     args = parser.parse_args()
-    suffix = "-pilot" if args.pilot else ""
+    suffix = ("-ttt7" if args.variant == "10k" else "") + (
+        "-pilot" if args.pilot else ""
+    )
     if args.output_root is None:
         args.output_root = Path(f"output/dyn-spec-attention-100k-{args.variant}-v1" + suffix)
     if args.hub_repo is None:

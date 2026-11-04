@@ -1,7 +1,7 @@
 # Fresh attention generator; managed launcher resolves the dataset revision.
-training_recipe: training_recipe.yaml
+training_recipe: training_recipe_ttt7.yaml
 input_root: output/attention-100k-2k-v1/inputs
-output_root: output/dyn-spec-attention-100k-10k-v1
+output_root: output/dyn-spec-attention-100k-10k-v1-ttt7
 staging_dir: /tmp/speculators-attention-100k-2k-v1
 condition: last
 seed: 42
@@ -28,11 +28,11 @@ optimization:
   pretraining_updates: 10000
   pretraining_validation_interval: 250
   episodes_per_update: 4
-  checkpoint_interval: 2000
+  checkpoint_interval: 1000
   log_interval: 10
   token_budget: 8192
 adaptation_updates: 1000
-hub_upload_interval: 2000
+hub_upload_interval: 1000
 pilot:
   updates: 100
 wandb:
@@ -44,8 +44,8 @@ wandb:
     conditioning: eagle3-generator-conditioning
     heatmap: eagle3-generator-heatmap
     adaptation: eagle3-generator-adaptation
-  name_prefix: attention-100k-10k-v1-
-  group: attention-100k-10k-v1
+  name_prefix: attention-100k-10k-v1-ttt7-
+  group: attention-100k-10k-v1-ttt7
 activation_source: vllm
 trajectories_path: output/attention-100k-2k-v1/trajectories
 online:

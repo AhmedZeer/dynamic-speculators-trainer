@@ -306,6 +306,17 @@ def test_cli_pilot_defaults_are_separate(tmp_path, monkeypatch, pilot):
     assert request.hub_repo.endswith("-pilot") == pilot
 
 
+def test_cli_10k_uses_separate_ttt7_destinations(monkeypatch):
+    captured = []
+    monkeypatch.setattr(launch.sys, "argv", ["train_attention_100k.py", "--variant", "10k"])
+    monkeypatch.setattr(launch, "run", lambda request: captured.append(request) or 0)
+    monkeypatch.setattr(launch.os, "chdir", lambda _: None)
+    monkeypatch.setattr(launch.signal, "signal", lambda *a: None)
+    assert launch.main() == 0
+    assert captured[0].output_root.name == "dyn-spec-attention-100k-10k-v1-ttt7"
+    assert captured[0].hub_repo == "azeeer/eagle3-generator-attention-100k-10k-v1-ttt7"
+
+
 def test_gpu_headroom_options_are_forwarded(tmp_path):
     request = args(tmp_path)
     request.max_num_seqs = 64
@@ -335,12 +346,17 @@ def test_10k_variant_configuration_and_schedule(tmp_path, monkeypatch):
     loaded = CampaignConfig.load(path)
     assert loaded.max_training_updates == 10000
     assert loaded.optimization.pretraining_updates == 10000
-    assert loaded.wandb.group == "attention-100k-10k-v1"
-    assert loaded.optimization.checkpoint_interval == 2000
-    assert loaded.hub_upload_interval == 2000
+    assert loaded.wandb.group == "attention-100k-10k-v1-ttt7"
+    recipe = yaml.safe_load(Path(loaded.training_recipe).read_text())
+    assert recipe["training"]["ttt_steps"] == 7
+    assert yaml.safe_load((launch.EXAMPLE / "training_recipe.yaml").read_text())[
+        "training"
+    ]["ttt_steps"] == 3
+    assert loaded.optimization.checkpoint_interval == 1000
+    assert loaded.hub_upload_interval == 1000
     _, command = launch.commands(request, cfg, path, provenance)
     assert command[command.index("--max-updates") + 1] == "10000"
-    assert command[command.index("--hub-upload-interval") + 1] == "2000"
+    assert command[command.index("--hub-upload-interval") + 1] == "1000"
     corpus = SimpleNamespace(indices=lambda _: range(1000))
     schedule = training.EpochSchedule(loaded, corpus, loaded.experiment_subsets, 10)
     assert len(schedule.updates) >= 10000
@@ -424,7 +440,7 @@ def test_parallelism_overrides_and_checkpoint_cadence_can_resume(tmp_path, monke
     path.write_text(yaml.safe_dump(saved))
     state_path = request.output_root / "launcher/run.json"
     state = json.loads(state_path.read_text())
-    recipe = yaml.safe_load((launch.EXAMPLE / "training_recipe.yaml").read_text())
+    recipe = yaml.safe_load((launch.EXAMPLE / "training_recipe_ttt7.yaml").read_text())
     state["template_sha256"] = "old-template"
     state["training_signature"] = hashlib.sha256(json.dumps(
         {"training": previous, "recipe": recipe}, sort_keys=True
@@ -438,6 +454,6 @@ def test_parallelism_overrides_and_checkpoint_cadence_can_resume(tmp_path, monke
     assert cfg["online"]["concurrency"] == 64
     assert cfg["online"]["buffered_examples"] == 128
     assert cfg["online"]["lookahead_updates"] == 8
-    assert cfg["optimization"]["checkpoint_interval"] == 2000
+    assert cfg["optimization"]["checkpoint_interval"] == 1000
     server, _ = launch.commands(request, cfg, path, provenance)
     assert server[server.index("--max-num-batched-tokens") + 1] == "16386"

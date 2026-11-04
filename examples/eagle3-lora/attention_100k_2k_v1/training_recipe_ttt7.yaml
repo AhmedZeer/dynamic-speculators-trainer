@@ -1,0 +1,76 @@
+# Template only: the launcher replaces this sentinel with a pinned completed release.
+models:
+  target: Qwen/Qwen3-8B
+  target_revision: b968826d9c46dd6066d109eabc6255188de91218
+  drafter: RedHatAI/Qwen3-8B-speculator.eagle3
+  drafter_revision: 08610ffa01dd9f16731fe8f627b85905b6aa51c4
+dataset:
+  source: openeurollm/Nemotron-Post-Training-Dataset-v2-decontaminated
+  revision: main
+  configuration: default
+  split: math
+  category: math
+  sample_limit: null
+hidden_states:
+  layer_ids:
+  - 2
+  - 18
+  - 33
+  - 36
+  dtype: bfloat16
+  sequence_length: 8192
+lora:
+  rank: 32
+  alpha: 64
+  dropout: 0.05
+  target_modules:
+  - o_proj
+  - v_proj
+training:
+  token_budget: 8192
+  noise_std: 0.05
+  ttt_steps: 7
+  ttt_step_loss_decay: 1.0
+  gradient_checkpointing: false
+execution:
+  draft_attn_impl: simple_flex_attention
+  n_workers: 1
+conditioning:
+  max_examples: 8
+  states: prompt
+hub:
+  mode: consumer
+  trajectories_repo: azeeer/eagle3-qwen3-8b-trajectories-v1
+  trajectories_revision: '0000000000000000000000000000000000000000'
+  release: r0002-100k
+  selection: s0002-100k
+partition:
+  train_examples: 1000
+  validation_examples: 100
+  seed: 0
+  subset_ids:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  - 13
+  - 14
+  - 15
+  - 16
+  - 17
+  - 18
+  - 19
+  - 20
+  - 21
+  - 22
+  - 23
+  - 24

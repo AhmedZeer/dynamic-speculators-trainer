@@ -9,26 +9,32 @@ RedHat EAGLE3 drafter is retained; the 24K generator checkpoint is not loaded.
 ## Single-command launch
 
 For a separate fresh 10,000-step run using the same 100K training pool and
-training recipe, select the 10K configuration:
+training architecture, select the 10K configuration. This variant now uses
+**seven TTT prediction steps** (`training_recipe_ttt7.yaml`); the 2K variant
+continues to use three. It starts a fresh TTT7 experiment and requires a separate
+output root from any TTT3 run:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 bash examples/eagle3-lora/attention_100k_2k_v1/run.sh \
-  --variant 10k --output-root /path/to/attention-100k-10k-v1
+  --variant 10k --output-root /path/to/attention-100k-10k-v1-ttt7
 ```
 
-Omit `--output-root` to use `output/dyn-spec-attention-100k-10k-v1`.
-The default destination is `azeeer/eagle3-generator-attention-100k-10k-v1`;
+Omit `--output-root` to use `output/dyn-spec-attention-100k-10k-v1-ttt7`.
+The default destination is `azeeer/eagle3-generator-attention-100k-10k-v1-ttt7`;
 use `--hub-repo` to change it. This starts from a fresh generator, saves and
-uploads every 2,000 updates, and retains the same validation and data caches as
+uploads every 1,000 updates, and retains the same validation and data caches as
 the 2K run. It does not resume the 2K checkpoint. Rerun with the same output
 root to resume this 10K run. Add `--prepare-only` to check the exact schedule
 without starting vLLM; `--pilot` retains its isolated 10-step behavior.
+HF snapshots include `step-00001000` and `step-00002000` for comparison with
+the earlier TTT3 runs. Seven TTT steps increase training compute and memory;
+this change does not automatically change the speculative length used by benchmarks.
 
 ### Two GPUs on one node
 
 ```bash
 CUDA_VISIBLE_DEVICES=2,3 bash examples/eagle3-lora/attention_100k_2k_v1/run.sh \
-  --variant 10k --output-root /path/to/attention-100k-10k-v1
+  --variant 10k --output-root /path/to/attention-100k-10k-v1-ttt7
 ```
 
 The first listed GPU runs vLLM; the second runs the trainer. Each subprocess
@@ -43,7 +49,7 @@ For more overlap on two dedicated 96 GB GPUs, an initial tuning experiment is:
 
 ```bash
 CUDA_VISIBLE_DEVICES=2,3 bash examples/eagle3-lora/attention_100k_2k_v1/run.sh \
-  --variant 10k --output-root /path/to/attention-100k-10k-v1 \
+  --variant 10k --output-root /path/to/attention-100k-10k-v1-ttt7 \
   --gpu-memory-utilization 0.70 --max-num-batched-tokens 16386 \
   --lookahead-updates 8
 ```
@@ -56,8 +62,8 @@ increase host RAM and temporary-file use; the RAM cache remains capped at
 120 GiB. These settings do not change the training cohort, loss or token budget.
 This tuning suggestion has not been measured on the cluster.
 
-The same output root can adopt a different GPU assignment, extraction queue
-settings, and the new 2K checkpoint/upload cadence on resume. Stop the existing
+The same TTT7 output root can adopt a different GPU assignment, extraction queue
+settings, and the 1K checkpoint/upload cadence on resume. Stop the existing
 launcher cleanly first; resume uses the latest saved local checkpoint. The
 10-step pilot still checkpoints/uploads at step 10; the 2K variant retains its
 500-step cadence. Initial recovery checkpoints and final saves still apply.
