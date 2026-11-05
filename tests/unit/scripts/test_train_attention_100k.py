@@ -317,6 +317,42 @@ def test_cli_10k_uses_separate_ttt7_destinations(monkeypatch):
     assert captured[0].hub_repo == "azeeer/eagle3-generator-attention-100k-10k-v1-ttt7"
 
 
+def test_cli_ttt3_continuation_retains_original_repo(monkeypatch):
+    captured = []
+    monkeypatch.setattr(
+        launch.sys, "argv", ["train_attention_100k.py", "--variant", "10k-ttt3"]
+    )
+    monkeypatch.setattr(launch, "run", lambda request: captured.append(request) or 0)
+    monkeypatch.setattr(launch.os, "chdir", lambda _: None)
+    monkeypatch.setattr(launch.signal, "signal", lambda *a: None)
+    assert launch.main() == 0
+    request = captured[0]
+    assert request.output_root.name == "dyn-spec-attention-100k-10k-ttt3-v1"
+    assert request.hub_repo == "azeeer/eagle3-generator-attention-100k-2k-v1"
+    assert launch.limits(request) == (100000, 10000, 1000)
+
+
+def test_ttt3_continuation_uses_original_dataset_without_resolving_main(
+    tmp_path, monkeypatch
+):
+    request = args(tmp_path)
+    request.variant = "10k-ttt3"
+    monkeypatch.setattr(launch, "HfApi", lambda: None)
+    revisions = []
+    monkeypatch.setattr(
+        launch, "release_records", lambda repo, revision: revisions.append(revision) or records()
+    )
+    monkeypatch.setattr(
+        launch, "snapshot_download", lambda repo, **kw: str(tmp_path / "models" / repo)
+    )
+    cfg, path, _ = launch.prepare(request)
+    assert revisions == ["93750ccc4ba1701c2ec6b75ca5e4c1a5d867daa6"]
+    recipe = yaml.safe_load(Path(CampaignConfig.load(path).training_recipe).read_text())
+    assert recipe["training"]["ttt_steps"] == 3
+    assert cfg["max_training_updates"] == 10000
+    assert cfg["optimization"]["checkpoint_interval"] == 1000
+
+
 def test_gpu_headroom_options_are_forwarded(tmp_path):
     request = args(tmp_path)
     request.max_num_seqs = 64

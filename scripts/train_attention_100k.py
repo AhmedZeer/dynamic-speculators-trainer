@@ -73,7 +73,7 @@ def release_records(repo, revision):
 
 def limits(args):
     """Return training membership, optimizer steps, and upload interval."""
-    extended = getattr(args, "variant", "2k") == "10k"
+    extended = getattr(args, "variant", "2k") in ("10k", "10k-ttt3")
     return (
         (PILOT_TRAIN_ROWS, PILOT_UPDATES, PILOT_UPDATES)
         if getattr(args, "pilot", False)
@@ -145,12 +145,17 @@ def resource_change_matches(state, training_template, recipe, launch):
 def prepare(args):
     """Resolve moving refs once, then reuse the same revision on every resume."""
     variant = getattr(args, "variant", "2k")
-    train_path = EXAMPLE / ("train_10k.yaml" if variant == "10k" else "train.yaml")
+    train_path = EXAMPLE / {
+        "2k": "train.yaml", "10k": "train_10k.yaml",
+        "10k-ttt3": "train_10k_ttt3.yaml",
+    }[variant]
     template = yaml.safe_load(train_path.read_text())
     recipe_source = train_path.parent / template["training_recipe"]
     recipe = yaml.safe_load(recipe_source.read_text())
     pilot = getattr(args, "pilot", False)
-    mode = ("pilot" if pilot else "full") + ("-10k" if variant == "10k" else "")
+    mode = ("pilot" if pilot else "full") + (
+        f"-{variant}" if variant != "2k" else ""
+    )
     configure_pilot(template, pilot)
     for option, key in (
         ("extraction_concurrency", "concurrency"),
@@ -217,11 +222,18 @@ def prepare(args):
             raise ValueError("Resume must retain the pinned trajectory revision")
         revision = state["trajectories_revision"]
     else:
-        revision = api.repo_info(
-            recipe["hub"]["trajectories_repo"],
-            repo_type="dataset",
-            revision=args.trajectories_revision,
-        ).sha
+        if variant == "10k-ttt3":
+            from speculators.generator.attention_continuation import TRAJECTORY_REVISION  # noqa: PLC0415
+
+            if args.trajectories_revision not in ("main", TRAJECTORY_REVISION):
+                raise ValueError("Continuation requires the original trajectory pin")
+            revision = TRAJECTORY_REVISION
+        else:
+            revision = api.repo_info(
+                recipe["hub"]["trajectories_repo"],
+                repo_type="dataset",
+                revision=args.trajectories_revision,
+            ).sha
         state = {
             "trajectories_revision": revision,
             "template_sha256": recipe_hash,
@@ -441,6 +453,10 @@ def run(args):
                 flush=True,
             )
             return 0
+        if getattr(args, "variant", "2k") == "10k-ttt3":
+            from speculators.generator.attention_continuation import restore  # noqa: PLC0415
+
+            restore(args.output_root, plan)
         server = trainer = None
         print(
             "GPU assignment: "
@@ -484,7 +500,7 @@ def interrupt(_signum, _frame):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--variant", choices=("2k", "10k"), default="2k")
+    parser.add_argument("--variant", choices=("2k", "10k", "10k-ttt3"), default="2k")
     parser.add_argument("--output-root", type=Path, default=None)
     parser.add_argument("--hub-repo", default=None)
     parser.add_argument(
@@ -508,13 +524,19 @@ def main():
         "isolated output and HF repo",
     )
     args = parser.parse_args()
+    if args.variant == "10k-ttt3" and args.pilot:
+        parser.error("The TTT3 continuation restores step 2000; --pilot is unavailable")
     suffix = ("-ttt7" if args.variant == "10k" else "") + (
         "-pilot" if args.pilot else ""
     )
     if args.output_root is None:
         args.output_root = Path(f"output/dyn-spec-attention-100k-{args.variant}-v1" + suffix)
     if args.hub_repo is None:
-        args.hub_repo = f"azeeer/eagle3-generator-attention-100k-{args.variant}-v1" + suffix
+        args.hub_repo = (
+            "azeeer/eagle3-generator-attention-100k-2k-v1"
+            if args.variant == "10k-ttt3"
+            else f"azeeer/eagle3-generator-attention-100k-{args.variant}-v1" + suffix
+        )
     if (
         not 0 < args.gpu_memory_utilization < 1
         or not 1 <= args.port <= MAX_PORT

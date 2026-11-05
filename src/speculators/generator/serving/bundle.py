@@ -19,6 +19,7 @@ VLLM_VERSION = "0.31.0"
 VLLM_COMMIT = "db9527a46873454610df6dbedf79a36d6bf1a7f6"
 PROJECTIONS = ("o_proj", "v_proj")
 PROVENANCE = (
+    "hf_continuation.json",
     "resolved_experiment.json",
     "train_command.txt",
     "speculators.patch",

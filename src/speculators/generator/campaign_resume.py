@@ -4,7 +4,7 @@ import copy
 import json
 import time
 
-from speculators.bank.artifacts import digest, write_json
+from speculators.bank.artifacts import digest, file_digest, write_json
 from speculators.bank.progress import report
 from speculators.generator.campaign_config import CampaignConfig
 
@@ -39,6 +39,21 @@ def resume_identity(output, current):
             "configuration"
         ]["optimization"]["checkpoint_interval"]
     adjusted["job"]["updates"] = current["job"]["updates"]
+    continuation = output / "hf_continuation.json"
+    if continuation.is_file():
+        source = output / "provenance" / "hf-continuation-source" / "resolved_experiment.json"
+        receipt = json.loads(continuation.read_text())
+        if file_digest(source) != receipt["identity_sha256"]:
+            raise ValueError("HF continuation source identity checksum differs")
+        # Only explicitly restored runs can relocate their paths/job budget.
+        # Architecture, loss, TTT horizon, full data membership and epoch schedule
+        # remain subject to the exact identity comparison below.
+        for key in ("bank_config", "additional_bank_configs"):
+            adjusted["configuration"][key] = current["configuration"][key]
+        for key in (
+            "label", "max_updates", "vllm_provenance_dir", "drafter_model_path", "hub_repo"
+        ):
+            adjusted["job"][key] = current["job"][key]
     execution_changed = False
     for key in ("generator_dtype", "generator_batching"):
         if adjusted["configuration"].get(key) != current["configuration"].get(key):

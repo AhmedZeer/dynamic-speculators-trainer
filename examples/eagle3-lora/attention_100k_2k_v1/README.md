@@ -11,6 +11,40 @@ RedHat EAGLE3 drafter is retained; the 24K generator checkpoint is not loaded.
 
 ## Single-command launch
 
+### Continue the published TTT3 model from 2K to 10K total updates
+
+```bash
+bash examples/eagle3-lora/attention_100k_2k_v1/run.sh --variant 10k-ttt3
+```
+
+This restores `step-00002000` from
+`azeeer/eagle3-generator-attention-100k-2k-v1` at pinned commit
+`cf09002ae6fbca1fe0e9139ab8a0eee3b149a124`, verifies the checkpoint SHA256,
+and resumes model weights, Adam state, RNG, history and the original epoch
+schedule at update 2,001. The target is 10,000 total updates: 8,000 additional
+updates. TTT remains 3; LR remains 1e-4 after its original warmup, without a
+warmup restart. The exact original trajectory commit is reused.
+
+Default output is `output/dyn-spec-attention-100k-10k-ttt3-v1`. Use
+`--output-root` for a persistent disk/Drive destination. Existing local progress
+takes precedence over the HF source checkpoint. HF recovery on a fresh output
+directory starts from the pinned 2K source, not automatically from a later
+continuation upload; retain the local directory to resume later progress.
+
+Local checkpoints and HF exports occur every 1,000 total updates, published to
+the same original model repo. The original step-2K snapshot is not republished;
+new exports start at `step-00003000`. The original training command, patches,
+extraction provenance and a source-recovery receipt accompany the continuation.
+Model/data/loss changes are rejected on restore. `--prepare-only` validates the
+dataset and 10K schedule without downloading the large source checkpoint or
+starting vLLM; the 10-step `--pilot` is unavailable for this continuation.
+
+On a two-GPU machine, prefix the same command with `CUDA_VISIBLE_DEVICES=2,3`;
+the extractor uses the first GPU and training the second. On one GPU they share
+it. This continuation has CPU recovery checks, but no local GPU measurement.
+
+### Fresh TTT7 run
+
 For a separate fresh 10,000-step run using the same 100K training pool and
 training architecture, select the 10K configuration. This variant now uses
 **seven TTT prediction steps** (`training_recipe_ttt7.yaml`); the 2K variant

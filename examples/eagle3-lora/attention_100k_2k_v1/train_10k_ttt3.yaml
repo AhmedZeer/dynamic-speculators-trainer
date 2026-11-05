@@ -1,0 +1,181 @@
+# Fresh attention generator; managed launcher resolves the dataset revision.
+training_recipe: training_recipe.yaml
+input_root: output/attention-100k-2k-v1/inputs
+output_root: output/dyn-spec-attention-100k-10k-ttt3-v1
+staging_dir: /tmp/speculators-attention-100k-2k-v1
+condition: last
+seed: 42
+device: cuda
+dtype: bfloat16
+generator_dtype: bfloat16
+generator_batching: true
+n_workers: 1
+heatmap_n_workers: 1
+activation_prefetch_workers: 2
+preprocessing_workers: 4
+factor_cache_mib: 256
+context:
+  min_examples: 1
+  max_examples: 8
+  evaluation_sizes:
+  - 4
+optimization:
+  loss_fn: lk_hybrid
+  lr: 0.0001
+  weight_decay: 0.01
+  max_grad_norm: 0.85
+  warmup_updates: 100
+  pretraining_updates: 10000
+  pretraining_validation_interval: 250
+  episodes_per_update: 4
+  checkpoint_interval: 1000
+  log_interval: 10
+  token_budget: 8192
+adaptation_updates: 1000
+hub_upload_interval: 1000
+pilot:
+  updates: 100
+wandb:
+  enabled: true
+  mode: online
+  pretraining_project: eagle3-generator-ablations-v3
+  layout: sections
+  projects:
+    conditioning: eagle3-generator-conditioning
+    heatmap: eagle3-generator-heatmap
+    adaptation: eagle3-generator-adaptation
+  name_prefix: attention-100k-10k-ttt3-v1-
+  group: attention-100k-10k-ttt3-v1
+activation_source: vllm
+trajectories_path: output/attention-100k-2k-v1/trajectories
+online:
+  ram_cache_gib: 120
+  summary_cache_dir: output/generator-summary-cache
+  compiler_cache_dir: output/generator-compiler-cache
+  lookahead_updates: 2
+  endpoint: http://127.0.0.1:8000/v1
+  shared_dir: /tmp/speculators-attention-100k-2k-v1
+  concurrency: 128
+  buffered_examples: 256
+  target_model_path: models/qwen3-8b
+  drafter_model_path: models/qwen3-8b-eagle3
+  reserve_gib: 8
+target_modules:
+- q_proj
+- k_proj
+- v_proj
+- o_proj
+architecture:
+  encoder_hidden: 512
+  example_dim: 128
+  condition_dim: 64
+  descriptor_dim: 32
+  decoder_width: 512
+  residual_blocks: 2
+max_training_updates: 10000
+expected_train_examples: 1000
+expected_validation_examples: 100
+experiment_subsets:
+- math-00000
+- math-00001
+- math-00002
+- math-00003
+- math-00004
+- math-00005
+- math-00006
+- math-00007
+- math-00008
+- math-00009
+- math-00010
+- math-00011
+- math-00012
+- math-00013
+- math-00014
+- math-00015
+- math-00016
+- math-00017
+- math-00018
+- math-00019
+- math-00020
+- math-00021
+- math-00022
+- math-00023
+- math-00024
+- code-00000
+- code-00001
+- code-00002
+- code-00003
+- code-00004
+- code-00005
+- code-00006
+- code-00007
+- code-00008
+- code-00009
+- code-00010
+- code-00011
+- code-00012
+- code-00013
+- code-00014
+- code-00015
+- code-00016
+- code-00017
+- code-00018
+- code-00019
+- code-00020
+- code-00021
+- code-00022
+- code-00023
+- code-00024
+- stem-00000
+- stem-00001
+- stem-00002
+- stem-00003
+- stem-00004
+- stem-00005
+- stem-00006
+- stem-00007
+- stem-00008
+- stem-00009
+- stem-00010
+- stem-00011
+- stem-00012
+- stem-00013
+- stem-00014
+- stem-00015
+- stem-00016
+- stem-00017
+- stem-00018
+- stem-00019
+- stem-00020
+- stem-00021
+- stem-00022
+- stem-00023
+- stem-00024
+- chat-00000
+- chat-00001
+- chat-00002
+- chat-00003
+- chat-00004
+- chat-00005
+- chat-00006
+- chat-00007
+- chat-00008
+- chat-00009
+- chat-00010
+- chat-00011
+- chat-00012
+- chat-00013
+- chat-00014
+- chat-00015
+- chat-00016
+- chat-00017
+- chat-00018
+- chat-00019
+- chat-00020
+- chat-00021
+- chat-00022
+- chat-00023
+- chat-00024
+
+# Runtime validation only; published membership counts stay 100 per subset.
+validation_examples_per_category: 250
