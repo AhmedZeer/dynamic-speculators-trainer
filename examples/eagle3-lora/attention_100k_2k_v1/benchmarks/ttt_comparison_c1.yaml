@@ -1,0 +1,66 @@
+# Training TTT is part of each row name; serving length is selected with --ttt.
+# Six pinned checkpoints x three categories per serving length.
+models:
+- name: attn_gen_ttt3_1k
+  type: generator
+  model: azeeer/eagle3-generator-attention-100k-2k-v1
+  revision: cf09002ae6fbca1fe0e9139ab8a0eee3b149a124
+  subfolder: step-00001000
+  adapter_policy: shared
+  conditioning_examples: 1
+- name: attn_gen_ttt7_1k
+  type: generator
+  model: azeeer/eagle3-generator-attention-100k-10k-v1-ttt7
+  revision: e2d9fb419311aec5134bd96c221037e504bf2596
+  subfolder: step-00001000
+  adapter_policy: shared
+  conditioning_examples: 1
+- name: attn_gen_ttt3_2k
+  type: generator
+  model: azeeer/eagle3-generator-attention-100k-2k-v1
+  revision: cf09002ae6fbca1fe0e9139ab8a0eee3b149a124
+  subfolder: step-00002000
+  adapter_policy: shared
+  conditioning_examples: 1
+- name: attn_gen_ttt7_2k
+  type: generator
+  model: azeeer/eagle3-generator-attention-100k-10k-v1-ttt7
+  revision: e2d9fb419311aec5134bd96c221037e504bf2596
+  subfolder: step-00002000
+  adapter_policy: shared
+  conditioning_examples: 1
+- name: attn_gen_ttt7_3k
+  type: generator
+  model: azeeer/eagle3-generator-attention-100k-10k-v1-ttt7
+  revision: e2d9fb419311aec5134bd96c221037e504bf2596
+  subfolder: step-00003000
+  adapter_policy: shared
+  conditioning_examples: 1
+- name: attn_gen_ttt7_4k
+  type: generator
+  model: azeeer/eagle3-generator-attention-100k-10k-v1-ttt7
+  revision: e2d9fb419311aec5134bd96c221037e504bf2596
+  subfolder: step-00004000
+  adapter_policy: shared
+  conditioning_examples: 1
+benchmarks:
+- dataset: nemotron
+  categories:
+  - math
+  - stem
+  - chat
+settings:
+  batching_policy: fixed_shared_adapter
+  concurrency: 1
+  max_samples: 50
+  max_tokens: 256
+  speculative_tokens: 3
+  warmups: 3
+  seed: 42
+  gpu: 0
+  continue_on_error: false
+wandb:
+  enabled: true
+  project: eagle3-generator-structure-bench-v1
+  group: attention-100k-training-ttt3-vs-ttt7-c1
+  mode: online

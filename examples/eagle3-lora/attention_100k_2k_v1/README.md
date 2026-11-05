@@ -1,5 +1,8 @@
 # Attention generator: 100K examples, 2,000 updates
 
+For the six-checkpoint comparison of TTT3/TTT7 training at serving lengths 3 and
+7, see [the comparison runbook](benchmarks/TTT_COMPARISON.md).
+
 Train a **fresh Q/K/V/O generator** using the expanded Nemotron release
 `r0002-100k`, with 25K training examples per category and separate validation.
 The architecture, rank/alpha/dropout, learning rate, loss, context-size sampling,

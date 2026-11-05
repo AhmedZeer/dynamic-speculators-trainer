@@ -75,6 +75,37 @@ def test_config_and_dry_run(tmp_path):
         Model(name="bad", type="lora", model="owner/repo", conditioning_examples=2)
 
 
+@pytest.mark.parametrize("ttt", [3, 7])
+def test_ttt_comparison_override_and_server_length(tmp_path, ttt):
+    path = Path(
+        "examples/eagle3-lora/attention_100k_2k_v1/benchmarks/ttt_comparison_c1.yaml"
+    )
+    result = suite.run_suite(path, tmp_path / "output", dry_run=True, ttt=ttt)
+    config = Suite.model_validate(result["configuration"])
+    assert config.settings.speculative_tokens == ttt
+    assert config.wandb.group.endswith(f"-ttt{ttt}")
+    assert [m.name for m in config.models] == [
+        "attn_gen_ttt3_1k", "attn_gen_ttt7_1k",
+        "attn_gen_ttt3_2k", "attn_gen_ttt7_2k",
+        "attn_gen_ttt7_3k", "attn_gen_ttt7_4k",
+    ]
+    assert config.benchmarks[0].categories == ["math", "stem", "chat"]
+    command = suite.server_command(
+        tmp_path,
+        {"type": "generator", "path": "/bundle"},
+        suite.DEFAULT_TARGET,
+        config.settings,
+        tmp_path / "provenance",
+    )
+    assert command[command.index("--spec-tokens") + 1] == str(ttt)
+    previous = config.model_dump(mode="json")
+    config.settings.speculative_tokens = 7 if ttt == 3 else 3
+    with pytest.raises(ValueError):
+        suite.validate_resume_request(previous, config)
+    with pytest.raises(ValidationError):
+        suite.run_suite(path, tmp_path / "bad", dry_run=True, ttt=0)
+
+
 def test_structure_suite_matches_math_chat_c1_and_requires_all_step1500_models(
     tmp_path, monkeypatch
 ):

@@ -15,11 +15,15 @@ def suite_command(
     output_root: Annotated[Path, typer.Option("--output-root")],
     resume: Annotated[bool, typer.Option("--resume")] = False,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    ttt: Annotated[
+        int | None,
+        typer.Option("--ttt", min=1, help="Serving draft length; overrides speculative_tokens."),
+    ] = None,
 ):
     """Measure model/category pairs and write a combined throughput table."""
     from speculators.benchmark.suite import run_suite  # noqa: PLC0415
 
-    result = run_suite(config, output_root, resume=resume, dry_run=dry_run)
+    result = run_suite(config, output_root, resume=resume, dry_run=dry_run, ttt=ttt)
     typer.echo(json.dumps(result, indent=2))
     if result.get("failed", 0):
         raise typer.Exit(code=1)

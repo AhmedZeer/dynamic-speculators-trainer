@@ -548,11 +548,17 @@ def _measure_model(root, output, model, plan, state, settings, tokenizer):  # no
 
 
 def run_suite(  # noqa: C901 -- resolve, launch and resume the complete suite
-    config_path, output_root, *, resume=False, dry_run=False, profile_mode=None
+    config_path, output_root, *, resume=False, dry_run=False, profile_mode=None, ttt=None
 ):
     session_started = time.monotonic()
     config_path = Path(config_path).resolve()
     config = Suite.load(config_path)
+    if ttt is not None:
+        config.settings = type(config.settings).model_validate(
+            {**config.settings.model_dump(), "speculative_tokens": ttt}
+        )
+        if config.wandb.group:
+            config.wandb.group += f"-ttt{ttt}"
     if profile_mode is None and config.settings.profiling is not None:
         raise ValueError("Use speculators benchmark profile for profiling configs")
     if profile_mode is not None:
