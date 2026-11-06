@@ -45,6 +45,8 @@ it. This continuation has CPU recovery checks, but no local GPU measurement.
 
 ### Fresh TTT7 run
 
+For the matched static adapter baseline, see the static-LoRA section below.
+
 For a separate fresh 10,000-step run using the same 100K training pool and
 training architecture, select the 10K configuration. This variant now uses
 **seven TTT prediction steps** (`training_recipe_ttt7.yaml`); the 2K variant
@@ -104,6 +106,46 @@ settings, and the 1K checkpoint/upload cadence on resume. Stop the existing
 launcher cleanly first; resume uses the latest saved local checkpoint. The
 10-step pilot still checkpoints/uploads at step 10; the 2K variant retains its
 500-step cadence. Initial recovery checkpoints and final saves still apply.
+
+### Matched static attention LoRA: 100K examples, 10K updates, TTT3
+
+```bash
+bash examples/eagle3-lora/attention_100k_2k_v1/run.sh --variant 10k-lora
+```
+
+This starts a fresh static Q/K/V/O LoRA at step 0 and trains through step
+10,000. It uses `train_10k_lora.yaml` and `train-full-data --arm lora`, directly
+optimizing one adapter shared across requests. There is no generator conditioning
+or generator-checkpoint restore in this arm. Initialization is ordinary LoRA:
+Kaiming A and zero B, with the drafter backbone frozen.
+
+The baseline matches the TTT3 generator's pinned target/drafter and exact
+trajectory commit, all 100K training examples, 1K held-out validation examples,
+epoch shuffles/cohort schedule, four cohorts per update, three TTT steps,
+`lk_hybrid` objective, LR 1e-4 with 100 warmup steps, rank 32, alpha 64,
+dropout 0.05, Q/K/V/O projections, and 8,192-token microbatch budget. The
+generator YAML architecture/conditioning fields are inherited for configuration
+compatibility but are unused by the static training arm. Model compute uses
+BF16; static trainable factors use the existing ordinary-LoRA FP32 parameter
+initialization and Adam state. Matching updates/data does not match parameter
+count or compute between static LoRA and the generator.
+
+Defaults:
+
+- Output: `output/dyn-spec-static-lora-attention-100k-10k-v1`.
+- HF repo: `azeeer/eagle3-static-lora-attention-100k-10k-v1`.
+- W&B group: `static-lora-attention-100k-10k-v1`.
+- Local checkpoints and resumable HF exports every 1,000 updates, including
+  `step-00001000`, `step-00002000`, and onward through `step-00010000`.
+- Training files: `pretraining/all-data-lora-10000steps/` under the output root.
+
+Use `--output-root` to choose persistent storage; rerun the same command/root
+to resume local progress. Add `--pilot` for a separate static-LoRA 1K-example,
+10-update smoke run or `--prepare-only` to inspect the training plan. Two-GPU
+assignment and extraction tuning flags work exactly as for the generator.
+Activation caches are reused; no NVMe storage is required. Exported bundles
+have kind `static_lora` and can enter benchmark suites with model type `lora`.
+Configuration/launcher checks are implemented; GPU training is unmeasured here.
 
 Finish the two generation workers and publish the complete trajectory dataset
 first, once on either generation machine:

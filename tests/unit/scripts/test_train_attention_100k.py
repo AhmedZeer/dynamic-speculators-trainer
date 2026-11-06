@@ -332,6 +332,67 @@ def test_cli_ttt3_continuation_retains_original_repo(monkeypatch):
     assert launch.limits(request) == (100000, 10000, 1000)
 
 
+@pytest.mark.parametrize("pilot", [False, True])
+def test_static_lora_variant_selects_lora_arm_and_separate_destinations(
+    tmp_path, monkeypatch, pilot
+):
+    captured = []
+    argv = ["train_attention_100k.py", "--variant", "10k-lora"]
+    if pilot:
+        argv.append("--pilot")
+    monkeypatch.setattr(launch.sys, "argv", argv)
+    monkeypatch.setattr(launch, "run", lambda request: captured.append(request) or 0)
+    monkeypatch.setattr(launch.os, "chdir", lambda _: None)
+    monkeypatch.setattr(launch.signal, "signal", lambda *a: None)
+    assert launch.main() == 0
+    request = captured[0]
+    suffix = "-pilot" if pilot else ""
+    assert request.hub_repo == "azeeer/eagle3-static-lora-attention-100k-10k-v1" + suffix
+    assert request.output_root.name == "dyn-spec-static-lora-attention-100k-10k-v1" + suffix
+    cfg = {"online": {"target_model_path": "/model", "shared_dir": "/shared"}}
+    _, command = launch.commands(request, cfg, tmp_path / "config", tmp_path / "provenance")
+    assert command[command.index("--arm") + 1] == "lora"
+    assert command[command.index("--max-updates") + 1] == ("10" if pilot else "10000")
+    assert command[command.index("--hub-upload-interval") + 1] == ("10" if pilot else "1000")
+
+
+def test_static_lora_configuration_matches_ttt3_generator_recipe():
+    generator = yaml.safe_load((launch.EXAMPLE / "train_10k_ttt3.yaml").read_text())
+    static = yaml.safe_load((launch.EXAMPLE / "train_10k_lora.yaml").read_text())
+    for key in ("wandb", "output_root"):
+        generator.pop(key)
+        static.pop(key)
+    assert static == generator
+
+
+def test_static_prepare_only_plans_the_lora_arm(tmp_path, monkeypatch):
+    request = args(tmp_path)
+    request.variant = "10k-lora"
+    request.prepare_only = True
+    provenance = tmp_path / "provenance"
+    provenance.mkdir()
+    monkeypatch.setattr(
+        launch, "prepare", lambda _: ({}, tmp_path / "config.yaml", provenance)
+    )
+    monkeypatch.setattr(launch, "commands", lambda *a: (["server"], ["trainer"]))
+    monkeypatch.setattr(CampaignConfig, "load", lambda _: None)
+    captured = []
+
+    def plan(*a, **kw):
+        captured.append(kw)
+        return {"job": {
+            "training_examples": 100000, "validation_examples": 1000, "updates": 10000,
+        }}
+
+    monkeypatch.setattr(training, "train_full_data", plan)
+    monkeypatch.setattr(
+        launch.subprocess, "Popen", lambda *a, **kw: pytest.fail("unexpected GPU launch")
+    )
+    assert launch.run(request) == 0
+    assert captured[0]["arm"] == "lora"
+    assert captured[0]["max_updates"] == 10000
+
+
 def test_ttt3_continuation_uses_original_dataset_without_resolving_main(
     tmp_path, monkeypatch
 ):

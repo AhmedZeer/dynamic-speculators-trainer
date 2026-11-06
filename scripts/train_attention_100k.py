@@ -73,12 +73,16 @@ def release_records(repo, revision):
 
 def limits(args):
     """Return training membership, optimizer steps, and upload interval."""
-    extended = getattr(args, "variant", "2k") in ("10k", "10k-ttt3")
+    extended = getattr(args, "variant", "2k") in ("10k", "10k-ttt3", "10k-lora")
     return (
         (PILOT_TRAIN_ROWS, PILOT_UPDATES, PILOT_UPDATES)
         if getattr(args, "pilot", False)
         else (TRAIN_ROWS, 10000 if extended else UPDATES, 1000 if extended else 500)
     )
+
+
+def training_arm(args):
+    return "lora" if getattr(args, "variant", "2k") == "10k-lora" else "generator"
 
 
 def process_environments():
@@ -148,6 +152,7 @@ def prepare(args):
     train_path = EXAMPLE / {
         "2k": "train.yaml", "10k": "train_10k.yaml",
         "10k-ttt3": "train_10k_ttt3.yaml",
+        "10k-lora": "train_10k_lora.yaml",
     }[variant]
     template = yaml.safe_load(train_path.read_text())
     recipe_source = train_path.parent / template["training_recipe"]
@@ -169,6 +174,11 @@ def prepare(args):
         template["wandb"].update(
             group="attention-100k-10k-v1-ttt7-pilot",
             name_prefix="attention-100k-10k-ttt7-pilot-",
+        )
+    if variant == "10k-lora" and pilot:
+        template["wandb"].update(
+            group="static-lora-attention-100k-10k-v1-pilot",
+            name_prefix="static-lora-attention-100k-10k-v1-pilot-",
         )
     root = args.output_root.resolve()
     launch = root / "launcher"
@@ -222,11 +232,11 @@ def prepare(args):
             raise ValueError("Resume must retain the pinned trajectory revision")
         revision = state["trajectories_revision"]
     else:
-        if variant == "10k-ttt3":
+        if variant in ("10k-ttt3", "10k-lora"):
             from speculators.generator.attention_continuation import TRAJECTORY_REVISION  # noqa: PLC0415
 
             if args.trajectories_revision not in ("main", TRAJECTORY_REVISION):
-                raise ValueError("Continuation requires the original trajectory pin")
+                raise ValueError("Matched TTT3 runs require the original trajectory pin")
             revision = TRAJECTORY_REVISION
         else:
             revision = api.repo_info(
@@ -344,6 +354,8 @@ def commands(args, cfg, config, provenance):
         "speculators",
         "generator",
         "train-full-data",
+        "--arm",
+        training_arm(args),
         "--config",
         str(config),
         "--output-root",
@@ -434,6 +446,7 @@ def run(args):
             epochs=10,
             max_updates=updates,
             hub_upload_interval=upload_interval,
+            arm=training_arm(args),
             dry_run=True,
         )
         if (
@@ -500,7 +513,9 @@ def interrupt(_signum, _frame):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--variant", choices=("2k", "10k", "10k-ttt3"), default="2k")
+    parser.add_argument(
+        "--variant", choices=("2k", "10k", "10k-ttt3", "10k-lora"), default="2k"
+    )
     parser.add_argument("--output-root", type=Path, default=None)
     parser.add_argument("--hub-repo", default=None)
     parser.add_argument(
@@ -530,11 +545,17 @@ def main():
         "-pilot" if args.pilot else ""
     )
     if args.output_root is None:
-        args.output_root = Path(f"output/dyn-spec-attention-100k-{args.variant}-v1" + suffix)
+        args.output_root = Path(
+            "output/dyn-spec-static-lora-attention-100k-10k-v1" + suffix
+            if args.variant == "10k-lora"
+            else f"output/dyn-spec-attention-100k-{args.variant}-v1" + suffix
+        )
     if args.hub_repo is None:
         args.hub_repo = (
             "azeeer/eagle3-generator-attention-100k-2k-v1"
             if args.variant == "10k-ttt3"
+            else "azeeer/eagle3-static-lora-attention-100k-10k-v1" + suffix
+            if args.variant == "10k-lora"
             else f"azeeer/eagle3-generator-attention-100k-{args.variant}-v1" + suffix
         )
     if (
