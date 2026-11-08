@@ -1,5 +1,8 @@
 # Attention generator: 100K examples, 2,000 updates
 
+For generator/static scaling through 5K and conditioning controls through 6K,
+see [the scaling/dynamism launcher](benchmarks/SCALING_DYNAMISM.md).
+
 For the six-checkpoint comparison of TTT3/TTT7 training at serving lengths 3 and
 7, see [the comparison runbook](benchmarks/TTT_COMPARISON.md).
 
