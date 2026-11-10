@@ -120,7 +120,7 @@ def run(command, env):
         raise
 
 
-def prepare_inputs(root, gpu, port, env):
+def prepare_inputs(root, gpu, port, env, gpu_memory_utilization):
     """Use the existing managed extractor and training-only donor preparation."""
     from speculators.benchmark.processes import (  # noqa: PLC0415
         ensure_port_free, owned_process, termination_cleanup,
@@ -147,6 +147,9 @@ def prepare_inputs(root, gpu, port, env):
         sys.executable, str(REPO / "scripts/train_attention_100k.py"),
         "--variant", "10k-lora", "--prepare-only", "--output-root", str(data_root),
         "--port", str(port),
+        # The extractor runs alone here; the training default (0.40) leaves no KV
+        # cache for Qwen3-8B on a 40 GB GPU.
+        "--gpu-memory-utilization", str(gpu_memory_utilization),
     ], env)
     attempts = sorted((data_root / "launcher").glob("vllm-attempt-*"))
     attempt = attempts[-1]
@@ -246,6 +249,7 @@ def main():
     parser.add_argument("--ttt", nargs="+", type=int, choices=(3, 7), default=[3])
     parser.add_argument("--gpu", default="0")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--extractor-gpu-memory-utilization", type=float, default=0.85)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--collect-only", action="store_true")
     args = parser.parse_args()
@@ -264,7 +268,8 @@ def main():
             return 0
         env = {**os.environ, "CUDA_VISIBLE_DEVICES": str(args.gpu)}
         if not args.collect_only:
-            prepare_inputs(root, args.gpu, args.port, env)
+            prepare_inputs(root, args.gpu, args.port, env,
+                           args.extractor_gpu_memory_utilization)
         for ttt in dict.fromkeys(args.ttt):
             if not args.collect_only:
                 for policy in PHASES[args.phase]:

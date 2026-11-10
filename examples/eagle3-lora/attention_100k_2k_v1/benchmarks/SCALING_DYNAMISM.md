@@ -13,7 +13,10 @@ Use the existing supported trainer/vLLM benchmark environment with the generator
 patch applied, and authenticate to HF and W&B. The launcher owns the extractor
 and benchmark services; stop other services on its port first. `--gpu 2` chooses
 physical GPU 2 for this sequential benchmark. `--port 8100` chooses another
-port. No NVMe is required. On Colab, a persistent `--output-root` preserves the
+port. The donor-preparation extractor runs alone on the GPU, so it uses
+`--extractor-gpu-memory-utilization 0.85` (the serving value of earlier Colab A100
+runs) rather than the co-located training default of 0.40, which leaves no KV
+cache for Qwen3-8B on a 40 GB A100. No NVMe is required. On Colab, a persistent `--output-root` preserves the
 workload, donors, completed tasks and collected tables across runtime resets.
 
 Serving draft length defaults to 3. To repeat the full matrix at both lengths:
