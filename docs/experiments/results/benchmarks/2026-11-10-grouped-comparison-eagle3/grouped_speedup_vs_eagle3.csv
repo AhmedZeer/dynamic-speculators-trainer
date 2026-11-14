@@ -1,0 +1,21 @@
+arm,category,tokens_per_second,x_vs_vanilla_eagle3
+Vanilla Eagle3,Math,64.34,1.0
+Vanilla Eagle3,Code,60.93,1.0
+Vanilla Eagle3,STEM,59.28,1.0
+Vanilla Eagle3,Chat,54.97,1.0
+Static LoRA (V/O),Math,72.5,1.1268262356232515
+Static LoRA (V/O),Code,64.79,1.0633513868373545
+Static LoRA (V/O),STEM,64.23,1.0835020242914981
+Static LoRA (V/O),Chat,56.35,1.0251046025104602
+"V/O generator, 24K / 4K",Math,79.11,1.2295617034504196
+"V/O generator, 24K / 4K",Code,69.83,1.1460692598063351
+"V/O generator, 24K / 4K",STEM,67.92,1.145748987854251
+"V/O generator, 24K / 4K",Chat,56.49,1.0276514462434057
+"Attention generator, 24K / 4K",Math,81.17471354648627,1.2616523709432121
+"Attention generator, 24K / 4K",Code,71.64207486132082,1.1758095332565375
+"Attention generator, 24K / 4K",STEM,69.40341701583716,1.1707728916301816
+"Attention generator, 24K / 4K",Chat,59.44061057410331,1.0813281894506697
+"Attention generator, 100K / 6K",Math,78.578,1.2219578570873182
+"Attention generator, 100K / 6K",Code,,
+"Attention generator, 100K / 6K",STEM,66.811,1.1270411605937922
+"Attention generator, 100K / 6K",Chat,57.933,1.0344809113960216

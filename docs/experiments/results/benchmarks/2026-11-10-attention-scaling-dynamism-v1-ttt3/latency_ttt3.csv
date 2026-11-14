@@ -1,0 +1,70 @@
+category,arm,steps,TTFT median ms,TTFT p90 ms,ITL median ms,ITL p90 ms,TPOT median ms,request latency median s,mean output tokens
+chat,Generator / correct,1000,51.64,87.82,16.25,19.22,16.38,4.19,242.04
+chat,Generator / correct,2000,51.28,86.53,16.2,19.06,16.41,4.18,242.04
+chat,Generator / correct,3000,51.06,89.74,15.87,19.04,16.08,4.09,242.04
+chat,Generator / correct,4000,51.03,87.11,15.92,19.22,16.05,4.09,242.04
+chat,Generator / correct,5000,52.63,88.22,16.44,19.24,16.62,4.22,242.04
+chat,Generator / correct,6000,53.06,89.3,16.58,19.76,16.81,4.24,242.04
+chat,Generator / cross_category,1000,51.87,87.02,17.1,20.46,17.23,4.38,242.04
+chat,Generator / cross_category,2000,50.3,87.36,16.61,20.23,16.81,4.29,242.04
+chat,Generator / cross_category,3000,50.65,87.69,16.75,20.01,16.88,4.3,242.04
+chat,Generator / cross_category,4000,51.78,87.81,17.55,20.81,17.75,4.52,242.04
+chat,Generator / cross_category,5000,52.02,87.1,17.47,21.07,17.61,4.48,242.04
+chat,Generator / cross_category,6000,51.07,87.58,17.43,21.47,17.56,4.48,242.04
+chat,Generator / fixed,1000,53.4,89.48,17.74,21.62,18.0,4.57,242.04
+chat,Generator / fixed,2000,54.34,89.81,17.81,21.51,17.97,4.59,242.04
+chat,Generator / fixed,3000,54.37,89.59,18.16,21.79,18.3,4.65,242.04
+chat,Generator / fixed,4000,52.96,90.0,17.76,21.47,17.97,4.59,242.04
+chat,Generator / fixed,5000,54.19,89.29,18.29,22.06,18.42,4.68,242.04
+chat,Generator / fixed,6000,53.49,89.35,18.23,22.19,18.42,4.7,242.04
+chat,Static LoRA / static,1000,45.46,81.44,16.74,20.44,16.89,4.32,242.04
+chat,Static LoRA / static,2000,45.06,81.62,16.58,19.99,16.7,4.26,242.04
+chat,Static LoRA / static,3000,44.59,80.76,16.21,19.38,16.36,4.13,242.04
+chat,Static LoRA / static,4000,47.08,82.74,17.14,20.11,17.3,4.4,242.04
+chat,Static LoRA / static,5000,46.11,81.98,16.73,19.54,16.87,4.31,242.04
+math,Generator / correct,1000,50.33,51.9,12.24,14.07,12.38,3.17,256.0
+math,Generator / correct,2000,51.51,52.53,12.25,14.15,12.41,3.18,256.0
+math,Generator / correct,3000,49.89,52.12,11.99,13.68,12.14,3.11,256.0
+math,Generator / correct,4000,52.28,53.51,12.34,14.2,12.5,3.2,256.0
+math,Generator / correct,5000,52.09,54.34,12.58,13.79,12.73,3.26,256.0
+math,Generator / correct,6000,51.95,53.91,12.32,13.88,12.48,3.2,256.0
+math,Generator / cross_category,1000,50.75,51.72,13.54,15.38,13.69,3.5,256.0
+math,Generator / cross_category,2000,50.6,51.9,13.69,15.49,13.84,3.54,256.0
+math,Generator / cross_category,3000,50.13,51.95,13.53,15.06,13.68,3.5,256.0
+math,Generator / cross_category,4000,51.37,53.22,13.9,15.5,14.05,3.6,256.0
+math,Generator / cross_category,5000,51.69,53.48,14.15,15.9,14.3,3.66,256.0
+math,Generator / cross_category,6000,51.13,52.46,13.96,15.39,14.11,3.61,256.0
+math,Generator / fixed,1000,53.11,54.81,13.0,14.72,13.16,3.37,256.0
+math,Generator / fixed,2000,53.39,55.47,12.72,14.58,12.88,3.3,256.0
+math,Generator / fixed,3000,53.47,54.8,12.73,14.31,12.89,3.3,256.0
+math,Generator / fixed,4000,52.75,54.96,12.33,14.27,12.48,3.2,256.0
+math,Generator / fixed,5000,53.64,55.54,12.74,14.41,12.9,3.3,256.0
+math,Generator / fixed,6000,50.79,52.95,11.98,13.56,12.13,3.11,256.0
+math,Static LoRA / static,1000,45.51,46.66,13.33,15.34,13.46,3.45,256.0
+math,Static LoRA / static,2000,45.02,46.71,13.26,15.12,13.38,3.43,256.0
+math,Static LoRA / static,3000,46.31,47.29,13.1,14.8,13.23,3.39,256.0
+math,Static LoRA / static,4000,46.49,48.01,13.2,14.84,13.33,3.41,256.0
+math,Static LoRA / static,5000,46.22,47.78,13.02,14.75,13.15,3.37,256.0
+stem,Generator / correct,1000,50.93,53.4,14.94,16.21,15.08,3.86,256.0
+stem,Generator / correct,2000,51.33,53.85,14.77,16.12,14.92,3.82,256.0
+stem,Generator / correct,3000,50.53,52.1,14.44,16.01,14.59,3.74,256.0
+stem,Generator / correct,4000,52.27,56.29,14.92,16.21,15.06,3.86,256.0
+stem,Generator / correct,5000,53.43,54.62,14.96,16.56,15.1,3.87,256.0
+stem,Generator / correct,6000,51.66,53.81,14.75,16.23,14.91,3.82,256.0
+stem,Generator / cross_category,1000,50.73,52.92,15.58,17.01,15.71,4.02,256.0
+stem,Generator / cross_category,2000,51.04,52.75,15.57,16.89,15.7,4.02,256.0
+stem,Generator / cross_category,3000,50.27,52.72,15.45,16.75,15.59,3.99,256.0
+stem,Generator / cross_category,4000,51.73,53.67,16.24,17.94,16.38,4.19,256.0
+stem,Generator / cross_category,5000,51.44,53.36,16.26,17.45,16.4,4.2,256.0
+stem,Generator / cross_category,6000,51.38,53.73,16.02,17.8,16.17,4.14,256.0
+stem,Generator / fixed,1000,53.2,54.95,16.38,17.95,16.53,4.23,256.0
+stem,Generator / fixed,2000,52.93,55.25,16.35,17.67,16.49,4.22,256.0
+stem,Generator / fixed,3000,53.63,54.65,16.91,18.13,17.05,4.37,256.0
+stem,Generator / fixed,4000,52.72,54.41,16.6,17.92,16.74,4.29,256.0
+stem,Generator / fixed,5000,54.21,55.63,17.22,18.51,17.36,4.45,256.0
+stem,Generator / fixed,6000,50.88,52.35,15.95,17.45,16.08,4.12,256.0
+stem,Static LoRA / static,1000,45.24,47.5,15.61,17.04,15.72,4.03,256.0
+stem,Static LoRA / static,2000,45.4,47.08,15.61,16.91,15.74,4.03,256.0
+stem,Static LoRA / static,3000,46.32,47.56,15.66,17.28,15.78,4.04,256.0
+stem,Static LoRA / static,4000,46.82,48.4,15.59,17.23,15.71,4.02,256.0
+stem,Static LoRA / static,5000,46.65,48.46,15.66,17.38,15.78,4.04,256.0

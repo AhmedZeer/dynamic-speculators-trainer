@@ -1,5 +1,23 @@
 # Generation benchmark archive
 
+The attention generator's 100K-row scaling/dynamism suite on a frozen
+50-prompt/category workload is recorded in
+[GEN-016](../GEN-016-attention-100k-ttt3-scaling-dynamism.md), with its
+[derived tables, confidence intervals, latency and speedup CSVs](2026-11-10-attention-scaling-dynamism-v1-ttt3/)
+and figures. Raw per-cell provenance stays on Google Drive (path in the
+record); this directory holds the suite's output tables and the figures/
+analysis built from them. Two cross-run comparison figures spanning this and
+three earlier records are in
+[GEN-017](../GEN-017-grouped-eagle3-comparison-figures.md), with
+[sources](2026-11-10-grouped-comparison-eagle3/).
+
+The `comparison-v2` four-model suite's missing acceptance rates are supplied
+in [GEN-015](../GEN-015-matched-comparison-acceptance.md), with the
+[28-cell C1 summary](2026-11-10-matched-comparison-v2-acceptance/summary.json)
+and [derived table](2026-11-10-matched-comparison-v2-acceptance/summary.md).
+Throughput matches the historical GEN-003 values to two decimals; C2/C4/C8
+acceptance is in the raw file but not yet transcribed.
+
 The five-model structure comparison is recorded in
 [GEN-010](../GEN-010-structure-serving.md), with the
 [supplied math/chat C1 throughput table](2026-10-30-structure-math-chat-c1/summary.md),

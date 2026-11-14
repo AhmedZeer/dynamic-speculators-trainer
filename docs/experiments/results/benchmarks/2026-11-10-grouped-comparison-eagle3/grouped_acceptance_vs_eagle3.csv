@@ -1,0 +1,16 @@
+arm,category,draft_acceptance_percent
+Vanilla Eagle3 (2026-11-10),Math,47.02
+Vanilla Eagle3 (2026-11-10),STEM,40.09
+Vanilla Eagle3 (2026-11-10),Chat,36.05
+Static LoRA (V/O),Math,59.667827096025526
+Static LoRA (V/O),STEM,48.54319086125016
+Static LoRA (V/O),Chat,38.765915768854065
+"V/O generator, 24K / 4K",Math,65.34165318542485
+"V/O generator, 24K / 4K",STEM,51.02553923514622
+"V/O generator, 24K / 4K",Chat,39.649818301949125
+"Attention generator, 24K / 4K",Math,67.93
+"Attention generator, 24K / 4K",STEM,52.49
+"Attention generator, 24K / 4K",Chat,40.45
+"Attention generator, 100K / 6K",Math,68.64994026284349
+"Attention generator, 100K / 6K",STEM,52.150106837606835
+"Attention generator, 100K / 6K",Chat,42.20223596277559
