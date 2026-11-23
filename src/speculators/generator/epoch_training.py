@@ -2,6 +2,7 @@
 
 import bisect
 import json
+import os
 import random
 import shutil
 import tempfile
@@ -66,6 +67,35 @@ def backup_checkpoint(output, job, identity, epoch, progress):
     ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {}
     key = f"step-{progress:08d}"
     if ledger.get(key, {}).get("checkpoint_sha256") == sha:
+        return
+    directory_backup = os.environ.get("SPECULATORS_CHECKPOINT_BACKUP_DIR")
+    if directory_backup:
+        # Durable copy outside the Hub (e.g. mounted Drive) when Hub storage is
+        # unavailable. Keeps only the newest step to bound storage.
+        target_root = Path(directory_backup) / job["label"]
+        target = target_root / key
+        pending = target_root / f".{key}.pending"
+        shutil.rmtree(pending, ignore_errors=True)
+        pending.mkdir(parents=True)
+        for name in PROVENANCE:
+            source = output / name
+            if source.is_file() and name != "result.json":
+                shutil.copy2(source, pending / name)
+        shutil.copy2(checkpoint, pending / "checkpoint.pt")
+        write_json(pending / "resolved_experiment.json", identity)
+        write_json(pending / "result.json", {
+            "status": "training_snapshot", "job": job, "completed_epochs": epoch,
+            "completed_updates": progress, "checkpoint_sha256": sha,
+        })
+        shutil.rmtree(target, ignore_errors=True)
+        pending.replace(target)
+        for old in target_root.glob("step-*"):
+            if old.name != key:
+                shutil.rmtree(old, ignore_errors=True)
+        ledger[key] = {"directory": str(target), "checkpoint_sha256": sha,
+                       "completed_updates": progress}
+        write_json(ledger_path, ledger)
+        report(f"{job['label']}: {key} backed up to {target}")
         return
     report(f"{job['label']}: uploading {key} to {job['hub_repo']}")
     with tempfile.TemporaryDirectory(prefix="step-backup-", dir=output) as temporary:

@@ -159,7 +159,11 @@ def resolve_static_init(spec, root):
         return None
     parent = load_spec(source["run"])
     folder = f"step-{source['step']:08d}"
-    path = Path(hf_hub_download(parent["hub_repo"], f"{folder}/checkpoint.pt"))
+    drive = os.environ.get("NEXTARMS_STATIC_INIT_DIR")
+    candidates = sorted(Path(drive).glob(f"{source['run']}/*/{folder}/checkpoint.pt")
+                        ) if drive else []
+    path = candidates[-1] if candidates else Path(
+        hf_hub_download(parent["hub_repo"], f"{folder}/checkpoint.pt"))
     local = root / "launcher" / "static_init.pt"
     if not local.exists():
         shutil.copy2(path, local)
@@ -224,6 +228,43 @@ def restore_from_hub(spec, root, label):
     return folder
 
 
+def restore_from_directory(spec, root, label):
+    """Fresh VM: install the newest directory backup (Drive) for resumption."""
+    backup = os.environ.get("SPECULATORS_CHECKPOINT_BACKUP_DIR")
+    output = root / "pretraining" / label
+    if not backup or (output / "checkpoint.pt").exists():
+        return None
+    steps = sorted((Path(backup) / label).glob("step-*/checkpoint.pt"))
+    if not steps:
+        return None
+    folder = steps[-1].parent
+    result = json.loads((folder / "result.json").read_text())
+    archive = output / "provenance" / "hf-continuation-source"
+    archive.mkdir(parents=True, exist_ok=True)
+    for name in ("resolved_experiment.json", "result.json", "configuration.json"):
+        shutil.copy2(folder / name, archive / name)
+    local = output / "checkpoint.pt.pending"
+    shutil.copy2(folder / "checkpoint.pt", local)
+    if sha256(local) != result["checkpoint_sha256"]:
+        raise ValueError("Backup checkpoint checksum differs from its result.json")
+    shutil.copy2(archive / "resolved_experiment.json",
+                 output / "resolved_experiment.json")
+    shutil.copy2(archive / "configuration.json", output / "configuration.json")
+    write_json(output / "hf_continuation.json", {
+        "repo_id": str(folder), "revision": "directory", "subfolder": folder.name,
+        "checkpoint_sha256": result["checkpoint_sha256"],
+        "identity_sha256": sha256(archive / "resolved_experiment.json"),
+        "completed_updates": result["completed_updates"],
+    })
+    write_json(output / "hub_checkpoints.json", {folder.name: {
+        "directory": str(folder), "checkpoint_sha256": result["checkpoint_sha256"],
+        "completed_updates": result["completed_updates"],
+    }})
+    local.replace(output / "checkpoint.pt")
+    print(f"Restored {folder} (update {result['completed_updates']})", flush=True)
+    return folder.name
+
+
 def run(args):
     spec = load_spec(args.run)
     if args.max_updates:
@@ -255,7 +296,7 @@ def run(args):
                            provenance, epochs=args.epochs,
                            max_updates=spec["updates"],
                            hub_upload_interval=cfg["hub_upload_interval"], arm=arm,
-                           private=True, dry_run=True)
+                           private=False, dry_run=True)
     expected = 4 * spec["subsets"] * 1000
     if plan["job"]["training_examples"] != expected or (
         plan["job"]["updates"] != spec["updates"]
@@ -267,7 +308,10 @@ def run(args):
         print(json.dumps({"run": spec["run_id"], "label": plan["job"]["label"],
                           "rows": expected, "updates": spec["updates"]}), flush=True)
         return 0
-    restore_from_hub(spec, root, plan["job"]["label"])
+    if os.environ.get("SPECULATORS_CHECKPOINT_BACKUP_DIR"):
+        restore_from_directory(spec, root, plan["job"]["label"])
+    else:
+        restore_from_hub(spec, root, plan["job"]["label"])
     server_env, trainer_env = process_environments()
     server = [
         sys.executable, str(REPO / "scripts/launch_vllm.py"), "train",
@@ -288,7 +332,6 @@ def run(args):
         "--epochs", str(args.epochs), "--max-updates", str(spec["updates"]),
         "--hub-upload-interval", str(cfg["hub_upload_interval"]),
         "--hub-repo", spec["hub_repo"], "--vllm-provenance-dir", str(provenance),
-        "--private",
     ]
     write_json(provenance / "launcher_commands.json",
                {"server": server, "train": train})

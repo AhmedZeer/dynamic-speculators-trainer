@@ -55,7 +55,10 @@ case "$JOB" in
     done
     ;;
   P0-*|R*)
-    python scripts/next_arms/train_run.py "$JOB" --output-root /content/runs
+    # Checkpoints go to public Hub repos (private storage quota is full). Set
+    # SPECULATORS_CHECKPOINT_BACKUP_DIR to back up to a directory instead.
+    rc=0
+    python scripts/next_arms/train_run.py "$JOB" --output-root /content/runs || rc=$?
     root=/content/runs/$JOB
     dest=$DRIVE/runs/$JOB
     mkdir -p "$dest"
@@ -69,6 +72,7 @@ case "$JOB" in
         [ -f "$run/$f" ] && cp "$run/$f" "$dest/$name/"
       done
     done
+    exit $rc
     ;;
   *) echo "unknown job $JOB"; exit 2;;
 esac
