@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from speculators.bank.config import Settings
 
@@ -21,6 +21,9 @@ ADAPTER_MODULES = (
 )
 
 
+GeneratorKind = Literal["full", "core", "gates", "perceiver_core"]
+
+
 class Architecture(Settings):
     encoder_hidden: int = Field(default=512, ge=1)
     example_dim: int = Field(default=128, ge=1)
@@ -28,6 +31,58 @@ class Architecture(Settings):
     descriptor_dim: int = Field(default=32, ge=1)
     decoder_width: int = Field(default=512, ge=1)
     residual_blocks: int = Field(default=2, ge=1)
+    # Next-arms extensions. Defaults reproduce the original generator exactly and
+    # are omitted from run identities (see ``architecture_identity``).
+    # full: generate every A/B entry (original). core: static A/B, generate an
+    # r x r core M(x) with dW = B M(x) A. gates: static A/B, generate r gates
+    # s(x) with dW = B diag(s(x)) A. perceiver_core: core head behind a learned
+    # cross-attention reader over the last ``summary_tokens`` prompt positions.
+    kind: GeneratorKind = "full"
+    # Learned scalar gate per module on the dynamic part, initialized at zero
+    # (A4: static LoRA + gated dynamic residual).
+    dynamic_gate: bool = False
+    # Probability of replacing the condition vector by a learned null vector.
+    condition_dropout: float = Field(default=0.0, ge=0.0, lt=1.0)
+    # Prompt-token window for perceiver_core summaries (last K positions plus
+    # the prompt mean). Zero keeps the original last-token summary.
+    summary_tokens: int = Field(default=0, ge=0, le=256)
+    perceiver_queries: int = Field(default=16, ge=1)
+    perceiver_width: int = Field(default=512, ge=8)
+    perceiver_blocks: int = Field(default=2, ge=1)
+    perceiver_heads: int = Field(default=8, ge=1)
+
+    @model_validator(mode="after")
+    def compatible_kind(self):
+        if (self.kind == "perceiver_core") != (self.summary_tokens > 0):
+            raise ValueError("perceiver_core requires summary_tokens > 0 and only it")
+        if self.dynamic_gate and self.kind == "full":
+            raise ValueError("dynamic_gate applies to core/gates/perceiver_core")
+        if self.perceiver_width % self.perceiver_heads:
+            raise ValueError("perceiver_width must be divisible by perceiver_heads")
+        return self
+
+    @model_serializer(mode="wrap")
+    def _omit_default_extensions(self, handler):
+        """Keep dumps (and so run identities) of pre-existing configs unchanged."""
+        values = handler(self)
+        for key, default in ARCHITECTURE_DEFAULTS.items():
+            if values.get(key) == default:
+                values.pop(key, None)
+        if self.kind != "perceiver_core":
+            for key in PERCEIVER_FIELDS:
+                values.pop(key, None)
+        return values
+
+
+ARCHITECTURE_DEFAULTS = {
+    "kind": "full",
+    "dynamic_gate": False,
+    "condition_dropout": 0.0,
+    "summary_tokens": 0,
+}
+PERCEIVER_FIELDS = (
+    "perceiver_queries", "perceiver_width", "perceiver_blocks", "perceiver_heads"
+)
 
 
 class Optimization(Settings):
@@ -44,6 +99,17 @@ class Optimization(Settings):
     checkpoint_interval: int = Field(default=100, ge=1)
     log_interval: int = Field(default=10, ge=1)
     token_budget: int = Field(default=8192, ge=2)
+    # Per-group learning-rate multiplier for the reading side of the generator
+    # (encoder/perceiver, set pooling, condition MLP, decoder trunk, null
+    # condition). Heads and static factors keep the base rate. 1.0 = original.
+    encoder_lr_scale: float = Field(default=1.0, gt=0)
+
+    @model_serializer(mode="wrap")
+    def _omit_default_extensions(self, handler):
+        values = handler(self)
+        if values.get("encoder_lr_scale") == 1.0:
+            values.pop("encoder_lr_scale", None)
+        return values
 
 
 class Context(Settings):
@@ -144,10 +210,22 @@ class ExperimentConfig(Settings):
     target_modules: list[str] | None = None
     generator_dtype: Literal["float32", "bfloat16"] = "float32"
     generator_batching: bool = False
+    # Training-dynamics metrics (run plan §4). None disables them. Metric
+    # settings never change training and are excluded from run identities.
+    dynamics_interval: int | None = Field(default=None, ge=1)
+    probe_examples_per_domain: int = Field(default=40, ge=8)
     optimization: Optimization = Field(default_factory=Optimization)
     context: Context = Field(default_factory=Context)
     heatmap: Heatmap = Field(default_factory=Heatmap)
     wandb: WandbSettings = Field(default_factory=WandbSettings)
+
+    @model_serializer(mode="wrap")
+    def _omit_default_metric_settings(self, handler):
+        values = handler(self)
+        if values.get("dynamics_interval") is None:
+            values.pop("dynamics_interval", None)
+            values.pop("probe_examples_per_domain", None)
+        return values
 
     @model_validator(mode="after")
     def valid_target_modules(self):

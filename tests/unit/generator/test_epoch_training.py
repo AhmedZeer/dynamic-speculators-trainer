@@ -453,3 +453,70 @@ def test_pilot_training_view_reaches_runtime_and_saves_tenth_step(
     assert Path(result["checkpoint_path"]).exists()
     assert result["preparation"]["generated_examples"] == 48 + 24
     assert all(row["validation_examples"] == 24 for row in result["history"])
+
+
+@pytest.mark.parametrize(
+    "architecture",
+    [
+        {"kind": "core"},
+        {"kind": "gates", "dynamic_gate": True, "condition_dropout": 0.2},
+        {"kind": "full", "condition_dropout": 0.2},
+        {"kind": "perceiver_core", "summary_tokens": 4, "perceiver_width": 16,
+         "perceiver_heads": 2, "perceiver_queries": 3, "perceiver_blocks": 1},
+    ],
+)
+def test_next_arms_generators_train_with_dynamics_and_export(
+    online_campaign,  # noqa: F811
+    tmp_path,
+    monkeypatch,
+    architecture,
+):
+    cfg, _, _ = online_campaign
+    cfg.training_cohort_size = 8
+    cfg.hub_upload_interval = 1000
+    cfg.optimization.pretraining_validation_interval = 500
+    cfg.optimization.encoder_lr_scale = 4.0
+    cfg.dynamics_interval = 1
+    cfg.probe_examples_per_domain = 8
+    cfg.architecture = cfg.architecture.model_copy(update=architecture)
+    provenance = tmp_path / "extractor"
+    provenance.mkdir()
+    for name in ("vllm_command.txt", "vllm.patch", "checkpoint_sha256.txt"):
+        (provenance / name).write_text("test provenance")
+    cfg.online.drafter_model_path = tmp_path / "drafter"
+    cfg.online.drafter_model_path.mkdir()
+    (cfg.online.drafter_model_path / "config.json").write_text("{}")
+    uploads = []
+
+    class API:
+        def whoami(self):
+            return {"name": "test"}
+
+        def create_repo(self, **kwargs):
+            return None
+
+        def upload_folder(self, **kwargs):
+            uploads.append(read_bundle(Path(kwargs["folder_path"])))
+            return SimpleNamespace(oid="c", commit_url="https://hf.test/commit")
+
+    monkeypatch.setattr(epoch_training, "HfApi", API)
+    monkeypatch.setattr(publish, "HfApi", API)
+    root = tmp_path / "run"
+    kwargs = {"epochs": 2, "max_updates": 3, "arm": "generator"}
+    plan = epoch_training.train_full_data(
+        cfg, root, "example/next", provenance, dry_run=True, **kwargs
+    )["job"]
+    result = epoch_training.train_full_data(
+        cfg, root, "example/next", provenance, **kwargs
+    )
+    assert result["completed_updates"] == 3
+    run = root / "pretraining" / plan["label"]
+    timing = json.loads((run / "timing.json").read_text())
+    assert "dynamics/grad_norm/encoder" in timing[0]
+    assert "dynamics/update_ratio/encoder" in timing[0]
+    assert "dynamics/lca/total" in timing[1]
+    history = json.loads((run / "metrics.json").read_text())
+    probe = history[-1]["probe"]
+    assert {"probe/swap_gap/within", "probe/swap_gap/null",
+            "probe/condition_effective_rank"} <= set(probe)
+    assert uploads and uploads[-1]["kind"] == "generator"

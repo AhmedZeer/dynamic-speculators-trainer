@@ -24,6 +24,8 @@ class PersistentSummaries:
             "dtype": bank.hidden_states.dtype,
             "condition": "last",
         }
+        if cfg.architecture.summary_tokens:
+            self.identity["summary_tokens"] = cfg.architecture.summary_tokens
         for key in ("validation_selection", "training_selection"):
             if key in inputs.identity:
                 self.identity[key] = inputs.identity[key]
@@ -97,7 +99,7 @@ class PersistentSummaries:
                 stats["memory_examples"] += 1
                 continue
             legacy = self.legacy_path(index)
-            if legacy.is_file():
+            if legacy.is_file() and "summary_tokens" not in self.identity:
                 value = torch.load(legacy, map_location="cpu", weights_only=True)
                 if value.shape != (width,) or not torch.isfinite(value).all():
                     raise ValueError(f"Invalid legacy prompt summary: {legacy}")

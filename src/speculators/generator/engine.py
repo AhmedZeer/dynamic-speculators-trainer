@@ -18,8 +18,9 @@ from speculators.bank.progress import report, stage_progress
 from speculators.generator.config import ExperimentConfig
 from speculators.generator.data import Corpus, FactorCache, atomic_torch_save, groups
 from speculators.generator.model import (
-    LoRAGenerator,
     backward_factors,
+    build_generator,
+    cast_generator,
     detached_factors,
     factor_loss,
     factor_parameters,
@@ -50,7 +51,7 @@ def set_learning_rate(optimizer, cfg, step):
     warmup = cfg.optimization.warmup_updates
     scale = min(step / warmup, 1.0) if warmup else 1.0
     for group in optimizer.param_groups:
-        group["lr"] = cfg.optimization.lr * scale
+        group["lr"] = cfg.optimization.lr * scale * group.get("lr_scale", 1.0)
 
 
 class Runtime:
@@ -134,13 +135,16 @@ class Runtime:
     def new_generator(self, condition):
         torch.manual_seed(self.cfg.seed)
         width = self.corpus.summaries[condition].shape[-1]
-        generator = LoRAGenerator(
-            width,
-            self.shapes,
-            self.bank.lora.rank,
-            self.cfg.architecture,
-            self.cfg.context.max_examples,
-        ).to(device=self.device, dtype=getattr(torch, self.cfg.generator_dtype))
+        generator = cast_generator(
+            build_generator(
+                width,
+                self.shapes,
+                self.bank.lora.rank,
+                self.cfg.architecture,
+                self.cfg.context.max_examples,
+            ).to(device=self.device),
+            getattr(torch, self.cfg.generator_dtype),
+        )
         report(
             f"Generator parameters={sum(p.numel() for p in generator.parameters()):,}; "
             f"condition={condition}; dtype={self.cfg.generator_dtype}; "
@@ -324,6 +328,8 @@ class Runtime:
 
 def run_identity(cfg, bank, corpus, job):
     settings = cfg.model_dump(mode="json")
+    settings.pop("dynamics_interval", None)
+    settings.pop("probe_examples_per_domain", None)
     if cfg.target_modules is None:
         settings.pop("target_modules")
     if cfg.generator_dtype == "float32":

@@ -12,7 +12,7 @@ from speculators.bank.artifacts import digest, file_digest, write_json
 from speculators.bank.config import BankConfig
 from speculators.bank.progress import report
 from speculators.generator.config import ADAPTER_MODULES, Architecture
-from speculators.generator.model import LoRAGenerator
+from speculators.generator.model import build_generator
 
 BUNDLE_VERSION = 1
 VLLM_VERSION = "0.31.0"
@@ -61,7 +61,7 @@ def read_bundle(path):
 def load_generator(metadata, state, *, validate_only=False):
     # Export checks keys/shapes without allocating a second full generator.
     with torch.device("meta" if validate_only else "cpu"):
-        generator = LoRAGenerator(
+        generator = build_generator(
             metadata["input_dim"],
             metadata["shapes"],
             metadata["rank"],
@@ -139,6 +139,12 @@ def export_run(cfg, run_dir, output, *, drafter_model_path=None):  # noqa: C901 
     shapes = {}
     if kind == "generator":
         for name in projections:
+            if f"static_a.{name}" in state:  # compact generator kinds
+                shapes[name] = [
+                    state[f"static_a.{name}"].shape[1],
+                    state[f"static_b.{name}"].shape[0],
+                ]
+                continue
             shapes[name] = [
                 state[f"heads.{name}.A.bias"].numel() // rank,
                 state[f"heads.{name}.B.bias"].numel() // rank,
@@ -177,7 +183,14 @@ def export_run(cfg, run_dir, output, *, drafter_model_path=None):  # noqa: C901 
     if kind == "generator":
         metadata.update(
             feedback_dim=job.get("feedback_dim", 0),
-            input_dim=state["encoder.0.weight"].shape[1] - 1,
+            input_dim=(
+                state["encoder.0.weight"].shape[1] - 1
+                if "encoder.0.weight" in state
+                # perceiver reader: per-layer projections over (K + 1) slots
+                else state["encoder.layer_proj.0.weight"].shape[1]
+                * 3
+                * state["encoder.position"].shape[0]
+            ),
             architecture=identity["configuration"]["architecture"],
             max_examples=identity["configuration"]["context"]["max_examples"],
         )

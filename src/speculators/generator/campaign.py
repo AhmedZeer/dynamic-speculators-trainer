@@ -275,6 +275,9 @@ def run_one(  # noqa: C901 -- shared online/offline run lifecycle
 
 def campaign_identity(cfg):
     values = cfg.model_dump(mode="json")
+    # Metric logging never changes training; keep it out of identities.
+    values.pop("dynamics_interval", None)
+    values.pop("probe_examples_per_domain", None)
     if values.get("trajectory_recipe") is None:
         values.pop("trajectory_recipe", None)
     if cfg.activation_source == "hub":

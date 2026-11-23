@@ -40,7 +40,13 @@ class LoRAGenerator(nn.Module):
     ):
         super().__init__()
         cfg = architecture or Architecture()
+        if cfg.kind != "full":
+            raise ValueError("Use build_generator for compact generator kinds")
         self.shapes, self.rank, self.max_examples = shapes, rank, max_examples
+        self.condition_dropout = cfg.condition_dropout
+        self.force_null = False
+        if self.condition_dropout:
+            self.null_condition = nn.Parameter(torch.zeros(cfg.condition_dim))
         self.encoder = nn.Sequential(
             nn.Linear(input_dim + 1, cfg.encoder_hidden),
             nn.GELU(),
@@ -83,7 +89,7 @@ class LoRAGenerator(nn.Module):
     def forward(self, summaries, lengths, feedback=None):
         encoded = self.encode_examples(summaries, lengths)
         condition = self.condition(self.pool_examples(encoded))
-        return self.decode_factors(condition, feedback)
+        return self.decode_factors(drop_condition(self, condition), feedback)
 
     def encode_examples(self, summaries, lengths):
         count = summaries.shape[0]
@@ -121,7 +127,9 @@ class LoRAGenerator(nn.Module):
                 for summaries, lengths in contexts
             ]
         )
-        return self.decode_factors(self.condition(pooled), feedback)
+        return self.decode_factors(
+            drop_condition(self, self.condition(pooled)), feedback
+        )
 
     def decode_factors(self, condition, feedback):
         leading = condition.shape[:-1]
@@ -149,6 +157,32 @@ class LoRAGenerator(nn.Module):
                 self.heads[name]["B"](decoded).view(*leading, out_features, self.rank),
             )
         return result
+
+
+def drop_condition(generator, condition):
+    """Condition dropout (classifier-free style) and forced null conditioning.
+
+    Training replaces each cohort's condition by a learned null vector with
+    probability ``condition_dropout``; ``generator.force_null`` replaces all of
+    them (the null-condition control at evaluation).
+    """
+    if not getattr(generator, "condition_dropout", 0.0) and not getattr(
+        generator, "force_null", False
+    ):
+        return condition
+    null = getattr(generator, "null_condition", None)
+    if null is None:
+        null = condition.new_zeros(condition.shape[-1])
+    null = null.to(condition).expand_as(condition)
+    if generator.force_null:
+        return null
+    if not generator.training:
+        return condition
+    keep = (
+        torch.rand(condition.shape[:-1], device=condition.device)
+        >= generator.condition_dropout
+    ).unsqueeze(-1)
+    return torch.where(keep, condition, null)
 
 
 class AdapterLinear(nn.Module):
@@ -249,3 +283,24 @@ def factor_loss(generated, target):
             for value, reference in zip(pair, target[name], strict=True)
         ]
     ).mean()
+
+
+def build_generator(input_dim, shapes, rank, architecture=None, max_examples=8, *,
+                    feedback_dim=0):
+    """Construct the generator variant named by ``architecture.kind``."""
+    architecture = architecture or Architecture()
+    if architecture.kind == "full":
+        return LoRAGenerator(input_dim, shapes, rank, architecture, max_examples,
+                             feedback_dim=feedback_dim)
+    from speculators.generator.compact import CompactLoRAGenerator  # noqa: PLC0415
+
+    return CompactLoRAGenerator(input_dim, shapes, rank, architecture, max_examples,
+                                feedback_dim=feedback_dim)
+
+
+def cast_generator(generator, dtype):
+    """Move to a dtype while keeping compact static factors/heads in float32."""
+    generator = generator.to(dtype=dtype)
+    if hasattr(generator, "fp32_static_"):
+        generator.fp32_static_()
+    return generator

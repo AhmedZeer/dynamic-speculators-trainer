@@ -24,6 +24,25 @@ from speculators.generator.persistent_summaries import PersistentSummaries
 HIDDEN_STATE_NDIM = 3
 
 
+def summary_vector(states, boundary, tokens=0):
+    """Conditioning summary from [seq, layers(+last), hidden] target states.
+
+    ``tokens == 0``: the original last-prompt-token vector (3 aux layers).
+    ``tokens == K``: the last K prompt positions (left zero-padded when the
+    prompt is shorter) followed by the mean over the whole prompt, flattened
+    as [K + 1, 3, hidden] for the perceiver reader.
+    """
+    prompt = states[:boundary, :-1]
+    if not tokens:
+        return prompt[-1].flatten().float().clone()
+    window = prompt[-tokens:].float()
+    if window.shape[0] < tokens:
+        pad = window.new_zeros(tokens - window.shape[0], *window.shape[1:])
+        window = torch.cat([pad, window])
+    mean = prompt.float().mean(0, keepdim=True)
+    return torch.cat([window, mean]).flatten().clone()
+
+
 class ActivationRAM:
     """Campaign-owned CPU cache, shared by sequential jobs on the same rows."""
 
@@ -62,6 +81,7 @@ class OnlineActivations:
     def __init__(self, cfg, rows, bank, *, client=None, ram=None):
         self.cfg, self.rows, self.bank = cfg, rows, bank
         self.settings = cfg.online
+        self.summary_tokens = cfg.architecture.summary_tokens
         self.root = self.settings.shared_dir.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self.output_root = cfg.output_root
@@ -148,7 +168,7 @@ class OnlineActivations:
             if states.dtype != getattr(torch, self.bank.hidden_states.dtype):
                 raise ValueError("vLLM hidden-state dtype differs from the bank")
             boundary = row["prompt_length"]
-            vector = states[boundary - 1, :-1].flatten().float().clone()
+            vector = summary_vector(states, boundary, self.summary_tokens)
             with self.lock:
                 self.summaries.setdefault(index, vector)
                 self.summaries.move_to_end(index)
@@ -257,11 +277,10 @@ class OnlineActivations:
             full = self.futures.get((index, False))
         if full is not None:
             payload = full.result()
-            return (
-                payload["hidden_states"][self.rows[index]["prompt_length"] - 1, :-1]
-                .flatten()
-                .float()
-                .clone()
+            return summary_vector(
+                payload["hidden_states"],
+                self.rows[index]["prompt_length"],
+                self.summary_tokens,
             )
         key = (index, True)
         future = self._future(index, True)
@@ -349,7 +368,10 @@ class OnlineCorpus(CampaignCorpus):
         self.cache.hidden_width = model.fc.weight.shape[1] // (
             len(self.bank.hidden_states.layer_ids) - 1
         )
-        self.summary_width = model.fc.weight.shape[1]
+        tokens = self.cache.summary_tokens
+        self.summary_width = model.fc.weight.shape[1] * (tokens + 1 if tokens else 1)
+        # Runtime.new_generator reads the conditioning width from this stub.
+        self.summaries = {"last": torch.empty(0, self.summary_width)}
 
     def prepare_summaries(self, names):
         return self.summary_store.prepare(names, self.cache, self.summary_width)
@@ -399,6 +421,8 @@ class OnlineCorpus(CampaignCorpus):
             "prompt_length": row["prompt_length"],
             "condition": "last",
         }
+        if self.cache.summary_tokens:
+            identity["summary_tokens"] = self.cache.summary_tokens
         return self.summary_root / (digest(identity) + ".pt")
 
     def references(self, indices, *, full):

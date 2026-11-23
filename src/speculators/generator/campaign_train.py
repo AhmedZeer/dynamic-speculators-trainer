@@ -287,9 +287,13 @@ def train_update(  # noqa: C901, PLR0917 -- shared serial/batched update API
     if batched:
         with timers.measure("generator_backward"):
             backward_factors(generated_batch, leaves_batch)
+    dynamics = getattr(runtime, "dynamics", None)
+    dynamics_metrics = dynamics.pre_clip(update) if dynamics is not None else {}
     with timers.measure("optimizer"):
         gradients = clip_gradients(optimizer, cfg.optimization.max_grad_norm)
         optimizer.step()
+    if dynamics is not None:
+        dynamics_metrics.update(dynamics.post_step(update))
     synchronize(runtime)
     component_seconds = timers.seconds()
     generator_calls = (1 if batched else len(episodes)) if generator is not None else 0
@@ -317,7 +321,9 @@ def train_update(  # noqa: C901, PLR0917 -- shared serial/batched update API
         "train/conditioning_size_mean": conditioning_count / len(episodes),
         "train/generator_forward_calls": generator_calls,
         "train/generator_backward_calls": generator_calls,
-        "train/lr": optimizer.param_groups[0]["lr"],
+        **dynamics_metrics,
+        "train/lr": optimizer.param_groups[-1]["lr"]
+        / optimizer.param_groups[-1].get("lr_scale", 1.0),
         **gradients,
     }
 
@@ -342,6 +348,29 @@ def source_weights(runtime, generator, job):
         raise ValueError("Source checkpoint checksum changed")
     state = torch.load(source, map_location="cpu", weights_only=True)
     generator.load_state_dict(state["model"])
+
+
+def static_warm_start(runtime, generator, job):
+    """Initialize compact static A/B from a finished static-LoRA checkpoint (A4).
+
+    ``job['static_init']`` = {"path": <checkpoint.pt>, "sha256": <digest>}; the
+    checkpoint stores ``factor_parameters`` keys ``<path>.a`` / ``<path>.b``.
+    """
+    source = job.get("static_init")
+    if source is None:
+        return
+    if not hasattr(generator, "load_static"):
+        raise ValueError("Static warm start requires a compact generator kind")
+    if file_digest(Path(source["path"])) != source["sha256"]:
+        raise ValueError("Static warm-start checkpoint checksum changed")
+    state = torch.load(source["path"], map_location="cpu", weights_only=True)
+    model = state.get("model", state)
+    generator.load_static(
+        {
+            name: (model[f"{path}.a"].float(), model[f"{path}.b"].float())
+            for name, path in runtime.paths.items()
+        }
+    )
 
 
 def _prefetch(runtime, schedule, step, updates, lookahead, objective):  # noqa: ARG001, PLR0917
@@ -399,10 +428,32 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
     else:
         runtime.drafter.requires_grad_(False)
         source_weights(runtime, generator, job)
+        static_warm_start(runtime, generator, job)
         parameters = list(generator.parameters())
+    if generator is not None:
+        from speculators.generator.compact import optimizer_groups  # noqa: PLC0415
+
+        param_groups = optimizer_groups(
+            generator, cfg.optimization.encoder_lr_scale
+        )
+    else:
+        param_groups = [{"params": parameters, "name": "static_ab"}]
     optimizer = torch.optim.AdamW(
-        parameters, lr=cfg.optimization.lr, weight_decay=cfg.optimization.weight_decay
+        param_groups, lr=cfg.optimization.lr,
+        weight_decay=cfg.optimization.weight_decay,
     )
+    runtime.dynamics = None
+    probe = None
+    if generator is not None and getattr(cfg, "dynamics_interval", None):
+        from speculators.generator.dynamics import (  # noqa: PLC0415
+            DynamicsLogger,
+            probe_cohorts,
+        )
+
+        runtime.dynamics = DynamicsLogger(generator, cfg.dynamics_interval)
+        probe = probe_cohorts(
+            runtime, job["validation_subsets"], cfg.probe_examples_per_domain
+        )
     checkpoint = output / "checkpoint.pt"
     epoch_schedule = "epochs" in job
     hub_backups = "hub_repo" in job
@@ -554,6 +605,28 @@ def run_training(runtime, job, output, identity, *, lookahead, started=None):  #
                     },
                 }
             )
+            if probe is not None:
+                from speculators.generator.dynamics import probe_metrics  # noqa: PLC0415
+
+                probe_started = time.perf_counter()
+                probe_values = probe_metrics(
+                    runtime,
+                    generator,
+                    probe,
+                    scale=runtime.bank.lora.alpha / runtime.bank.lora.rank,
+                )
+                probe_values["probe/seconds"] = time.perf_counter() - probe_started
+                row["probe"] = probe_values
+                tracker.log({"optimizer_step": progress, **probe_values})
+                report(
+                    f"{job['label']}: probe at update={progress}: "
+                    + ", ".join(
+                        f"{k.split('/', 1)[1]}={v:.4g}"
+                        for k, v in probe_values.items()
+                        if k.startswith("probe/swap_gap")
+                        or k.endswith(("effective_rank", "centroid_accuracy"))
+                    )
+                )
             write_json(output / "metrics.json", history)
             report(
                 f"{job['label']}: validation completed at update={progress}; "
