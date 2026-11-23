@@ -356,7 +356,7 @@ def static_warm_start(runtime, generator, job):
     ``job['static_init']`` = {"path": <checkpoint.pt>, "sha256": <digest>}; the
     checkpoint stores ``factor_parameters`` keys ``<path>.a`` / ``<path>.b``.
     """
-    source = job.get("static_init")
+    source = job.get("static_init") or getattr(runtime.cfg, "static_init", None)
     if source is None:
         return
     if not hasattr(generator, "load_static"):

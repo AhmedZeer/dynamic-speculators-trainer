@@ -139,13 +139,17 @@ class Publisher:
         for repo in (cfg.hub.trajectories_repo, cfg.hub.activations_repo):
             retry_hub_call(
                 lambda repo=repo: self.api.create_repo(
-                    repo, repo_type="dataset", private=False, exist_ok=True
+                    repo, repo_type="dataset", private=cfg.hub.private, exist_ok=True
                 )
             )
-            if retry_hub_call(
-                lambda repo=repo: self.api.repo_info(repo, repo_type="dataset")
-            ).private:
-                raise ValueError(f"Expected public dataset repository: {repo}")
+            if (
+                retry_hub_call(
+                    lambda repo=repo: self.api.repo_info(repo, repo_type="dataset")
+                ).private
+                != cfg.hub.private
+            ):
+                visibility = "private" if cfg.hub.private else "public"
+                raise ValueError(f"Expected {visibility} dataset repository: {repo}")
 
     def put(self, repo, path, source):
         return self.put_many(repo, [(path, source)])[0]

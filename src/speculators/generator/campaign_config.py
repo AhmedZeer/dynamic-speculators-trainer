@@ -80,6 +80,9 @@ class CampaignConfig(ExperimentConfig):
     expected_validation_examples: int = Field(default=100, ge=4)
     validation_examples_per_category: int | None = Field(default=None, ge=1)
     training_examples_per_category: int | None = Field(default=None, ge=1)
+    # Train only on the first N subsets of each category (nested 4K/24K/100K
+    # views of one release). None keeps every subset in the release.
+    training_subset_limit: int | None = Field(default=None, ge=1)
     condition: str = "last"
     context: Context = Field(default_factory=lambda: Context(evaluation_sizes=[4]))
     optimization: Optimization = Field(

@@ -1,0 +1,67 @@
+# Next-arms EAGLE3 generator runs (run plan v2). One entry per queue ID.
+# data: which trajectory release and how many 1K-train subsets per category.
+# arm: generator | lora. architecture/optimization: overrides of the base
+# attention template (Q/K/V/O, rank 32, LK hybrid, TTT3, LR 1e-4, clip 0.85).
+# All generator runs log training dynamics every 25 updates and probe at
+# every validation (250 updates).
+defaults:
+  wandb_project: eagle3-generator-next-arms
+  hub_prefix: azeeer/eagle3-nextarms
+  dynamics_interval: 25
+
+data:
+  new:
+    repo: azeeer/eagle3-qwen3-8b-trajectories-newdata-v1
+    release: r0002-24k
+    selection: s0002
+    available_subsets: 6
+  nemotron:
+    repo: azeeer/eagle3-qwen3-8b-trajectories-v1
+    release: r0001
+    selection: s0001
+    revision: 058f01d1f0585e98327b2c190a65c796da04fdd4
+    available_subsets: 6
+
+runs:
+  # ---- P0 pilot: speed / memory / cache, Nemotron 4K, 50 updates ----
+  P0-current: {data: nemotron, subsets: 1, updates: 50, arm: generator, wave: pilot}
+  P0-A1: {data: nemotron, subsets: 1, updates: 50, arm: generator, wave: pilot,
+          architecture: {kind: core}}
+  P0-A5: {data: nemotron, subsets: 1, updates: 50, arm: generator, wave: pilot,
+          architecture: {kind: perceiver_core, summary_tokens: 16}}
+
+  # ---- Wave 1: 4K architecture sweep (E0) ----
+  R01: {data: new, subsets: 1, updates: 1500, arm: lora, wave: w1-arch,
+        hub_upload_interval: 250}
+  R02: {data: new, subsets: 1, updates: 1500, arm: generator, wave: w1-arch}
+  R03: {data: new, subsets: 1, updates: 1500, arm: generator, wave: w1-arch,
+        architecture: {kind: core}}
+  R04: {data: new, subsets: 1, updates: 1500, arm: generator, wave: w1-arch,
+        architecture: {kind: gates}}
+  R06: {data: new, subsets: 1, updates: 1500, arm: generator, wave: w1-arch,
+        architecture: {kind: perceiver_core, summary_tokens: 16}}
+  # A4 and its null control start from R01 at update 750 and train 750 more.
+  R05: {data: new, subsets: 1, updates: 750, arm: generator, wave: w1-arch,
+        architecture: {kind: core, dynamic_gate: true},
+        static_init: {run: R01, step: 750}}
+  R05n: {data: new, subsets: 1, updates: 750, arm: generator, wave: w1-arch,
+         architecture: {kind: core, dynamic_gate: true, constant_condition: true},
+         static_init: {run: R01, step: 750}}
+
+  # ---- Wave 1: 4K training methods on the current generator ----
+  R07: {data: new, subsets: 1, updates: 1500, arm: generator, wave: w1-method,
+        optimization: {encoder_lr_scale: 4.0}}
+  R08: {data: new, subsets: 1, updates: 1500, arm: generator, wave: w1-method,
+        optimization: {encoder_lr_scale: 16.0}}
+  R09: {data: new, subsets: 1, updates: 1500, arm: generator, wave: w1-method,
+        architecture: {condition_dropout: 0.15}}
+  R10: {data: new, subsets: 1, updates: 1500, arm: generator, wave: w1-method,
+        architecture: {condition_dropout: 0.15}, optimization: {encoder_lr_scale: 4.0}}
+
+  # ---- Wave 1: 24K data comparison (E1); R12 reuses attention-24k-6k-v1 ----
+  R11: {data: nemotron, subsets: 6, updates: 6000, arm: lora, wave: w1-data,
+        hub_upload_interval: 1000}
+  R13: {data: new, subsets: 6, updates: 6000, arm: lora, wave: w1-data,
+        hub_upload_interval: 1000}
+  R14: {data: new, subsets: 6, updates: 6000, arm: generator, wave: w1-data,
+        hub_upload_interval: 1000}

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serializer
 
 CACHED_LAYER_COUNT = 4
 MIN_CONSUMER_LAYER_COUNT = 2
@@ -132,6 +132,8 @@ class HubArtifacts(Settings):
     parent_release: str | None = None
     parent_revision: str | None = None
     trajectories_revision: str = "main"
+    # Private repos for data derived from private/gated prompt sources.
+    private: bool = False
     selection_root: Path = Path("output/eagle3-selection")
     domains: list[Literal["chat", "math", "code", "stem"]] = Field(
         default_factory=lambda: ["chat", "math", "code", "stem"]
@@ -154,6 +156,13 @@ class HubArtifacts(Settings):
     compaction_cache_dir: Path | None = None
     progress_bars: bool = False
     upload_log_interval: float = Field(default=30, ge=1)
+
+    @model_serializer(mode="wrap")
+    def _omit_default_private(self, handler):
+        values = handler(self)
+        if values.get("private") is False:
+            values.pop("private", None)
+        return values
 
     @model_validator(mode="after")
     def valid(self):

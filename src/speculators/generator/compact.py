@@ -99,7 +99,8 @@ class CompactLoRAGenerator(nn.Module):
             raise ValueError(f"Unsupported compact generator kind: {cfg.kind}")
         self.kind, self.feedback_dim = cfg.kind, 0
         self.shapes, self.rank, self.max_examples = shapes, rank, max_examples
-        self.condition_dropout, self.force_null = cfg.condition_dropout, False
+        self.condition_dropout = cfg.condition_dropout
+        self.force_null = cfg.constant_condition
         if cfg.kind == "perceiver_core":
             tokens = cfg.summary_tokens
             if input_dim % ((tokens + 1) * TARGET_LAYERS):
@@ -119,7 +120,7 @@ class CompactLoRAGenerator(nn.Module):
             nn.GELU(),
             nn.Linear(cfg.example_dim, cfg.condition_dim),
         )
-        if cfg.condition_dropout:
+        if cfg.condition_dropout or cfg.constant_condition:
             self.null_condition = nn.Parameter(torch.zeros(cfg.condition_dim))
         self.module_embedding = nn.Embedding(len(shapes), cfg.descriptor_dim)
         self.layer_embedding = nn.Embedding(1, cfg.descriptor_dim)

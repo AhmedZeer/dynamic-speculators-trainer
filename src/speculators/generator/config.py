@@ -43,6 +43,9 @@ class Architecture(Settings):
     dynamic_gate: bool = False
     # Probability of replacing the condition vector by a learned null vector.
     condition_dropout: float = Field(default=0.0, ge=0.0, lt=1.0)
+    # Always use the learned null condition (R05n: extra parameters and steps
+    # of the gated arm without any prompt information).
+    constant_condition: bool = False
     # Prompt-token window for perceiver_core summaries (last K positions plus
     # the prompt mean). Zero keeps the original last-token summary.
     summary_tokens: int = Field(default=0, ge=0, le=256)
@@ -78,6 +81,7 @@ ARCHITECTURE_DEFAULTS = {
     "kind": "full",
     "dynamic_gate": False,
     "condition_dropout": 0.0,
+    "constant_condition": False,
     "summary_tokens": 0,
 }
 PERCEIVER_FIELDS = (
@@ -213,6 +217,9 @@ class ExperimentConfig(Settings):
     # Training-dynamics metrics (run plan §4). None disables them. Metric
     # settings never change training and are excluded from run identities.
     dynamics_interval: int | None = Field(default=None, ge=1)
+    # A4 warm start: a finished static-LoRA checkpoint (factor_parameters keys)
+    # copied into the compact generator's static A/B before training.
+    static_init: dict[str, str] | None = None
     probe_examples_per_domain: int = Field(default=40, ge=8)
     optimization: Optimization = Field(default_factory=Optimization)
     context: Context = Field(default_factory=Context)
@@ -222,6 +229,10 @@ class ExperimentConfig(Settings):
     @model_serializer(mode="wrap")
     def _omit_default_metric_settings(self, handler):
         values = handler(self)
+        if "training_subset_limit" in values and values["training_subset_limit"] is None:
+            values.pop("training_subset_limit")
+        if values.get("static_init") is None:
+            values.pop("static_init", None)
         if values.get("dynamics_interval") is None:
             values.pop("dynamics_interval", None)
             values.pop("probe_examples_per_domain", None)

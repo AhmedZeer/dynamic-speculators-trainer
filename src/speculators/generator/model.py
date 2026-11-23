@@ -44,8 +44,8 @@ class LoRAGenerator(nn.Module):
             raise ValueError("Use build_generator for compact generator kinds")
         self.shapes, self.rank, self.max_examples = shapes, rank, max_examples
         self.condition_dropout = cfg.condition_dropout
-        self.force_null = False
-        if self.condition_dropout:
+        self.force_null = cfg.constant_condition
+        if self.condition_dropout or cfg.constant_condition:
             self.null_condition = nn.Parameter(torch.zeros(cfg.condition_dim))
         self.encoder = nn.Sequential(
             nn.Linear(input_dim + 1, cfg.encoder_hidden),

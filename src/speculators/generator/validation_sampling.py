@@ -14,7 +14,27 @@ def validation_view(cfg, inputs):
 
 def training_view(cfg, inputs):
     """Restrict pilot training to a balanced subset of the original training split."""
+    limit = getattr(cfg, "training_subset_limit", None)
+    if limit is not None:
+        inputs = nested_view(inputs, limit)
     return split_view(cfg, inputs, "train", cfg.training_examples_per_category)
+
+
+def nested_view(inputs, limit):
+    """Keep subsets 0..limit-1 of each category (nested data-scaling views).
+
+    Validation membership is unchanged: it always comes from subset 00000.
+    """
+    subsets = {
+        name: subset
+        for name, subset in inputs.subsets.items()
+        if int(name.rsplit("-", 1)[1]) < limit
+    }
+    for domain in DOMAINS:
+        if not any(name.startswith(domain + "-") for name in subsets):
+            raise ValueError(f"No subsets left for {domain} at limit {limit}")
+    identity = {**inputs.identity, "training_subset_limit": limit}
+    return replace(inputs, subsets=subsets, identity=identity, ram_cache=None)
 
 
 def split_view(cfg, inputs, split, quota):  # noqa: C901 -- bounded stratified sampling
