@@ -67,13 +67,17 @@ def main():
                 v["tau_hat"] = 1 + a[0] + a[0] * a[1] + a[0] * a[1] * a[2]
         probe_keys = [k for k in run.summary.keys() if k.startswith("probe/")]
         dyn_keys = [k for k in run.summary.keys() if k.startswith(
-            ("dynamics/lca_share/", "dynamics/update_ratio/", "dynamics/grad_share/"))]
+            ("dynamics/update_ratio/", "dynamics/grad_share/"))]
+        lca_keys = [k for k in run.summary.keys() if k.startswith("dynamics/lca/")]
         data["runs"][rid] = {
             "arm": arm, "label": label, "data": data_label, "state": run.state,
             "step": run.summary.get("optimizer_step"), "url": run.url,
             "validation": validation,
             "probe": rows(run, probe_keys, "probe/swap_gap/within") if probe_keys else [],
-            "dynamics": rows(run, dyn_keys, dyn_keys[0]) if dyn_keys else [],
+            "dynamics": rows(run, [k for k in dyn_keys if "update_ratio" in k],
+                             "dynamics/update_ratio/encoder") if dyn_keys else [],
+            # LCA for update t is logged at t+1, on different rows from the rest.
+            "lca": rows(run, lca_keys, "dynamics/lca/total") if lca_keys else [],
         }
         print(rid, run.state, len(validation), "val rows", flush=True)
     with open(sys.argv[1], "w") as handle:
