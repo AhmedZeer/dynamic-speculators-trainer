@@ -119,7 +119,8 @@ def build_configs(spec, root, revision, records, port, static_init, *,
     template["optimization"].update(
         pretraining_updates=updates,
         checkpoint_interval=min(250, updates),
-        warmup_updates=min(100, max(1, updates // 10)),
+        # Same warmup as every historical run; never shorten it for short runs.
+        warmup_updates=min(100, updates),
         **spec.get("optimization", {}),
     )
     template["architecture"].update(spec.get("architecture", {}))
