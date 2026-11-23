@@ -80,6 +80,20 @@ def main():
             "lca": rows(run, lca_keys, "dynamics/lca/total") if lca_keys else [],
         }
         print(rid, run.state, len(validation), "val rows", flush=True)
+    # R12 is reused from the earlier attention-24k-6k-v1 generator run.
+    run = api.run(f"{ENTITY}/eagle3-generator-ablations-v3/730c1ee03e837115")
+    validation = rows(run, VAL, VAL[0])
+    for v in validation:
+        a = [v.get(VAL[d]) for d in range(3)]
+        if None not in a:
+            v["tau_hat"] = 1 + a[0] + a[0] * a[1] + a[0] * a[1] * a[2]
+    data["runs"]["R12"] = {
+        "arm": "current", "label": "Current generator", "data": "Nemotron 24K",
+        "state": run.state, "step": run.summary.get("optimizer_step"), "url": run.url,
+        "validation": validation, "probe": [], "dynamics": [], "lca": [],
+        "source": "attention-24k-6k-v1 (reused)",
+    }
+    print("R12", run.state, len(validation), "val rows", flush=True)
     with open(sys.argv[1], "w") as handle:
         json.dump(data, handle, separators=(",", ":"))
 
